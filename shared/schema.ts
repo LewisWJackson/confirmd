@@ -136,7 +136,17 @@ export const sourceScores = pgTable("source_score", {
   metadata: jsonb("metadata").default({}),
 });
 
+export const users = pgTable("user", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  email: text("email").notNull().unique(),
+  passwordHash: text("password_hash").notNull(),
+  displayName: text("display_name").notNull(),
+  subscriptionTier: text("subscription_tier").notNull().default("free"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 // Insert schemas
+export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true });
 export const insertSourceSchema = createInsertSchema(sources).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertItemSchema = createInsertSchema(items).omit({ id: true, ingestedAt: true });
 export const insertClaimSchema = createInsertSchema(claims).omit({ id: true, createdAt: true });
@@ -159,3 +169,5 @@ export type Resolution = typeof resolutions.$inferSelect;
 export type Story = typeof stories.$inferSelect;
 export type InsertStory = z.infer<typeof insertStorySchema>;
 export type SourceScore = typeof sourceScores.$inferSelect;
+export type User = typeof users.$inferSelect;
+export type InsertUser = z.infer<typeof insertUserSchema>;

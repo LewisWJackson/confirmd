@@ -13,6 +13,8 @@ import type {
   Story,
   InsertStory,
   SourceScore,
+  User,
+  InsertUser,
 } from "../shared/schema.js";
 
 // ─── Storage Interface ───────────────────────────────────────────────
@@ -61,6 +63,11 @@ export interface IStorage {
   createSourceScore(data: Omit<SourceScore, "id">): Promise<SourceScore>;
   getSourceScore(sourceId: string): Promise<SourceScore | undefined>;
 
+  // Users
+  createUser(data: InsertUser): Promise<User>;
+  getUserByEmail(email: string): Promise<User | undefined>;
+  getUserById(id: string): Promise<User | undefined>;
+
   // Pipeline Stats
   getPipelineStats(): Promise<PipelineStats>;
 }
@@ -105,6 +112,7 @@ export class MemStorage implements IStorage {
   private stories: Map<string, Story> = new Map();
   private storyClaims: Map<string, StoryClaim> = new Map();
   private sourceScores: Map<string, SourceScore> = new Map();
+  private users: Map<string, User> = new Map();
   private lastPipelineRun: string | null = null;
 
   // ── Sources ──────────────────────────────────────────────────────
@@ -423,6 +431,32 @@ export class MemStorage implements IStorage {
     return Array.from(this.sourceScores.values()).find(
       (s) => s.sourceId === sourceId
     );
+  }
+
+  // ── Users ──────────────────────────────────────────────────
+
+  async createUser(data: InsertUser): Promise<User> {
+    const id = crypto.randomUUID();
+    const user: User = {
+      id,
+      email: data.email,
+      passwordHash: data.passwordHash,
+      displayName: data.displayName,
+      subscriptionTier: data.subscriptionTier ?? "free",
+      createdAt: new Date(),
+    };
+    this.users.set(id, user);
+    return user;
+  }
+
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    return Array.from(this.users.values()).find(
+      (u) => u.email.toLowerCase() === email.toLowerCase()
+    );
+  }
+
+  async getUserById(id: string): Promise<User | undefined> {
+    return this.users.get(id);
   }
 
   // ── Pipeline Stats ───────────────────────────────────────────────

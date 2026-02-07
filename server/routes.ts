@@ -1,7 +1,15 @@
 import { Router, type Request, type Response } from "express";
+import bcrypt from "bcryptjs";
 import { storage } from "./storage.js";
 import { validateCommunityEvidence } from "./pipeline.js";
+import { pipeline } from "./pipeline-instance.js";
 import type { Claim, Verdict, EvidenceItem, Resolution, Source, SourceScore } from "../shared/schema.js";
+
+declare module "express-session" {
+  interface SessionData {
+    userId?: string;
+  }
+}
 
 const router = Router();
 
@@ -647,9 +655,21 @@ router.get("/pipeline/status", async (_req: Request, res: Response) => {
 
 router.post("/pipeline/run", async (_req: Request, res: Response) => {
   try {
-    // In a real system this would trigger the ingestion/analysis pipeline.
-    // For now we just mark the run time and return 202 Accepted.
+    const status = pipeline.getStatus();
+    if (status.isRunning) {
+      res.status(409).json({
+        error: "Pipeline is already running",
+        startedAt: status.lastRunAt?.toISOString() ?? null,
+      });
+      return;
+    }
+
     storage.setLastPipelineRun(new Date().toISOString());
+
+    // Trigger the pipeline asynchronously — don't await so we return 202 immediately
+    pipeline.runDailyBatch().catch((err) => {
+      console.error("[Pipeline] Manual run failed:", err);
+    });
 
     res.status(202).json({
       message: "Pipeline run accepted",
@@ -675,6 +695,123 @@ router.get("/health", async (_req: Request, res: Response) => {
       stories: stats.totalStories,
     },
   });
+});
+
+// ─── Auth Routes ────────────────────────────────────────────────────
+
+router.post("/auth/signup", async (req: Request, res: Response) => {
+  try {
+    const { email, password, displayName } = req.body || {};
+
+    if (!email || !password || !displayName) {
+      res.status(400).json({ error: "Email, password, and display name are required" });
+      return;
+    }
+
+    if (typeof email !== "string" || typeof password !== "string" || typeof displayName !== "string") {
+      res.status(400).json({ error: "Invalid input types" });
+      return;
+    }
+
+    if (password.length < 8) {
+      res.status(400).json({ error: "Password must be at least 8 characters" });
+      return;
+    }
+
+    const existing = await storage.getUserByEmail(email);
+    if (existing) {
+      res.status(409).json({ error: "An account with this email already exists" });
+      return;
+    }
+
+    const passwordHash = await bcrypt.hash(password, 10);
+    const user = await storage.createUser({ email, passwordHash, displayName });
+
+    req.session.userId = user.id;
+    res.status(201).json({
+      id: user.id,
+      email: user.email,
+      displayName: user.displayName,
+      subscriptionTier: user.subscriptionTier,
+      createdAt: user.createdAt,
+    });
+  } catch (err) {
+    console.error("POST /auth/signup error:", err);
+    res.status(500).json({ error: "Failed to create account" });
+  }
+});
+
+router.post("/auth/login", async (req: Request, res: Response) => {
+  try {
+    const { email, password } = req.body || {};
+
+    if (!email || !password) {
+      res.status(400).json({ error: "Email and password are required" });
+      return;
+    }
+
+    const user = await storage.getUserByEmail(email);
+    if (!user) {
+      res.status(401).json({ error: "Invalid email or password" });
+      return;
+    }
+
+    const valid = await bcrypt.compare(password, user.passwordHash);
+    if (!valid) {
+      res.status(401).json({ error: "Invalid email or password" });
+      return;
+    }
+
+    req.session.userId = user.id;
+    res.json({
+      id: user.id,
+      email: user.email,
+      displayName: user.displayName,
+      subscriptionTier: user.subscriptionTier,
+      createdAt: user.createdAt,
+    });
+  } catch (err) {
+    console.error("POST /auth/login error:", err);
+    res.status(500).json({ error: "Failed to log in" });
+  }
+});
+
+router.post("/auth/logout", (req: Request, res: Response) => {
+  req.session.destroy((err) => {
+    if (err) {
+      console.error("POST /auth/logout error:", err);
+      res.status(500).json({ error: "Failed to log out" });
+      return;
+    }
+    res.json({ ok: true });
+  });
+});
+
+router.get("/auth/me", async (req: Request, res: Response) => {
+  try {
+    const userId = req.session.userId;
+    if (!userId) {
+      res.json(null);
+      return;
+    }
+
+    const user = await storage.getUserById(userId);
+    if (!user) {
+      res.json(null);
+      return;
+    }
+
+    res.json({
+      id: user.id,
+      email: user.email,
+      displayName: user.displayName,
+      subscriptionTier: user.subscriptionTier,
+      createdAt: user.createdAt,
+    });
+  } catch (err) {
+    console.error("GET /auth/me error:", err);
+    res.status(500).json({ error: "Failed to fetch user" });
+  }
 });
 
 export default router;

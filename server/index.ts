@@ -1,8 +1,11 @@
 import express from "express";
+import session from "express-session";
 import path from "path";
 import { fileURLToPath } from "url";
 import apiRouter from "./routes.js";
+import stripeRouter from "./stripe.js";
 import { storage, seedInitialData } from "./storage.js";
+import { pipeline } from "./pipeline-instance.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -10,10 +13,29 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = parseInt(process.env.PORT || "3000", 10);
 
+const SIX_HOURS_MS = 6 * 60 * 60 * 1000;
+
 // ─── Middleware ──────────────────────────────────────────────────────
+
+// Stripe webhook needs raw body for signature verification — must come BEFORE express.json()
+app.use("/api/stripe/webhook", express.raw({ type: "application/json" }));
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
+
+// Session
+app.use(
+  session({
+    secret: process.env.SESSION_SECRET || "confirmd-dev-secret",
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      secure: process.env.NODE_ENV === "production",
+      httpOnly: true,
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    },
+  })
+);
 
 // Request logging
 app.use((req, res, next) => {
@@ -36,6 +58,7 @@ app.use((req, res, next) => {
 
 // ─── API Routes ─────────────────────────────────────────────────────
 
+app.use("/api/stripe", stripeRouter);
 app.use("/api", apiRouter);
 
 // ─── Static / Vite Dev Server ───────────────────────────────────────
@@ -113,6 +136,12 @@ async function main() {
     console.log(`  http://localhost:${PORT}`);
     console.log("=========================================");
     console.log("");
+
+    // Delay the first pipeline run by 30 seconds so the server is fully ready
+    setTimeout(() => {
+      console.log("[Pipeline] Starting auto-run scheduler (6h interval)");
+      pipeline.startScheduler(SIX_HOURS_MS);
+    }, 30_000);
   });
 }
 

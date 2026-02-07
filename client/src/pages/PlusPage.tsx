@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { createCheckoutSession } from "../lib/api";
 
 interface PlusFaqItem {
   question: string;
@@ -156,6 +157,29 @@ const comparisonFeatures = [
 
 const PlusPage: React.FC = () => {
   const [openFaqs, setOpenFaqs] = useState<Record<number, boolean>>({});
+  const [loadingTier, setLoadingTier] = useState<string | null>(null);
+  const [showSuccess, setShowSuccess] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("success") === "true") {
+      setShowSuccess(true);
+      window.history.replaceState({}, "", "/plus");
+    }
+  }, []);
+
+  const handleSubscribe = async (tierName: string) => {
+    const key = tierName.toLowerCase();
+    if (key === "scholar") return;
+    setLoadingTier(key);
+    try {
+      const { url } = await createCheckoutSession(key);
+      if (url) window.location.href = url;
+    } catch (err) {
+      console.error("Checkout error:", err);
+      setLoadingTier(null);
+    }
+  };
 
   const toggleFaq = (idx: number) => {
     setOpenFaqs((prev) => ({ ...prev, [idx]: !prev[idx] }));
@@ -163,6 +187,32 @@ const PlusPage: React.FC = () => {
 
   return (
     <div className="relative z-10 animate-in">
+      {/* Success Banner */}
+      {showSuccess && (
+        <div className="max-w-4xl mx-auto px-6 md:px-12 pt-6">
+          <div className="bg-emerald-50 border border-emerald-200 rounded-2xl px-6 py-4 flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <div className="w-8 h-8 rounded-lg bg-emerald-500 flex items-center justify-center flex-shrink-0">
+                <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              <span className="text-sm font-bold text-emerald-800">
+                Subscription activated! Welcome to Confirmd Plus.
+              </span>
+            </div>
+            <button
+              onClick={() => setShowSuccess(false)}
+              className="text-emerald-400 hover:text-emerald-600 transition-colors"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Hero */}
       <section className="max-w-7xl mx-auto px-6 md:px-12 pt-20 pb-16">
         <div className="text-center max-w-4xl mx-auto">
@@ -274,12 +324,13 @@ const PlusPage: React.FC = () => {
               </p>
 
               {/* CTA */}
-              <a
-                href="#"
-                className={`block w-full text-center text-[11px] font-black px-8 py-4 rounded-xl transition-all uppercase tracking-[0.15em] mb-10 ${tier.ctaClass}`}
+              <button
+                onClick={() => handleSubscribe(tier.name)}
+                disabled={loadingTier === tier.name.toLowerCase()}
+                className={`block w-full text-center text-[11px] font-black px-8 py-4 rounded-xl transition-all uppercase tracking-[0.15em] mb-10 disabled:opacity-60 disabled:cursor-wait ${tier.ctaClass}`}
               >
-                {tier.ctaText}
-              </a>
+                {loadingTier === tier.name.toLowerCase() ? "Redirecting..." : tier.ctaText}
+              </button>
 
               {/* Features */}
               <div className="space-y-4">
@@ -528,12 +579,13 @@ const PlusPage: React.FC = () => {
               verified intelligence. Start with a 7-day free trial of
               Tribune.
             </p>
-            <a
-              href="#"
-              className="inline-block bg-cyan-500 text-white text-[11px] font-black px-12 py-5 rounded-xl hover:bg-cyan-400 transition-all shadow-xl shadow-cyan-500/25 uppercase tracking-[0.2em]"
+            <button
+              onClick={() => handleSubscribe("Tribune")}
+              disabled={loadingTier === "tribune"}
+              className="inline-block bg-cyan-500 text-white text-[11px] font-black px-12 py-5 rounded-xl hover:bg-cyan-400 transition-all shadow-xl shadow-cyan-500/25 uppercase tracking-[0.2em] disabled:opacity-60 disabled:cursor-wait"
             >
-              Start Free Trial
-            </a>
+              {loadingTier === "tribune" ? "Redirecting..." : "Start Free Trial"}
+            </button>
           </div>
         </div>
       </section>

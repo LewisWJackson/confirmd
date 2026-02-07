@@ -13,6 +13,8 @@ import PrivacyPage from "./pages/PrivacyPage";
 import PlusPage from "./pages/PlusPage";
 import BlindspotPage from "./pages/BlindspotPage";
 import SignalsPage from "./pages/SignalsPage";
+import LoginPage from "./pages/LoginPage";
+import SignupPage from "./pages/SignupPage";
 
 const App: React.FC = () => {
   const [location, setLocation] = useLocation();
@@ -29,6 +31,8 @@ const App: React.FC = () => {
     if (location.startsWith("/faq")) return "faq";
     if (location.startsWith("/privacy")) return "privacy";
     if (location.startsWith("/plus")) return "plus";
+    if (location.startsWith("/login")) return "login";
+    if (location.startsWith("/signup")) return "signup";
     return "home";
   })();
 
@@ -66,6 +70,8 @@ const App: React.FC = () => {
             <Route path="/faq" component={FaqPage} />
             <Route path="/privacy" component={PrivacyPage} />
             <Route path="/plus" component={PlusPage} />
+            <Route path="/login" component={LoginPage} />
+            <Route path="/signup" component={SignupPage} />
             <Route>
               <div className="max-w-7xl mx-auto px-6 py-32 text-center">
                 <h1 className="text-5xl font-black text-slate-900 tracking-tighter">404</h1>

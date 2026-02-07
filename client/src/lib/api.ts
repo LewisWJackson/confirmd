@@ -94,3 +94,51 @@ export function fetchPipelineStatus() {
 export function triggerPipeline() {
   return postJson<any>("/pipeline/run");
 }
+
+// Auth
+export interface AuthUser {
+  id: string;
+  email: string;
+  displayName: string;
+  subscriptionTier: string;
+  createdAt: string;
+}
+
+export function fetchMe(): Promise<AuthUser | null> {
+  return fetchJson<AuthUser | null>("/auth/me");
+}
+
+export async function signup(data: { email: string; password: string; displayName: string }): Promise<AuthUser> {
+  const res = await fetch(`${BASE}/auth/signup`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  const body = await res.json();
+  if (!res.ok) {
+    throw new Error(body.error || "Signup failed");
+  }
+  return body;
+}
+
+export async function login(data: { email: string; password: string }): Promise<AuthUser> {
+  const res = await fetch(`${BASE}/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  const body = await res.json();
+  if (!res.ok) {
+    throw new Error(body.error || "Login failed");
+  }
+  return body;
+}
+
+export async function logout(): Promise<void> {
+  await postJson("/auth/logout");
+}
+
+// Stripe
+export function createCheckoutSession(tier: string) {
+  return postJson<{ url: string }>("/stripe/create-checkout", { tier });
+}
