@@ -1,10 +1,13 @@
 import express from "express";
 import session from "express-session";
+import pgSession from "connect-pg-simple";
+import rateLimit from "express-rate-limit";
 import path from "path";
 import { fileURLToPath } from "url";
 import apiRouter from "./routes.js";
 import stripeRouter from "./stripe.js";
 import { storage, seedInitialData, MemStorage } from "./storage.js";
+import { pool } from "./db.js";
 import { pipeline } from "./pipeline-instance.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -17,6 +20,9 @@ const SIX_HOURS_MS = 6 * 60 * 60 * 1000;
 
 // ─── Middleware ──────────────────────────────────────────────────────
 
+// Trust first proxy (Railway / render / etc.) so secure cookies work
+app.set("trust proxy", 1);
+
 // Stripe webhook needs raw body for signature verification — must come BEFORE express.json()
 app.use("/api/stripe/webhook", express.raw({ type: "application/json" }));
 
@@ -24,18 +30,41 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
 // Session
-app.use(
-  session({
-    secret: process.env.SESSION_SECRET || "confirmd-dev-secret",
-    resave: false,
-    saveUninitialized: false,
-    cookie: {
-      secure: process.env.NODE_ENV === "production",
-      httpOnly: true,
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-    },
-  })
-);
+const sessionConfig: session.SessionOptions = {
+  secret: process.env.SESSION_SECRET || "confirmd-dev-secret",
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: process.env.NODE_ENV === "production",
+    httpOnly: true,
+    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+  },
+};
+
+if (pool) {
+  const PgStore = pgSession(session);
+  sessionConfig.store = new PgStore({ pool, createTableIfMissing: true });
+}
+
+app.use(session(sessionConfig));
+
+// Rate limiting
+const apiLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const authLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+app.use("/api/auth", authLimiter);
+app.use("/api", apiLimiter);
 
 // Request logging
 app.use((req, res, next) => {

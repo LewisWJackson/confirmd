@@ -1,5 +1,6 @@
 import { Router, type Request, type Response } from "express";
 import Stripe from "stripe";
+import { storage } from "./storage.js";
 
 const router = Router();
 
@@ -88,7 +89,16 @@ router.post("/webhook", async (req: Request, res: Response) => {
       console.log(
         `[Stripe] Checkout completed — tier: ${tier}, email: ${customerEmail}, session: ${session.id}`,
       );
-      // TODO: Update user subscription tier in database once auth is wired
+
+      if (customerEmail && tier) {
+        const user = await storage.getUserByEmail(customerEmail);
+        if (user) {
+          await storage.updateUserTier(user.id, tier);
+          console.log(`[Stripe] Updated user ${user.id} subscription to "${tier}"`);
+        } else {
+          console.warn(`[Stripe] No user found for email: ${customerEmail}`);
+        }
+      }
       break;
     }
     default:

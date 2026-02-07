@@ -6,6 +6,7 @@ import FeedPage from "./pages/FeedPage";
 import ClaimsPage from "./pages/ClaimsPage";
 import ClaimDetailPage from "./pages/ClaimDetailPage";
 import SourcesPage from "./pages/SourcesPage";
+import SourceDetailPage from "./pages/SourceDetailPage";
 import StoryDetailPage from "./pages/StoryDetailPage";
 import AboutPage from "./pages/AboutPage";
 import FaqPage from "./pages/FaqPage";
@@ -62,6 +63,7 @@ const App: React.FC = () => {
             <Route path="/" component={FeedPage} />
             <Route path="/claims/:id" component={ClaimDetailPage} />
             <Route path="/claims" component={ClaimsPage} />
+            <Route path="/sources/:id" component={SourceDetailPage} />
             <Route path="/sources" component={SourcesPage} />
             <Route path="/stories/:id" component={StoryDetailPage} />
             <Route path="/blindspot" component={BlindspotPage} />

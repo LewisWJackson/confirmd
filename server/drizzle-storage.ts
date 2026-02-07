@@ -292,6 +292,13 @@ export class DrizzleStorage implements IStorage {
     return user;
   }
 
+  async updateUserTier(userId: string, tier: string): Promise<void> {
+    await this.db
+      .update(users)
+      .set({ subscriptionTier: tier })
+      .where(eq(users.id, userId));
+  }
+
   // ── Pipeline Stats ───────────────────────────────────────────────
 
   async getPipelineStats(): Promise<PipelineStats> {

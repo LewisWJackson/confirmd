@@ -1,10 +1,12 @@
 import React, { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import { fetchSources } from "../lib/api";
 
 type SortField = "trackRecord" | "methodDiscipline" | "sampleSize";
 
 export default function SourcesPage() {
+  const [, setLocation] = useLocation();
   const [sortBy, setSortBy] = useState<SortField>("trackRecord");
   const [search, setSearch] = useState("");
 
@@ -88,7 +90,7 @@ export default function SourcesPage() {
             const trackGlow = score.trackRecord >= 70 ? "shadow-[0_0_10px_rgba(6,182,212,0.5)]" : "";
 
             return (
-              <div key={source.id} className="glass rounded-[2rem] p-8 border border-slate-200 hover:shadow-2xl transition-all duration-500 cursor-pointer group bg-white/50">
+              <div key={source.id} onClick={() => setLocation(`/sources/${source.id}`)} className="glass rounded-[2rem] p-8 border border-slate-200 hover:shadow-2xl transition-all duration-500 cursor-pointer group bg-white/50">
                 <div className="flex items-center space-x-4 mb-6">
                   <div className={`w-14 h-14 rounded-2xl flex items-center justify-center font-black text-lg shadow-xl group-hover:scale-110 transition-transform ${
                     source.logoUrl ? "bg-white p-1.5" :
@@ -140,7 +142,7 @@ export default function SourcesPage() {
                     : source.type === "x_handle" ? "bg-orange-100 text-orange-700"
                     : "bg-slate-100 text-slate-500"
                   }`}>
-                    {(source.type || "unknown").replace("_", " ")}
+                    {(source.type || "unknown").replace(/_/g, " ")}
                   </span>
                 </div>
               </div>
