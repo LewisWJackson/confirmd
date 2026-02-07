@@ -1,0 +1,1053 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Confirmd — Separate Speculation from Verified Information</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        * { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; }
+
+        /* Custom scrollbar */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #f8fafc; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+        /* Verdict colors */
+        .verdict-verified { background: linear-gradient(135deg, #10b981 0%, #059669 100%); }
+        .verdict-plausible { background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); }
+        .verdict-speculative { background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); }
+        .verdict-misleading { background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); }
+
+        /* Evidence grade colors */
+        .grade-A { color: #10b981; background: #d1fae5; }
+        .grade-B { color: #3b82f6; background: #dbeafe; }
+        .grade-C { color: #f59e0b; background: #fef3c7; }
+        .grade-D { color: #ef4444; background: #fee2e2; }
+
+        /* Pulse animation for alerts */
+        @keyframes pulse-ring {
+            0% { transform: scale(0.95); opacity: 1; }
+            50% { transform: scale(1.05); opacity: 0.8; }
+            100% { transform: scale(0.95); opacity: 1; }
+        }
+        .pulse-alert { animation: pulse-ring 2s ease-in-out infinite; }
+
+        /* Smooth transitions */
+        .transition-smooth { transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); }
+
+        /* Card hover effects */
+        .card-hover:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 40px -12px rgba(0, 0, 0, 0.15);
+        }
+
+        /* Score ring */
+        .score-ring {
+            background: conic-gradient(
+                var(--score-color) calc(var(--score) * 3.6deg),
+                #e2e8f0 0deg
+            );
+        }
+    </style>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        verified: { DEFAULT: '#10b981', light: '#d1fae5' },
+                        plausible: { DEFAULT: '#3b82f6', light: '#dbeafe' },
+                        speculative: { DEFAULT: '#f59e0b', light: '#fef3c7' },
+                        misleading: { DEFAULT: '#ef4444', light: '#fee2e2' },
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-slate-50 text-slate-900 antialiased">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useMemo, useEffect, useCallback } = React;
+
+        // ============================================
+        // MOCK DATA - Full implementation of spec
+        // ============================================
+
+        const SOURCES = {
+            'bloomberg-crypto': {
+                id: 'bloomberg-crypto',
+                type: 'publisher',
+                handleOrDomain: 'bloomberg.com',
+                displayName: 'Bloomberg Crypto',
+                logoUrl: '📊',
+                score: { trackRecord: 89, methodDiscipline: 92, sampleSize: 156, confidenceInterval: { lower: 85, upper: 93 } }
+            },
+            'reuters': {
+                id: 'reuters',
+                type: 'publisher',
+                handleOrDomain: 'reuters.com',
+                displayName: 'Reuters',
+                logoUrl: '🌐',
+                score: { trackRecord: 91, methodDiscipline: 94, sampleSize: 203, confidenceInterval: { lower: 88, upper: 94 } }
+            },
+            'the-block': {
+                id: 'the-block',
+                type: 'publisher',
+                handleOrDomain: 'theblock.co',
+                displayName: 'The Block',
+                logoUrl: '🔲',
+                score: { trackRecord: 82, methodDiscipline: 85, sampleSize: 189, confidenceInterval: { lower: 78, upper: 86 } }
+            },
+            'coindesk': {
+                id: 'coindesk',
+                type: 'publisher',
+                handleOrDomain: 'coindesk.com',
+                displayName: 'CoinDesk',
+                logoUrl: '📰',
+                score: { trackRecord: 76, methodDiscipline: 78, sampleSize: 234, confidenceInterval: { lower: 72, upper: 80 } }
+            },
+            'cointelegraph': {
+                id: 'cointelegraph',
+                type: 'publisher',
+                handleOrDomain: 'cointelegraph.com',
+                displayName: 'Cointelegraph',
+                logoUrl: '📡',
+                score: { trackRecord: 58, methodDiscipline: 52, sampleSize: 312, confidenceInterval: { lower: 54, upper: 62 } }
+            },
+            'ct-whale': {
+                id: 'ct-whale',
+                type: 'x_handle',
+                handleOrDomain: '@CryptoWhale',
+                displayName: 'Crypto Whale',
+                logoUrl: '🐋',
+                score: { trackRecord: 34, methodDiscipline: 22, sampleSize: 89, confidenceInterval: { lower: 28, upper: 40 } }
+            },
+            'defi-alpha': {
+                id: 'defi-alpha',
+                type: 'telegram',
+                handleOrDomain: 't.me/defialpha',
+                displayName: 'DeFi Alpha Leaks',
+                logoUrl: '🔮',
+                score: { trackRecord: 28, methodDiscipline: 18, sampleSize: 67, confidenceInterval: { lower: 20, upper: 36 } }
+            },
+            'sec-gov': {
+                id: 'sec-gov',
+                type: 'regulator',
+                handleOrDomain: 'sec.gov',
+                displayName: 'SEC',
+                logoUrl: '⚖️',
+                score: { trackRecord: 98, methodDiscipline: 99, sampleSize: 45, confidenceInterval: { lower: 95, upper: 100 } }
+            },
+        };
+
+        const CLAIMS = [
+            {
+                id: 'claim-1',
+                sourceId: 'bloomberg-crypto',
+                claimText: 'The SEC has scheduled a meeting to discuss spot Ethereum ETF applications on February 15, 2024',
+                claimType: 'filing_approved_or_denied',
+                assetSymbols: ['ETH'],
+                assertedAt: new Date('2024-01-15T14:30:00Z'),
+                resolveBy: new Date('2024-02-15T23:59:00Z'),
+                resolutionType: 'scheduled',
+                falsifiabilityScore: 0.95,
+                llmConfidence: 0.82,
+                status: 'reviewed',
+                verdict: {
+                    verdictLabel: 'verified',
+                    probabilityTrue: 0.91,
+                    evidenceStrength: 0.88,
+                    reasoningSummary: 'SEC public calendar confirms the scheduled meeting. Multiple institutional sources corroborate the timeline.',
+                    invalidationTriggers: 'SEC announcement of postponement or cancellation',
+                },
+                evidence: [
+                    { id: 'ev-1', url: 'https://sec.gov/calendar', publisher: 'SEC', grade: 'A', stance: 'supports', excerpt: 'Commission meeting scheduled for February 15...' },
+                    { id: 'ev-2', url: 'https://bloomberg.com/etf-timeline', publisher: 'Bloomberg', grade: 'B', stance: 'supports', excerpt: 'Sources confirm SEC readiness to evaluate applications...' },
+                    { id: 'ev-3', url: 'https://theblock.co/analysis', publisher: 'The Block', grade: 'B', stance: 'supports', excerpt: 'Industry insiders expect decision within the scheduled window...' },
+                ],
+            },
+            {
+                id: 'claim-2',
+                sourceId: 'ct-whale',
+                claimText: 'ETH ETF will be approved THIS WEEK, insider source confirms',
+                claimType: 'filing_approved_or_denied',
+                assetSymbols: ['ETH'],
+                assertedAt: new Date('2024-01-15T16:20:00Z'),
+                resolveBy: new Date('2024-01-22T23:59:00Z'),
+                resolutionType: 'scheduled',
+                falsifiabilityScore: 0.85,
+                llmConfidence: 0.25,
+                status: 'reviewed',
+                verdict: {
+                    verdictLabel: 'speculative',
+                    probabilityTrue: 0.18,
+                    evidenceStrength: 0.22,
+                    reasoningSummary: 'No primary source evidence supports this timeline. Contradicted by official SEC communications indicating no imminent decision.',
+                    invalidationTriggers: 'Official SEC announcement of approval',
+                },
+                evidence: [
+                    { id: 'ev-4', url: 'https://twitter.com/whale/123', publisher: 'Crypto Whale', grade: 'D', stance: 'supports', excerpt: 'My source at [redacted] confirms approval coming...' },
+                    { id: 'ev-5', url: 'https://sec.gov/statement', publisher: 'SEC', grade: 'A', stance: 'contradicts', excerpt: 'The Commission has not set a timeline for ETF decisions...' },
+                ],
+            },
+            {
+                id: 'claim-3',
+                sourceId: 'the-block',
+                claimText: 'Nexus Protocol lost approximately $45 million in a smart contract exploit via reentrancy vulnerability',
+                claimType: 'exploit_or_hack',
+                assetSymbols: ['NEXUS', 'ETH'],
+                assertedAt: new Date('2024-01-15T08:00:00Z'),
+                resolutionType: 'immediate',
+                falsifiabilityScore: 0.98,
+                llmConfidence: 0.95,
+                status: 'resolved',
+                verdict: {
+                    verdictLabel: 'verified',
+                    probabilityTrue: 0.97,
+                    evidenceStrength: 0.95,
+                    reasoningSummary: 'On-chain transaction data confirms fund movement. Protocol team acknowledged the incident. Security firms verified the attack vector.',
+                    invalidationTriggers: 'Protocol clarification that funds are safe or transaction reversal',
+                },
+                evidence: [
+                    { id: 'ev-6', url: 'https://etherscan.io/tx/0xabc', publisher: 'Etherscan', grade: 'A', stance: 'supports', excerpt: 'Transfer of 15,000 ETH from Nexus contract to unknown wallet...' },
+                    { id: 'ev-7', url: 'https://twitter.com/NexusProtocol', publisher: 'Nexus Protocol', grade: 'A', stance: 'supports', excerpt: 'We are aware of a security incident. Funds have been moved...' },
+                    { id: 'ev-8', url: 'https://theblock.co/exploit', publisher: 'The Block', grade: 'B', stance: 'supports', excerpt: 'Security researchers confirm reentrancy attack...' },
+                ],
+                resolution: { outcome: 'true', resolvedAt: new Date('2024-01-15T12:00:00Z') },
+            },
+            {
+                id: 'claim-4',
+                sourceId: 'defi-alpha',
+                claimText: 'Arbitrum preparing massive airdrop for active users, launching next week',
+                claimType: 'rumor',
+                assetSymbols: ['ARB'],
+                assertedAt: new Date('2024-01-13T16:00:00Z'),
+                resolveBy: new Date('2024-01-20T23:59:00Z'),
+                resolutionType: 'scheduled',
+                falsifiabilityScore: 0.6,
+                llmConfidence: 0.15,
+                status: 'reviewed',
+                verdict: {
+                    verdictLabel: 'speculative',
+                    probabilityTrue: 0.12,
+                    evidenceStrength: 0.15,
+                    reasoningSummary: 'No official announcement from Arbitrum. Anonymous source with no track record. Previous similar claims from this channel have not materialized.',
+                    invalidationTriggers: 'Official Arbitrum Foundation announcement',
+                },
+                evidence: [
+                    { id: 'ev-9', url: 'https://t.me/defialpha/789', publisher: 'DeFi Alpha Leaks', grade: 'D', stance: 'supports', excerpt: 'Insider info: ARB airdrop incoming...' },
+                ],
+            },
+            {
+                id: 'claim-5',
+                sourceId: 'reuters',
+                claimText: 'The European Central Bank has advanced the Digital Euro project to its preparation phase, with potential launch by 2027',
+                claimType: 'regulatory_action',
+                assetSymbols: ['EUR'],
+                assertedAt: new Date('2024-01-12T09:00:00Z'),
+                resolutionType: 'immediate',
+                falsifiabilityScore: 0.92,
+                llmConfidence: 0.94,
+                status: 'resolved',
+                verdict: {
+                    verdictLabel: 'verified',
+                    probabilityTrue: 0.96,
+                    evidenceStrength: 0.94,
+                    reasoningSummary: 'Official ECB press release confirms preparation phase. Named ECB officials quoted on timeline.',
+                    invalidationTriggers: 'ECB retraction or policy reversal announcement',
+                },
+                evidence: [
+                    { id: 'ev-10', url: 'https://ecb.europa.eu/press', publisher: 'ECB', grade: 'A', stance: 'supports', excerpt: 'The Governing Council has decided to advance the digital euro project...' },
+                    { id: 'ev-11', url: 'https://reuters.com/ecb-cbdc', publisher: 'Reuters', grade: 'B', stance: 'supports', excerpt: 'ECB President Lagarde confirmed the 2027 target...' },
+                ],
+                resolution: { outcome: 'true', resolvedAt: new Date('2024-01-12T11:00:00Z') },
+            },
+            {
+                id: 'claim-6',
+                sourceId: 'cointelegraph',
+                claimText: 'Bitcoin will reach $150,000 following the halving event in 2024',
+                claimType: 'price_prediction',
+                assetSymbols: ['BTC'],
+                assertedAt: new Date('2024-01-14T14:00:00Z'),
+                resolutionType: 'indefinite',
+                falsifiabilityScore: 0.35,
+                llmConfidence: 0.3,
+                status: 'reviewed',
+                verdict: {
+                    verdictLabel: 'speculative',
+                    probabilityTrue: 0.25,
+                    evidenceStrength: 0.2,
+                    reasoningSummary: 'Price predictions are inherently speculative. Historical halving data shows varied outcomes. No methodology or evidence supports the specific $150K target.',
+                    invalidationTriggers: 'This is a prediction - will be resolved by market price movement',
+                },
+                evidence: [
+                    { id: 'ev-12', url: 'https://cointelegraph.com/prediction', publisher: 'Cointelegraph', grade: 'C', stance: 'supports', excerpt: 'Analysts predict BTC could reach new highs...' },
+                ],
+            },
+            {
+                id: 'claim-7',
+                sourceId: 'coindesk',
+                claimText: 'Solana experienced 4 hours of degraded network performance with significantly increased failed transactions',
+                claimType: 'upgrade_released',
+                assetSymbols: ['SOL'],
+                assertedAt: new Date('2024-01-15T10:00:00Z'),
+                resolutionType: 'immediate',
+                falsifiabilityScore: 0.9,
+                llmConfidence: 0.88,
+                status: 'resolved',
+                verdict: {
+                    verdictLabel: 'verified',
+                    probabilityTrue: 0.92,
+                    evidenceStrength: 0.85,
+                    reasoningSummary: 'On-chain metrics confirm degraded performance. Solana Status page acknowledged issues. Multiple block explorers show transaction failure spike.',
+                    invalidationTriggers: 'Solana Foundation clarification that metrics were misinterpreted',
+                },
+                evidence: [
+                    { id: 'ev-13', url: 'https://status.solana.com', publisher: 'Solana Status', grade: 'A', stance: 'supports', excerpt: 'Network experiencing degraded performance...' },
+                    { id: 'ev-14', url: 'https://solscan.io/analytics', publisher: 'Solscan', grade: 'A', stance: 'supports', excerpt: 'Failed transaction rate increased to 45%...' },
+                ],
+                resolution: { outcome: 'true', resolvedAt: new Date('2024-01-15T14:00:00Z') },
+            },
+        ];
+
+        // ============================================
+        // HELPER FUNCTIONS
+        // ============================================
+
+        const formatTime = (date) => {
+            if (!date) return 'Unknown';
+            const d = new Date(date);
+            const now = new Date();
+            const diffMs = now - d;
+            const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+            const diffDays = Math.floor(diffHours / 24);
+
+            if (diffHours < 1) return 'Just now';
+            if (diffHours < 24) return `${diffHours}h ago`;
+            if (diffDays < 7) return `${diffDays}d ago`;
+            return d.toLocaleDateString();
+        };
+
+        const getVerdictColor = (label) => ({
+            verified: { bg: 'bg-emerald-500', light: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200' },
+            plausible_unverified: { bg: 'bg-blue-500', light: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200' },
+            speculative: { bg: 'bg-amber-500', light: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200' },
+            misleading: { bg: 'bg-red-500', light: 'bg-red-50', text: 'text-red-700', border: 'border-red-200' },
+        }[label] || { bg: 'bg-slate-500', light: 'bg-slate-50', text: 'text-slate-700', border: 'border-slate-200' });
+
+        const getGradeColor = (grade) => ({
+            A: 'grade-A',
+            B: 'grade-B',
+            C: 'grade-C',
+            D: 'grade-D',
+        }[grade] || 'grade-C');
+
+        const getClaimTypeLabel = (type) => ({
+            filing_submitted: '📋 Filing Submitted',
+            filing_approved_or_denied: '⚖️ Filing Decision',
+            regulatory_action: '🏛️ Regulatory Action',
+            listing_announced: '📈 Listing Announced',
+            listing_live: '✅ Listing Live',
+            exploit_or_hack: '🔓 Security Incident',
+            mainnet_launch: '🚀 Mainnet Launch',
+            partnership_announced: '🤝 Partnership',
+            price_prediction: '🔮 Price Prediction',
+            rumor: '💭 Rumor',
+            misc_claim: '📝 Miscellaneous',
+        }[type] || '📝 Claim');
+
+        // ============================================
+        // COMPONENTS
+        // ============================================
+
+        // Header
+        const Header = ({ currentPage, setCurrentPage, userTier, credits }) => (
+            <header className="bg-white border-b border-slate-200 sticky top-0 z-50">
+                <div className="max-w-7xl mx-auto px-4">
+                    <div className="flex items-center justify-between h-16">
+                        <div className="flex items-center gap-8">
+                            <div className="flex items-center gap-2 cursor-pointer" onClick={() => setCurrentPage('feed')}>
+                                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-500 to-cyan-500 flex items-center justify-center">
+                                    <span className="text-white font-bold text-lg">✓</span>
+                                </div>
+                                <span className="text-xl font-bold tracking-tight">Confirmd</span>
+                            </div>
+                            <nav className="hidden md:flex items-center gap-1">
+                                {['feed', 'sources', 'blindspots'].map(page => (
+                                    <button
+                                        key={page}
+                                        onClick={() => setCurrentPage(page)}
+                                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-smooth ${
+                                            currentPage === page
+                                                ? 'bg-slate-100 text-slate-900'
+                                                : 'text-slate-600 hover:bg-slate-50'
+                                        }`}
+                                    >
+                                        {page.charAt(0).toUpperCase() + page.slice(1)}
+                                    </button>
+                                ))}
+                            </nav>
+                        </div>
+                        <div className="flex items-center gap-4">
+                            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-full">
+                                <span className="text-xs text-slate-500">Credits:</span>
+                                <span className="text-sm font-semibold text-slate-700">{credits}</span>
+                            </div>
+                            <button className="px-4 py-2 bg-slate-900 text-white text-sm font-medium rounded-lg hover:bg-slate-800 transition-smooth">
+                                {userTier === 'free' ? 'Upgrade' : userTier.charAt(0).toUpperCase() + userTier.slice(1)}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </header>
+        );
+
+        // Verdict Badge
+        const VerdictBadge = ({ label, size = 'md' }) => {
+            const colors = getVerdictColor(label);
+            const sizeClasses = {
+                sm: 'text-xs px-2 py-0.5',
+                md: 'text-sm px-3 py-1',
+                lg: 'text-base px-4 py-1.5',
+            };
+
+            const labelText = {
+                verified: 'Verified',
+                plausible_unverified: 'Plausible',
+                speculative: 'Speculative',
+                misleading: 'Misleading',
+            }[label] || label;
+
+            return (
+                <span className={`inline-flex items-center gap-1.5 ${colors.light} ${colors.text} ${colors.border} border rounded-full font-medium ${sizeClasses[size]}`}>
+                    <span className={`w-2 h-2 rounded-full ${colors.bg}`}></span>
+                    {labelText}
+                </span>
+            );
+        };
+
+        // Evidence Ladder
+        const EvidenceLadder = ({ evidence, expanded = false }) => {
+            if (!evidence || evidence.length === 0) {
+                return <div className="text-sm text-slate-500 italic">No evidence collected</div>;
+            }
+
+            const displayed = expanded ? evidence : evidence.slice(0, 3);
+
+            return (
+                <div className="space-y-2">
+                    {displayed.map((ev, i) => (
+                        <div key={ev.id || i} className="flex items-start gap-3 p-3 bg-slate-50 rounded-lg">
+                            <span className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${getGradeColor(ev.grade)}`}>
+                                {ev.grade}
+                            </span>
+                            <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 mb-1">
+                                    <span className="text-sm font-medium text-slate-700">{ev.publisher}</span>
+                                    <span className={`text-xs px-1.5 py-0.5 rounded ${
+                                        ev.stance === 'supports' ? 'bg-emerald-100 text-emerald-700' :
+                                        ev.stance === 'contradicts' ? 'bg-red-100 text-red-700' :
+                                        'bg-slate-100 text-slate-600'
+                                    }`}>
+                                        {ev.stance}
+                                    </span>
+                                </div>
+                                <p className="text-sm text-slate-600 line-clamp-2">{ev.excerpt}</p>
+                            </div>
+                        </div>
+                    ))}
+                    {!expanded && evidence.length > 3 && (
+                        <div className="text-sm text-slate-500 text-center">
+                            +{evidence.length - 3} more sources
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        // Source Score Card
+        const SourceScoreCard = ({ source, onClick }) => {
+            const score = source.score;
+            const trackColor = score.trackRecord >= 70 ? 'text-emerald-600' : score.trackRecord >= 50 ? 'text-amber-600' : 'text-red-600';
+            const methodColor = score.methodDiscipline >= 70 ? 'text-emerald-600' : score.methodDiscipline >= 50 ? 'text-amber-600' : 'text-red-600';
+
+            return (
+                <div
+                    className="bg-white rounded-xl border border-slate-200 p-4 card-hover transition-smooth cursor-pointer"
+                    onClick={onClick}
+                >
+                    <div className="flex items-center gap-3 mb-4">
+                        <span className="text-2xl">{source.logoUrl}</span>
+                        <div>
+                            <h3 className="font-semibold text-slate-900">{source.displayName}</h3>
+                            <p className="text-sm text-slate-500">{source.handleOrDomain}</p>
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <div className="text-xs text-slate-500 mb-1">Track Record</div>
+                            <div className={`text-2xl font-bold ${trackColor}`}>
+                                {score.trackRecord.toFixed(0)}
+                                <span className="text-sm font-normal text-slate-400">
+                                    ±{((score.confidenceInterval.upper - score.confidenceInterval.lower) / 2).toFixed(0)}
+                                </span>
+                            </div>
+                        </div>
+                        <div>
+                            <div className="text-xs text-slate-500 mb-1">Method Discipline</div>
+                            <div className={`text-2xl font-bold ${methodColor}`}>
+                                {score.methodDiscipline.toFixed(0)}
+                            </div>
+                        </div>
+                    </div>
+                    <div className="mt-3 pt-3 border-t border-slate-100">
+                        <span className="text-xs text-slate-500">
+                            Based on {score.sampleSize} resolved claims
+                        </span>
+                    </div>
+                </div>
+            );
+        };
+
+        // Claim Card
+        const ClaimCard = ({ claim, onSelect }) => {
+            const source = SOURCES[claim.sourceId];
+            const verdict = claim.verdict;
+            const colors = getVerdictColor(verdict?.verdictLabel);
+
+            return (
+                <div
+                    className={`bg-white rounded-xl border ${colors.border} p-5 card-hover transition-smooth cursor-pointer`}
+                    onClick={() => onSelect(claim)}
+                >
+                    <div className="flex items-start justify-between gap-4 mb-3">
+                        <div className="flex items-center gap-2">
+                            <span className="text-lg">{source?.logoUrl}</span>
+                            <span className="text-sm font-medium text-slate-700">{source?.displayName}</span>
+                            <span className="text-xs text-slate-400">•</span>
+                            <span className="text-xs text-slate-500">{formatTime(claim.assertedAt)}</span>
+                        </div>
+                        {verdict && <VerdictBadge label={verdict.verdictLabel} />}
+                    </div>
+
+                    <h3 className="text-base font-semibold text-slate-900 mb-3 leading-snug">
+                        {claim.claimText}
+                    </h3>
+
+                    <div className="flex flex-wrap items-center gap-2 mb-4">
+                        <span className="text-xs px-2 py-1 bg-slate-100 text-slate-600 rounded-full">
+                            {getClaimTypeLabel(claim.claimType)}
+                        </span>
+                        {claim.assetSymbols.map(s => (
+                            <span key={s} className="text-xs px-2 py-1 bg-indigo-50 text-indigo-700 rounded-full font-medium">
+                                ${s}
+                            </span>
+                        ))}
+                        {claim.resolution && (
+                            <span className={`text-xs px-2 py-1 rounded-full font-medium ${
+                                claim.resolution.outcome === 'true' ? 'bg-emerald-100 text-emerald-700' :
+                                claim.resolution.outcome === 'false' ? 'bg-red-100 text-red-700' :
+                                'bg-slate-100 text-slate-600'
+                            }`}>
+                                Resolved: {claim.resolution.outcome}
+                            </span>
+                        )}
+                    </div>
+
+                    {verdict && (
+                        <div className="border-t border-slate-100 pt-3">
+                            <div className="flex items-center gap-4 mb-2">
+                                <div className="flex-1">
+                                    <div className="flex items-center justify-between text-xs mb-1">
+                                        <span className="text-slate-500">Probability True</span>
+                                        <span className="font-medium">{(verdict.probabilityTrue * 100).toFixed(0)}%</span>
+                                    </div>
+                                    <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                        <div
+                                            className={`h-full ${colors.bg} rounded-full`}
+                                            style={{ width: `${verdict.probabilityTrue * 100}%` }}
+                                        />
+                                    </div>
+                                </div>
+                                <div className="flex-1">
+                                    <div className="flex items-center justify-between text-xs mb-1">
+                                        <span className="text-slate-500">Evidence Strength</span>
+                                        <span className="font-medium">{(verdict.evidenceStrength * 100).toFixed(0)}%</span>
+                                    </div>
+                                    <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                        <div
+                                            className="h-full bg-slate-600 rounded-full"
+                                            style={{ width: `${verdict.evidenceStrength * 100}%` }}
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                            <p className="text-sm text-slate-600 line-clamp-2">
+                                {verdict.reasoningSummary}
+                            </p>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        // Claim Detail Modal
+        const ClaimDetailModal = ({ claim, onClose }) => {
+            if (!claim) return null;
+
+            const source = SOURCES[claim.sourceId];
+            const verdict = claim.verdict;
+            const colors = getVerdictColor(verdict?.verdictLabel);
+
+            return (
+                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={onClose}>
+                    <div
+                        className="bg-white rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto"
+                        onClick={e => e.stopPropagation()}
+                    >
+                        <div className="p-6 border-b border-slate-100">
+                            <div className="flex items-start justify-between">
+                                <div className="flex items-center gap-3">
+                                    <span className="text-2xl">{source?.logoUrl}</span>
+                                    <div>
+                                        <h2 className="font-semibold text-slate-900">{source?.displayName}</h2>
+                                        <p className="text-sm text-slate-500">{formatTime(claim.assertedAt)}</p>
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={onClose}
+                                    className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-slate-100 transition-smooth"
+                                >
+                                    ✕
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="p-6">
+                            <div className="flex items-center gap-3 mb-4">
+                                {verdict && <VerdictBadge label={verdict.verdictLabel} size="lg" />}
+                                <span className="text-sm px-3 py-1 bg-slate-100 text-slate-600 rounded-full">
+                                    {getClaimTypeLabel(claim.claimType)}
+                                </span>
+                            </div>
+
+                            <h1 className="text-xl font-bold text-slate-900 mb-4 leading-snug">
+                                {claim.claimText}
+                            </h1>
+
+                            <div className="flex flex-wrap gap-2 mb-6">
+                                {claim.assetSymbols.map(s => (
+                                    <span key={s} className="px-3 py-1 bg-indigo-50 text-indigo-700 rounded-full font-medium">
+                                        ${s}
+                                    </span>
+                                ))}
+                            </div>
+
+                            {verdict && (
+                                <div className={`${colors.light} rounded-xl p-5 mb-6`}>
+                                    <h3 className="font-semibold text-slate-900 mb-3">Verdict Analysis</h3>
+
+                                    <div className="grid grid-cols-2 gap-4 mb-4">
+                                        <div>
+                                            <div className="text-xs text-slate-500 mb-1">Probability True</div>
+                                            <div className="text-2xl font-bold text-slate-900">
+                                                {(verdict.probabilityTrue * 100).toFixed(0)}%
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <div className="text-xs text-slate-500 mb-1">Evidence Strength</div>
+                                            <div className="text-2xl font-bold text-slate-900">
+                                                {(verdict.evidenceStrength * 100).toFixed(0)}%
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <p className="text-slate-700 mb-4">{verdict.reasoningSummary}</p>
+
+                                    <div className="bg-white/60 rounded-lg p-3">
+                                        <div className="text-xs font-medium text-slate-500 mb-1">What would change this verdict?</div>
+                                        <p className="text-sm text-slate-700">{verdict.invalidationTriggers}</p>
+                                    </div>
+                                </div>
+                            )}
+
+                            <div className="mb-6">
+                                <h3 className="font-semibold text-slate-900 mb-3">Evidence Ladder</h3>
+                                <EvidenceLadder evidence={claim.evidence} expanded={true} />
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4 p-4 bg-slate-50 rounded-xl">
+                                <div>
+                                    <div className="text-xs text-slate-500">Falsifiability Score</div>
+                                    <div className="text-lg font-semibold text-slate-900">
+                                        {(claim.falsifiabilityScore * 100).toFixed(0)}%
+                                    </div>
+                                </div>
+                                <div>
+                                    <div className="text-xs text-slate-500">Initial Confidence</div>
+                                    <div className="text-lg font-semibold text-slate-900">
+                                        {(claim.llmConfidence * 100).toFixed(0)}%
+                                    </div>
+                                </div>
+                                <div>
+                                    <div className="text-xs text-slate-500">Resolution Type</div>
+                                    <div className="text-lg font-semibold text-slate-900 capitalize">
+                                        {claim.resolutionType}
+                                    </div>
+                                </div>
+                                <div>
+                                    <div className="text-xs text-slate-500">Status</div>
+                                    <div className="text-lg font-semibold text-slate-900 capitalize">
+                                        {claim.status}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {claim.resolveBy && (
+                                <div className="mt-4 p-3 bg-amber-50 rounded-lg text-sm text-amber-800">
+                                    <strong>Resolution deadline:</strong> {new Date(claim.resolveBy).toLocaleString()}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // Filter Bar
+        const FilterBar = ({ filters, setFilters }) => {
+            return (
+                <div className="flex flex-wrap items-center gap-3 mb-6">
+                    <select
+                        value={filters.verdict || ''}
+                        onChange={e => setFilters({ ...filters, verdict: e.target.value || undefined })}
+                        className="px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    >
+                        <option value="">All Verdicts</option>
+                        <option value="verified">Verified</option>
+                        <option value="plausible_unverified">Plausible</option>
+                        <option value="speculative">Speculative</option>
+                        <option value="misleading">Misleading</option>
+                    </select>
+
+                    <select
+                        value={filters.claimType || ''}
+                        onChange={e => setFilters({ ...filters, claimType: e.target.value || undefined })}
+                        className="px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    >
+                        <option value="">All Types</option>
+                        <option value="filing_approved_or_denied">Filing Decisions</option>
+                        <option value="exploit_or_hack">Security Incidents</option>
+                        <option value="listing_announced">Listings</option>
+                        <option value="regulatory_action">Regulatory</option>
+                        <option value="price_prediction">Price Predictions</option>
+                        <option value="rumor">Rumors</option>
+                    </select>
+
+                    <select
+                        value={filters.asset || ''}
+                        onChange={e => setFilters({ ...filters, asset: e.target.value || undefined })}
+                        className="px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    >
+                        <option value="">All Assets</option>
+                        <option value="BTC">Bitcoin (BTC)</option>
+                        <option value="ETH">Ethereum (ETH)</option>
+                        <option value="SOL">Solana (SOL)</option>
+                        <option value="ARB">Arbitrum (ARB)</option>
+                    </select>
+
+                    {(filters.verdict || filters.claimType || filters.asset) && (
+                        <button
+                            onClick={() => setFilters({})}
+                            className="px-3 py-2 text-sm text-slate-600 hover:text-slate-900"
+                        >
+                            Clear filters
+                        </button>
+                    )}
+                </div>
+            );
+        };
+
+        // Stats Overview
+        const StatsOverview = ({ claims }) => {
+            const stats = useMemo(() => {
+                const verified = claims.filter(c => c.verdict?.verdictLabel === 'verified').length;
+                const speculative = claims.filter(c => c.verdict?.verdictLabel === 'speculative').length;
+                const resolved = claims.filter(c => c.resolution).length;
+
+                return { total: claims.length, verified, speculative, resolved };
+            }, [claims]);
+
+            return (
+                <div className="grid grid-cols-4 gap-4 mb-6">
+                    <div className="bg-white rounded-xl border border-slate-200 p-4">
+                        <div className="text-2xl font-bold text-slate-900">{stats.total}</div>
+                        <div className="text-sm text-slate-500">Total Claims</div>
+                    </div>
+                    <div className="bg-emerald-50 rounded-xl border border-emerald-200 p-4">
+                        <div className="text-2xl font-bold text-emerald-700">{stats.verified}</div>
+                        <div className="text-sm text-emerald-600">Verified</div>
+                    </div>
+                    <div className="bg-amber-50 rounded-xl border border-amber-200 p-4">
+                        <div className="text-2xl font-bold text-amber-700">{stats.speculative}</div>
+                        <div className="text-sm text-amber-600">Speculative</div>
+                    </div>
+                    <div className="bg-slate-100 rounded-xl border border-slate-200 p-4">
+                        <div className="text-2xl font-bold text-slate-700">{stats.resolved}</div>
+                        <div className="text-sm text-slate-500">Resolved</div>
+                    </div>
+                </div>
+            );
+        };
+
+        // Blind Spots Page
+        const BlindSpotsPage = ({ claims }) => {
+            const blindspots = useMemo(() => {
+                return claims.filter(c =>
+                    c.verdict?.verdictLabel === 'speculative' &&
+                    c.verdict?.probabilityTrue > 0.2 &&
+                    c.falsifiabilityScore > 0.5
+                );
+            }, [claims]);
+
+            return (
+                <div>
+                    <div className="mb-6">
+                        <h1 className="text-2xl font-bold text-slate-900 mb-2">Blind Spots</h1>
+                        <p className="text-slate-600">
+                            Claims with high speculation saturation that may be under-verified by mainstream sources.
+                        </p>
+                    </div>
+
+                    {blindspots.length === 0 ? (
+                        <div className="bg-white rounded-xl border border-slate-200 p-8 text-center">
+                            <span className="text-4xl mb-4 block">👁️</span>
+                            <p className="text-slate-600">No blind spots detected right now.</p>
+                        </div>
+                    ) : (
+                        <div className="space-y-4">
+                            {blindspots.map(claim => (
+                                <div key={claim.id} className="bg-amber-50 rounded-xl border border-amber-200 p-5">
+                                    <div className="flex items-start gap-4">
+                                        <div className="w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
+                                            <span className="text-xl">⚠️</span>
+                                        </div>
+                                        <div className="flex-1">
+                                            <div className="flex items-center gap-2 mb-2">
+                                                <VerdictBadge label={claim.verdict?.verdictLabel} />
+                                                <span className="text-xs text-amber-600">
+                                                    {((1 - claim.verdict?.evidenceStrength) * 100).toFixed(0)}% speculation
+                                                </span>
+                                            </div>
+                                            <h3 className="font-semibold text-slate-900 mb-2">{claim.claimText}</h3>
+                                            <p className="text-sm text-amber-800">{claim.verdict?.reasoningSummary}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        // Sources Page
+        const SourcesPage = ({ sources }) => {
+            const sortedSources = useMemo(() => {
+                return Object.values(sources).sort((a, b) =>
+                    b.score.trackRecord - a.score.trackRecord
+                );
+            }, [sources]);
+
+            return (
+                <div>
+                    <div className="mb-6">
+                        <h1 className="text-2xl font-bold text-slate-900 mb-2">Source Directory</h1>
+                        <p className="text-slate-600">
+                            Credibility scores based on track record and methodology discipline.
+                        </p>
+                    </div>
+
+                    <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {sortedSources.map(source => (
+                            <SourceScoreCard key={source.id} source={source} onClick={() => {}} />
+                        ))}
+                    </div>
+                </div>
+            );
+        };
+
+        // Feed Page
+        const FeedPage = ({ claims, filters, setFilters, onSelectClaim }) => {
+            const filteredClaims = useMemo(() => {
+                return claims.filter(c => {
+                    if (filters.verdict && c.verdict?.verdictLabel !== filters.verdict) return false;
+                    if (filters.claimType && c.claimType !== filters.claimType) return false;
+                    if (filters.asset && !c.assetSymbols.includes(filters.asset)) return false;
+                    return true;
+                });
+            }, [claims, filters]);
+
+            return (
+                <div>
+                    <StatsOverview claims={claims} />
+                    <FilterBar filters={filters} setFilters={setFilters} />
+
+                    <div className="space-y-4">
+                        {filteredClaims.map(claim => (
+                            <ClaimCard key={claim.id} claim={claim} onSelect={onSelectClaim} />
+                        ))}
+                    </div>
+
+                    {filteredClaims.length === 0 && (
+                        <div className="bg-white rounded-xl border border-slate-200 p-8 text-center">
+                            <span className="text-4xl mb-4 block">🔍</span>
+                            <p className="text-slate-600">No claims match your filters.</p>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        // Pricing Section
+        const PricingSection = ({ currentTier, onUpgrade }) => {
+            const tiers = [
+                {
+                    name: 'Free',
+                    price: '£0',
+                    features: ['Verdict labels', '1-2 citations per claim', '3 watchlist items', 'Daily AI summary limit'],
+                    cta: 'Current Plan',
+                    current: currentTier === 'free',
+                },
+                {
+                    name: 'Plus',
+                    price: '£6.99/mo',
+                    features: ['Full evidence ladder', 'Source credibility breakdown', 'Advanced filters', '25 watchlist items', 'Basic alerts', '30 credits/mo'],
+                    cta: 'Upgrade',
+                    current: currentTier === 'plus',
+                    highlight: true,
+                },
+                {
+                    name: 'Pro',
+                    price: '£19.99/mo',
+                    features: ['Real-time alerts', 'Custom dashboards', 'Full historical data', 'Claim tracking', 'CSV exports', '120 credits/mo'],
+                    cta: 'Upgrade',
+                    current: currentTier === 'pro',
+                },
+            ];
+
+            return (
+                <div className="grid md:grid-cols-3 gap-4">
+                    {tiers.map(tier => (
+                        <div
+                            key={tier.name}
+                            className={`rounded-xl p-5 ${
+                                tier.highlight
+                                    ? 'bg-indigo-600 text-white'
+                                    : 'bg-white border border-slate-200'
+                            }`}
+                        >
+                            <h3 className={`font-bold text-lg mb-1 ${tier.highlight ? 'text-white' : 'text-slate-900'}`}>
+                                {tier.name}
+                            </h3>
+                            <div className={`text-2xl font-bold mb-4 ${tier.highlight ? 'text-white' : 'text-slate-900'}`}>
+                                {tier.price}
+                            </div>
+                            <ul className="space-y-2 mb-4">
+                                {tier.features.map((f, i) => (
+                                    <li key={i} className={`text-sm flex items-center gap-2 ${tier.highlight ? 'text-indigo-100' : 'text-slate-600'}`}>
+                                        <span className={tier.highlight ? 'text-white' : 'text-emerald-500'}>✓</span>
+                                        {f}
+                                    </li>
+                                ))}
+                            </ul>
+                            <button
+                                className={`w-full py-2 rounded-lg font-medium text-sm transition-smooth ${
+                                    tier.current
+                                        ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                                        : tier.highlight
+                                            ? 'bg-white text-indigo-600 hover:bg-indigo-50'
+                                            : 'bg-slate-900 text-white hover:bg-slate-800'
+                                }`}
+                                disabled={tier.current}
+                            >
+                                {tier.current ? 'Current Plan' : tier.cta}
+                            </button>
+                        </div>
+                    ))}
+                </div>
+            );
+        };
+
+        // Main App
+        const App = () => {
+            const [currentPage, setCurrentPage] = useState('feed');
+            const [selectedClaim, setSelectedClaim] = useState(null);
+            const [filters, setFilters] = useState({});
+            const [userTier, setUserTier] = useState('free');
+            const [credits, setCredits] = useState(10);
+
+            return (
+                <div className="min-h-screen bg-slate-50">
+                    <Header
+                        currentPage={currentPage}
+                        setCurrentPage={setCurrentPage}
+                        userTier={userTier}
+                        credits={credits}
+                    />
+
+                    <main className="max-w-6xl mx-auto px-4 py-8">
+                        {currentPage === 'feed' && (
+                            <FeedPage
+                                claims={CLAIMS}
+                                filters={filters}
+                                setFilters={setFilters}
+                                onSelectClaim={setSelectedClaim}
+                            />
+                        )}
+
+                        {currentPage === 'sources' && (
+                            <SourcesPage sources={SOURCES} />
+                        )}
+
+                        {currentPage === 'blindspots' && (
+                            <BlindSpotsPage claims={CLAIMS} />
+                        )}
+
+                        {currentPage === 'pricing' && (
+                            <div>
+                                <h1 className="text-2xl font-bold text-slate-900 mb-6">Upgrade Your Plan</h1>
+                                <PricingSection currentTier={userTier} onUpgrade={setUserTier} />
+                            </div>
+                        )}
+                    </main>
+
+                    {selectedClaim && (
+                        <ClaimDetailModal claim={selectedClaim} onClose={() => setSelectedClaim(null)} />
+                    )}
+
+                    <footer className="border-t border-slate-200 mt-12 py-8 bg-white">
+                        <div className="max-w-6xl mx-auto px-4 text-center">
+                            <p className="text-sm text-slate-500">
+                                Confirmd — Separate speculation from verified information.
+                            </p>
+                            <p className="text-xs text-slate-400 mt-2">
+                                Scores are computed deterministically. Not financial advice.
+                            </p>
+                        </div>
+                    </footer>
+                </div>
+            );
+        };
+
+        ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+    </script>
+</body>
+</html>

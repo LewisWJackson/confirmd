@@ -1,0 +1,53 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+    --bg-color: #ffffff;
+    --text-color: #0f172a;
+}
+
+body {
+    font-family: 'Inter', sans-serif;
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    overflow-x: hidden;
+}
+
+.glass {
+    background: rgba(255, 255, 255, 0.7);
+    backdrop-filter: blur(16px) saturate(180%);
+    border: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.glass-light {
+    background: rgba(0, 0, 0, 0.02);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.logo-text {
+    letter-spacing: -0.05em;
+    font-weight: 900;
+}
+
+@keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.animate-in {
+    animation: fade-in 0.7s ease-out forwards;
+}
+
+.fade-in {
+    animation-name: fade-in;
+}
+
+.duration-700 {
+    animation-duration: 700ms;
+}
+
+.duration-1000 {
+    animation-duration: 1000ms;
+}
