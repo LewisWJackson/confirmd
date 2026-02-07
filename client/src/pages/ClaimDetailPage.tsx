@@ -125,11 +125,11 @@ export default function ClaimDetailPage() {
               <ul className="space-y-3">
                 <li className="flex items-start gap-3">
                   <div className={`w-2 h-2 rounded-full mt-2 ${style?.bg}`} />
-                  <span className="text-sm text-slate-700 font-medium">Verdict: <strong className="uppercase">{verdict.verdictLabel.replace("_", " ")}</strong> with {Math.round(verdict.probabilityTrue * 100)}% probability</span>
+                  <span className="text-sm text-slate-700 font-medium">Verdict: <strong className="uppercase">{verdict.verdictLabel.replace(/_/g, " ")}</strong> with {Math.round((verdict.probabilityTrue ?? 0) * 100)}% probability</span>
                 </li>
                 <li className="flex items-start gap-3">
                   <div className="w-2 h-2 rounded-full mt-2 bg-slate-400" />
-                  <span className="text-sm text-slate-700 font-medium">{evidence.length} evidence source{evidence.length !== 1 ? "s" : ""} analyzed, evidence strength {Math.round(verdict.evidenceStrength * 100)}%</span>
+                  <span className="text-sm text-slate-700 font-medium">{evidence.length} evidence source{evidence.length !== 1 ? "s" : ""} analyzed, evidence strength {Math.round((verdict.evidenceStrength ?? 0) * 100)}%</span>
                 </li>
                 <li className="flex items-start gap-3">
                   <div className="w-2 h-2 rounded-full mt-2 bg-slate-400" />
@@ -145,7 +145,7 @@ export default function ClaimDetailPage() {
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center space-x-3">
                   <div className={`w-4 h-4 rounded-full ${style?.bg} ${verdict.verdictLabel === "verified" ? "shadow-[0_0_12px_cyan]" : ""}`} />
-                  <span className={`text-2xl font-black uppercase tracking-tight ${style?.text}`}>{verdict.verdictLabel.replace("_", " ")}</span>
+                  <span className={`text-2xl font-black uppercase tracking-tight ${style?.text}`}>{verdict.verdictLabel.replace(/_/g, " ")}</span>
                 </div>
                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{getClaimTypeLabel(claim.claimType)}</span>
               </div>
@@ -174,11 +174,11 @@ export default function ClaimDetailPage() {
               <div className="grid grid-cols-2 gap-8 mb-8">
                 <div className="p-6 bg-slate-50 rounded-2xl">
                   <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Probability True</div>
-                  <div className={`text-4xl font-black ${style?.text}`}>{Math.round(verdict.probabilityTrue * 100)}%</div>
+                  <div className={`text-4xl font-black ${style?.text}`}>{Math.round((verdict.probabilityTrue ?? 0) * 100)}%</div>
                 </div>
                 <div className="p-6 bg-slate-50 rounded-2xl">
                   <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Evidence Strength</div>
-                  <div className="text-4xl font-black text-slate-900">{Math.round(verdict.evidenceStrength * 100)}%</div>
+                  <div className="text-4xl font-black text-slate-900">{Math.round((verdict.evidenceStrength ?? 0) * 100)}%</div>
                 </div>
               </div>
               <div className="space-y-6">
@@ -312,7 +312,7 @@ export default function ClaimDetailPage() {
                     <div key={v} className="flex justify-between items-center">
                       <div className="flex items-center gap-2">
                         <div className={`w-2 h-2 rounded-full ${vStyle.bg}`} />
-                        <span className="text-sm text-slate-500 capitalize">{v.replace("_", " ")}</span>
+                        <span className="text-sm text-slate-500 capitalize">{v.replace(/_/g, " ")}</span>
                       </div>
                       <span className="text-sm font-bold text-slate-700">{count}</span>
                     </div>
@@ -322,11 +322,11 @@ export default function ClaimDetailPage() {
                 <div className="pt-4 border-t border-slate-100">
                   <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Verification Distribution</div>
                   <div className="h-3 bg-slate-100 rounded-full overflow-hidden">
-                    <div className={`h-full ${style?.bg} rounded-full`} style={{ width: `${verdict.probabilityTrue * 100}%` }} />
+                    <div className={`h-full ${style?.bg} rounded-full`} style={{ width: `${(verdict.probabilityTrue ?? 0) * 100}%` }} />
                   </div>
                   <div className="flex justify-between mt-2">
-                    <span className={`text-xs font-black ${style?.text}`}>{Math.round(verdict.probabilityTrue * 100)}% verified</span>
-                    <span className="text-xs text-slate-400">{Math.round((1 - verdict.probabilityTrue) * 100)}% unverified</span>
+                    <span className={`text-xs font-black ${style?.text}`}>{Math.round((verdict.probabilityTrue ?? 0) * 100)}% verified</span>
+                    <span className="text-xs text-slate-400">{Math.round((1 - (verdict.probabilityTrue ?? 0)) * 100)}% unverified</span>
                   </div>
                 </div>
               </div>

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { useLocation } from "wouter";
 import { createCheckoutSession } from "../lib/api";
 
 interface PlusFaqItem {
@@ -156,9 +157,11 @@ const comparisonFeatures = [
 ];
 
 const PlusPage: React.FC = () => {
+  const [, setLocation] = useLocation();
   const [openFaqs, setOpenFaqs] = useState<Record<number, boolean>>({});
   const [loadingTier, setLoadingTier] = useState<string | null>(null);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [checkoutError, setCheckoutError] = useState<string | null>(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -170,13 +173,22 @@ const PlusPage: React.FC = () => {
 
   const handleSubscribe = async (tierName: string) => {
     const key = tierName.toLowerCase();
-    if (key === "scholar") return;
+    setCheckoutError(null);
+    if (key === "scholar") {
+      setLocation("/signup");
+      return;
+    }
+    if (key === "oracle") {
+      window.location.href = "mailto:hello@confirmd.io?subject=Oracle%20Tier%20Inquiry";
+      return;
+    }
     setLoadingTier(key);
     try {
       const { url } = await createCheckoutSession(key);
       if (url) window.location.href = url;
     } catch (err) {
       console.error("Checkout error:", err);
+      setCheckoutError("Unable to start checkout. Please sign in first or try again.");
       setLoadingTier(null);
     }
   };
@@ -267,6 +279,30 @@ const PlusPage: React.FC = () => {
         </div>
       </section>
 
+      {/* Checkout Error */}
+      {checkoutError && (
+        <section className="max-w-4xl mx-auto px-6 md:px-12 pb-6">
+          <div className="bg-red-50 border border-red-200 rounded-2xl px-6 py-4 flex items-center justify-between animate-in fade-in duration-300">
+            <div className="flex items-center space-x-3">
+              <div className="w-8 h-8 rounded-lg bg-red-500 flex items-center justify-center flex-shrink-0">
+                <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <span className="text-sm font-bold text-red-800">{checkoutError}</span>
+            </div>
+            <button
+              onClick={() => setCheckoutError(null)}
+              className="text-red-400 hover:text-red-600 transition-colors"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </section>
+      )}
+
       {/* Pricing Tiers */}
       <section className="max-w-7xl mx-auto px-6 md:px-12 pb-24">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 items-start">
@@ -302,13 +338,7 @@ const PlusPage: React.FC = () => {
                 >
                   {tier.price}
                 </span>
-                <span
-                  className={`text-sm font-bold ml-1 ${
-                    tier.name === "Oracle"
-                      ? "text-slate-400"
-                      : "text-slate-400"
-                  }`}
-                >
+                <span className="text-sm font-bold ml-1 text-slate-400">
                   {tier.priceNote}
                 </span>
               </div>
@@ -329,7 +359,15 @@ const PlusPage: React.FC = () => {
                 disabled={loadingTier === tier.name.toLowerCase()}
                 className={`block w-full text-center text-[11px] font-black px-8 py-4 rounded-xl transition-all uppercase tracking-[0.15em] mb-10 disabled:opacity-60 disabled:cursor-wait ${tier.ctaClass}`}
               >
-                {loadingTier === tier.name.toLowerCase() ? "Redirecting..." : tier.ctaText}
+                {loadingTier === tier.name.toLowerCase() ? (
+                  <span className="flex items-center justify-center space-x-2">
+                    <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    <span>Redirecting...</span>
+                  </span>
+                ) : tier.ctaText}
               </button>
 
               {/* Features */}
@@ -584,7 +622,15 @@ const PlusPage: React.FC = () => {
               disabled={loadingTier === "tribune"}
               className="inline-block bg-cyan-500 text-white text-[11px] font-black px-12 py-5 rounded-xl hover:bg-cyan-400 transition-all shadow-xl shadow-cyan-500/25 uppercase tracking-[0.2em] disabled:opacity-60 disabled:cursor-wait"
             >
-              {loadingTier === "tribune" ? "Redirecting..." : "Start Free Trial"}
+              {loadingTier === "tribune" ? (
+                <span className="flex items-center justify-center space-x-2">
+                  <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                  <span>Redirecting...</span>
+                </span>
+              ) : "Start Free Trial"}
             </button>
           </div>
         </div>

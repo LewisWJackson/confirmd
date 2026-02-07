@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useLocation } from 'wouter';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { fetchMe, logout } from '../lib/api';
@@ -8,6 +8,18 @@ export const Header: React.FC = () => {
   const [location, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!showUserMenu) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setShowUserMenu(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [showUserMenu]);
 
   const { data: user } = useQuery({
     queryKey: ['auth', 'me'],
@@ -82,29 +94,44 @@ export const Header: React.FC = () => {
           </button>
 
           {user ? (
-            <div className="relative">
+            <div className="relative" ref={menuRef}>
               <button
                 onClick={() => setShowUserMenu(!showUserMenu)}
                 className="flex items-center space-x-3 bg-slate-900 text-white text-[10px] font-black px-5 py-3 rounded-xl hover:bg-cyan-600 transition-all shadow-xl uppercase tracking-widest"
               >
                 <div className="w-6 h-6 bg-cyan-500 rounded-lg flex items-center justify-center text-[10px] font-black text-white">
-                  {user.displayName.charAt(0).toUpperCase()}
+                  {(user.displayName || user.email || "U").charAt(0).toUpperCase()}
                 </div>
-                <span>{user.displayName}</span>
+                <span className="hidden md:inline">{user.displayName || "Account"}</span>
               </button>
 
               {showUserMenu && (
-                <div className="absolute right-0 mt-2 w-48 bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden z-50">
+                <div className="absolute right-0 mt-3 w-56 bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden z-50 animate-in fade-in zoom-in-95 duration-200">
                   <div className="px-5 py-4 border-b border-slate-100">
-                    <p className="text-xs font-bold text-slate-900 truncate">{user.displayName}</p>
-                    <p className="text-[10px] text-slate-400 truncate">{user.email}</p>
+                    <p className="text-xs font-bold text-slate-900 truncate">{user.displayName || "User"}</p>
+                    <p className="text-[10px] text-slate-400 truncate mt-0.5">{user.email}</p>
+                    {user.subscriptionTier && user.subscriptionTier !== "free" && (
+                      <div className="mt-2">
+                        <span className="text-[9px] font-black uppercase tracking-widest px-2 py-1 bg-cyan-50 text-cyan-600 rounded-md border border-cyan-100">
+                          {user.subscriptionTier}
+                        </span>
+                      </div>
+                    )}
                   </div>
-                  <button
-                    onClick={handleLogout}
-                    className="w-full text-left px-5 py-3 text-xs font-bold text-slate-600 hover:bg-slate-50 hover:text-red-600 transition-colors"
-                  >
-                    Sign Out
-                  </button>
+                  <div className="py-1">
+                    <button
+                      onClick={() => { setLocation("/plus"); setShowUserMenu(false); }}
+                      className="w-full text-left px-5 py-3 text-xs font-bold text-slate-600 hover:bg-slate-50 hover:text-cyan-600 transition-colors"
+                    >
+                      Manage Subscription
+                    </button>
+                    <button
+                      onClick={handleLogout}
+                      className="w-full text-left px-5 py-3 text-xs font-bold text-slate-600 hover:bg-red-50 hover:text-red-600 transition-colors"
+                    >
+                      Sign Out
+                    </button>
+                  </div>
                 </div>
               )}
             </div>

@@ -10,6 +10,7 @@
     "db:push": "drizzle-kit push",
     "db:migrate": "drizzle-kit migrate",
     "seed": "tsx server/seed.ts",
+    "db:seed": "tsx scripts/seed-production.ts",
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {

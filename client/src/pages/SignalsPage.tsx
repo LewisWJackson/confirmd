@@ -65,7 +65,7 @@ const SignalsPage: React.FC = () => {
     const symbolMap: Record<string, Claim[]> = {};
 
     (allClaims as Claim[]).forEach((claim) => {
-      const symbols = claim.assetSymbols || [];
+      const symbols = claim.assetSymbols ?? [];
       if (symbols.length === 0) {
         const key = "OTHER";
         if (!symbolMap[key]) symbolMap[key] = [];
@@ -91,7 +91,7 @@ const SignalsPage: React.FC = () => {
             else if (label === "plausible_unverified") dist.plausible++;
             else if (label === "speculative") dist.speculative++;
             else if (label === "misleading") dist.misleading++;
-            probSum += c.verdict.probabilityTrue;
+            probSum += c.verdict.probabilityTrue ?? 0;
             probCount++;
           } else {
             // Unreviewed claims count toward speculative for emerging
@@ -119,7 +119,7 @@ const SignalsPage: React.FC = () => {
     if (activeFilter === "emerging") {
       // Emerging = has unreviewed or speculative claims
       return signals.filter(
-        (s) => s.verdictDistribution.speculative > 0 || s.claims.some((c) => c.status === "unreviewed")
+        (s) => s.verdictDistribution.speculative > 0 || s.claims.some((c) => c.status === "unreviewed" || c.status === "needs_evidence")
       );
     }
     return signals;
@@ -370,7 +370,7 @@ const SignalsPage: React.FC = () => {
                     : signals.filter(
                         (s) =>
                           s.verdictDistribution.speculative > 0 ||
-                          s.claims.some((c) => c.status === "unreviewed")
+                          s.claims.some((c) => c.status === "unreviewed" || c.status === "needs_evidence")
                       ).length}
                 </span>
               )}

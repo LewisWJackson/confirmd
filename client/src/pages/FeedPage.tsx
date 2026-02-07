@@ -115,17 +115,14 @@ export default function FeedPage() {
                     className="group cursor-pointer glass p-8 rounded-[2.5rem] transition-all duration-500 hover:-translate-y-2 border border-slate-100 hover:shadow-[0_10px_50px_rgba(0,0,0,0.05)] bg-white"
                   >
                     <div className="relative rounded-[2rem] overflow-hidden mb-8 aspect-[21/9] shadow-2xl bg-gradient-to-br from-slate-900 to-cyan-900 flex items-center justify-center">
-                      {stories[0]?.imageUrl ? (
-                        <img src={stories[0].imageUrl} alt={stories[0].title || "Story"} className="w-full h-full object-cover absolute inset-0" />
-                      ) : (
-                        <span className="text-6xl font-black text-white/10 uppercase tracking-tighter">{filteredClaims[0].assetSymbols?.[0] || "CRYPTO"}</span>
-                      )}
+                      {filteredClaims[0].source?.logoUrl ? (
+                        <img src={filteredClaims[0].source.logoUrl} alt={filteredClaims[0].source?.displayName || "Source"} className="w-full h-full object-cover absolute inset-0 opacity-20 scale-150 blur-sm" />
+                      ) : null}
+                      <span className="text-6xl font-black text-white/10 uppercase tracking-tighter">{(filteredClaims[0].assetSymbols && filteredClaims[0].assetSymbols[0]) || filteredClaims[0].claimType?.replace(/_/g, " ") || "CRYPTO"}</span>
                       <div className="absolute top-6 left-6">
                         <span className="bg-cyan-600 text-white text-[10px] font-black px-4 py-2 rounded-xl uppercase tracking-widest shadow-xl">Latest Signal</span>
                       </div>
-                      {stories[0]?.imageUrl && (
-                        <div className="absolute inset-0 bg-gradient-to-t from-slate-900/60 to-transparent" />
-                      )}
+                      <div className="absolute inset-0 bg-gradient-to-t from-slate-900/60 to-transparent" />
                     </div>
                     <div className="space-y-6">
                       <div className="flex items-center space-x-3 text-[10px] font-black tracking-[0.3em] text-cyan-600 uppercase">
@@ -139,9 +136,9 @@ export default function FeedPage() {
                       {filteredClaims[0].verdict && (
                         <div className="flex items-center space-x-3">
                           <div className={`w-3 h-3 rounded-full ${getVerdictColor(filteredClaims[0].verdict.verdictLabel)}`} />
-                          <span className="text-sm font-bold text-slate-600 uppercase">{filteredClaims[0].verdict.verdictLabel.replace("_", " ")}</span>
+                          <span className="text-sm font-bold text-slate-600 uppercase">{filteredClaims[0].verdict.verdictLabel.replace(/_/g, " ")}</span>
                           <span className="text-sm text-slate-400">|</span>
-                          <span className="text-sm text-slate-500">{Math.round(filteredClaims[0].verdict.probabilityTrue * 100)}% probability</span>
+                          <span className="text-sm text-slate-500">{Math.round((filteredClaims[0].verdict.probabilityTrue ?? 0) * 100)}% probability</span>
                         </div>
                       )}
                     </div>
@@ -174,7 +171,7 @@ export default function FeedPage() {
                         {claim.verdict && (
                           <div className="pt-4 border-t border-slate-100">
                             <div className="flex h-2 w-full rounded-full overflow-hidden bg-slate-100">
-                              <div className={`h-full ${getVerdictColor(claim.verdict.verdictLabel)} rounded-full`} style={{ width: `${claim.verdict.probabilityTrue * 100}%` }} />
+                              <div className={`h-full ${getVerdictColor(claim.verdict.verdictLabel)} rounded-full`} style={{ width: `${(claim.verdict.probabilityTrue ?? 0) * 100}%` }} />
                             </div>
                           </div>
                         )}
@@ -209,7 +206,7 @@ export default function FeedPage() {
                       <h4 className="font-black text-xl text-slate-800 group-hover/item:text-cyan-600 transition-colors tracking-tight">{claim.claimText}</h4>
                     </div>
                     <div className="ml-8 w-20 h-20 rounded-2xl bg-white flex flex-col items-center justify-center border border-orange-100 shadow-xl">
-                      <span className="text-2xl font-black text-orange-600">{Math.round((1 - (claim.verdict?.probabilityTrue || 0.5)) * 100)}%</span>
+                      <span className="text-2xl font-black text-orange-600">{Math.round((1 - (claim.verdict?.probabilityTrue ?? 0.5)) * 100)}%</span>
                       <span className="text-[8px] font-black text-slate-400 uppercase tracking-tighter">NOISE</span>
                     </div>
                   </div>
