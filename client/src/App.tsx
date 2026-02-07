@@ -104,10 +104,9 @@ const App: React.FC = () => {
                 <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-500">Product</h4>
                 <div className="space-y-3">
                   {[
-                    { label: "Feed", path: "home" },
-                    { label: "Claims", path: "claims" },
-                    { label: "Sources", path: "sources" },
+                    { label: "Stories", path: "home" },
                     { label: "Blindspot", path: "blindspot" },
+                    { label: "Sources", path: "sources" },
                     { label: "Signals", path: "signals" },
                   ].map((item) => (
                     <button key={item.path} onClick={() => onNavigate(item.path)} className="block text-sm text-slate-400 hover:text-white transition-colors font-medium">

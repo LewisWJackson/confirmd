@@ -3,7 +3,6 @@ import bcrypt from "bcryptjs";
 import { storage } from "./storage.js";
 import { validateCommunityEvidence } from "./pipeline.js";
 import { pipeline } from "./pipeline-instance.js";
-import { deepVerifyClaim, calculateVerificationPriority } from "./deep-verify.js";
 import type { Claim, Verdict, EvidenceItem, Resolution, Source, SourceScore } from "../shared/schema.js";
 
 declare module "express-session" {
@@ -374,54 +373,29 @@ router.get("/sources/:id", async (req: Request, res: Response) => {
 
 // ─── GET /stories ───────────────────────────────────────────────────
 
-router.get("/stories", async (_req: Request, res: Response) => {
+router.get("/stories", async (req: Request, res: Response) => {
   try {
-    const stories = await storage.getStories();
+    const limit = parseInt(req.query.limit as string) || 50;
+    const offset = parseInt(req.query.offset as string) || 0;
+    const category = req.query.category as string | undefined;
+    const asset = req.query.asset as string | undefined;
 
-    const enrichedStories = await Promise.all(
-      stories.map(async (story) => {
-        const storyWithClaims = await storage.getStoryWithClaims(story.id);
-        const claims = storyWithClaims?.claims ?? [];
+    let feedItems = await storage.getStoriesForFeed(limit, offset);
 
-        // Gather unique source IDs
-        const sourceIds = new Set(claims.map((c) => c.sourceId));
+    // Filter by category if provided
+    if (category) {
+      feedItems = feedItems.filter(s => s.category?.toLowerCase() === category.toLowerCase());
+    }
 
-        // Compute verdict distribution
-        const verdictDistribution: Record<string, number> = {};
-        let latestClaimTimestamp: Date | null = null;
+    // Filter by asset if provided
+    if (asset) {
+      const assetUpper = asset.toUpperCase();
+      feedItems = feedItems.filter(s => s.assetSymbols.some(a => a.toUpperCase() === assetUpper));
+    }
 
-        for (const claim of claims) {
-          const verdict = await storage.getVerdictByClaim(claim.id);
-          if (verdict) {
-            const label = verdict.verdictLabel;
-            verdictDistribution[label] = (verdictDistribution[label] || 0) + 1;
-          }
-
-          const claimTime = new Date(claim.assertedAt);
-          if (!latestClaimTimestamp || claimTime > latestClaimTimestamp) {
-            latestClaimTimestamp = claimTime;
-          }
-        }
-
-        return {
-          id: story.id,
-          title: story.title,
-          summary: story.summary,
-          imageUrl: story.imageUrl,
-          category: story.category,
-          createdAt: story.createdAt,
-          updatedAt: story.updatedAt,
-          claimCount: claims.length,
-          sourceCount: sourceIds.size,
-          verdictDistribution,
-          latestClaimTimestamp,
-        };
-      })
-    );
-
-    res.json({ data: enrichedStories });
+    res.json({ data: feedItems });
   } catch (err) {
-    console.error("GET /stories error:", err);
+    console.error("Error fetching stories for feed:", (err as Error).message);
     res.status(500).json({ error: "Failed to fetch stories" });
   }
 });
@@ -440,39 +414,79 @@ router.get("/stories/:id", async (req: Request, res: Response) => {
     const { story, claims } = storyWithClaims;
     const enrichedClaims = await Promise.all(claims.map(enrichClaim));
 
-    // Unique sources
-    const sourceIds = new Set(claims.map((c) => c.sourceId));
-    const sources: Array<{
-      id: string;
-      displayName: string;
-      logo: string;
-      logoUrl: string | null;
-      type: string;
-      score: { trackRecord: number | null } | null;
-    }> = [];
+    // ── Build source-grouped coverage view ──────────────────────────
+    // For each claim, look up its originating item and source, then
+    // group items by source so the frontend can show a "coverage" list.
+    const sourceMap = new Map<
+      string,
+      {
+        source: {
+          id: string;
+          displayName: string;
+          logoUrl: string | null;
+          trackRecord: number | null;
+          tier: "high" | "medium" | "low";
+        };
+        items: Array<{
+          id: string;
+          title: string | null;
+          url: string | null;
+          publishedAt: Date | null;
+        }>;
+      }
+    >();
 
-    for (const sid of sourceIds) {
-      const source = await storage.getSource(sid);
-      if (source) {
+    const credibilityDistribution = { high: 0, medium: 0, low: 0 };
+    const seenItemIds = new Set<string>();
+
+    for (const claim of claims) {
+      const item = await storage.getItem(claim.itemId);
+      if (!item) continue;
+      // Deduplicate items across claims
+      if (seenItemIds.has(item.id)) continue;
+      seenItemIds.add(item.id);
+
+      if (!sourceMap.has(item.sourceId)) {
+        const source = await storage.getSource(item.sourceId);
+        if (!source) continue;
+
         const score = await storage.getSourceScore(source.id);
-        const logoAbbrev = source.displayName
-          .split(" ")
-          .map((w) => w[0])
-          .join("")
-          .toUpperCase()
-          .slice(0, 3);
-        sources.push({
-          id: source.id,
-          displayName: source.displayName,
-          logo: logoAbbrev,
-          logoUrl: source.logoUrl,
-          type: source.type,
-          score: score ? { trackRecord: score.trackRecord } : null,
+        const trackRecord = score?.trackRecord ?? null;
+        const tier: "high" | "medium" | "low" =
+          trackRecord !== null && trackRecord >= 70
+            ? "high"
+            : trackRecord !== null && trackRecord >= 50
+              ? "medium"
+              : "low";
+
+        sourceMap.set(item.sourceId, {
+          source: {
+            id: source.id,
+            displayName: source.displayName,
+            logoUrl: source.logoUrl ?? null,
+            trackRecord,
+            tier,
+          },
+          items: [],
         });
       }
+
+      sourceMap.get(item.sourceId)!.items.push({
+        id: item.id,
+        title: item.title ?? null,
+        url: item.url ?? null,
+        publishedAt: item.publishedAt ?? null,
+      });
     }
 
-    // Verdict distribution
+    // Tally credibility distribution from unique sources
+    for (const entry of sourceMap.values()) {
+      credibilityDistribution[entry.source.tier] += 1;
+    }
+
+    const coverage = Array.from(sourceMap.values());
+
+    // ── Verdict distribution ────────────────────────────────────────
     const verdictDistribution: Record<string, number> = {};
     for (const claim of claims) {
       const verdict = await storage.getVerdictByClaim(claim.id);
@@ -488,14 +502,11 @@ router.get("/stories/:id", async (req: Request, res: Response) => {
       summary: story.summary,
       imageUrl: story.imageUrl,
       category: story.category,
-      createdAt: story.createdAt,
-      updatedAt: story.updatedAt,
-      metadata: story.metadata,
+      assetSymbols: story.assetSymbols ?? [],
+      credibilityDistribution,
+      coverage,
       claims: enrichedClaims,
-      sources,
       verdictDistribution,
-      claimCount: claims.length,
-      sourceCount: sourceIds.size,
     });
   } catch (err) {
     console.error("GET /stories/:id error:", err);
@@ -649,63 +660,6 @@ router.get("/claims/:id/verdict-history", async (req: Request, res: Response) =>
   } catch (err) {
     console.error("Error fetching verdict history:", (err as Error).message);
     res.status(500).json({ error: "Failed to fetch verdict history" });
-  }
-});
-
-// ─── POST /verification/deep/:claimId ───────────────────────────────
-
-router.post("/verification/deep/:claimId", async (req: Request, res: Response) => {
-  try {
-    const claim = await storage.getClaim(param(req, "claimId"));
-    if (!claim) {
-      res.status(404).json({ error: "Claim not found" });
-      return;
-    }
-
-    const evidence = await storage.getEvidenceByClaim(claim.id);
-
-    // Run deep verification async
-    res.status(202).json({ message: "Deep verification started", claimId: claim.id });
-
-    try {
-      const result = await deepVerifyClaim(claim, evidence);
-      // Store new evidence
-      for (const ev of result.evidence) {
-        await storage.createEvidence({
-          claimId: claim.id,
-          url: ev.url,
-          publisher: ev.publisher,
-          excerpt: ev.excerpt,
-          stance: ev.stance,
-          evidenceGrade: ev.evidenceGrade,
-          primaryFlag: false,
-          metadata: { tier: "deep", searchQuery: ev.searchQuery },
-        });
-      }
-      // Store new verdict
-      await storage.createVerdict({
-        claimId: claim.id,
-        model: "claude-sonnet-4-5-20250929",
-        promptVersion: "deep-v1.0.0",
-        verdictLabel: result.verdict.verdictLabel,
-        probabilityTrue: result.verdict.probabilityTrue,
-        evidenceStrength: result.verdict.evidenceStrength,
-        reasoningSummary: result.verdict.reasoningSummary,
-        invalidationTriggers: result.verdict.invalidationTriggers,
-      });
-      // Update claim metadata
-      await storage.updateClaimMetadata(claim.id, {
-        verificationTier: "deep_verified",
-        lastDeepVerifiedAt: new Date().toISOString(),
-        deepVerificationCount: ((claim.metadata as any)?.deepVerificationCount || 0) + 1,
-      });
-      console.log(`[Route] Deep verification completed for claim ${claim.id}`);
-    } catch (err) {
-      console.error(`[Route] Deep verification failed for claim ${claim.id}:`, (err as Error).message);
-    }
-  } catch (err) {
-    console.error("Error triggering deep verification:", (err as Error).message);
-    res.status(500).json({ error: "Failed to trigger deep verification" });
   }
 });
 

@@ -35,8 +35,8 @@ export const Header: React.FC = () => {
   };
 
   const navItems = [
-    { path: '/', label: 'Feed' },
-    { path: '/claims', label: 'Claims' },
+    { path: '/', label: 'Stories' },
+    { path: '/blindspot', label: 'Blindspot' },
     { path: '/sources', label: 'Sources' },
     { path: '/signals', label: 'Signals' },
   ];

@@ -56,12 +56,21 @@ export function fetchSource(id: string) {
 }
 
 // Stories
-export function fetchStories() {
-  return fetchJson<{ data: any[] }>("/stories").then(r => r.data);
+export function fetchStories(params?: { category?: string; asset?: string }) {
+  const qs = new URLSearchParams();
+  if (params?.category) qs.set("category", params.category);
+  if (params?.asset) qs.set("asset", params.asset);
+  const query = qs.toString();
+  return fetchJson<{ data: any[] }>(`/stories${query ? `?${query}` : ""}`).then(r => r.data);
 }
 
-export function fetchStory(id: string) {
+export function fetchStoryDetail(id: string) {
   return fetchJson<any>(`/stories/${id}`);
+}
+
+// Keep old fetchStory as alias for backward compatibility
+export function fetchStory(id: string) {
+  return fetchStoryDetail(id);
 }
 
 // Evidence

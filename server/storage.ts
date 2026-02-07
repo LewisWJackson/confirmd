@@ -60,8 +60,11 @@ export interface IStorage {
   createStory(data: InsertStory): Promise<Story>;
   getStory(id: string): Promise<Story | undefined>;
   getStories(): Promise<Story[]>;
+  updateStory(id: string, data: Partial<Pick<Story, "title" | "summary" | "imageUrl" | "category" | "assetSymbols" | "sourceCount">>): Promise<void>;
   addClaimToStory(storyId: string, claimId: string): Promise<void>;
+  addItemToStory(storyId: string, itemId: string): Promise<void>;
   getStoryWithClaims(storyId: string): Promise<{ story: Story; claims: Claim[] } | undefined>;
+  getStoriesForFeed(limit?: number, offset?: number): Promise<StoryFeedItem[]>;
 
   // Source Scores
   createSourceScore(data: Omit<SourceScore, "id">): Promise<SourceScore>;
@@ -97,12 +100,33 @@ export interface PipelineStats {
   lastRunAt: string | null;
 }
 
+export interface StoryFeedItem {
+  id: string;
+  title: string;
+  summary: string | null;
+  imageUrl: string | null;
+  category: string | null;
+  createdAt: Date | null;
+  assetSymbols: string[];
+  sourceCount: number;
+  claimCount: number;
+  credibilityDistribution: { high: number; medium: number; low: number };
+  topSources: Array<{ id: string; displayName: string; logoUrl: string | null; trackRecord: number | null }>;
+  latestItemTimestamp: Date | null;
+}
+
 // ─── StoryClaim join type ────────────────────────────────────────────
 
 interface StoryClaim {
   id: string;
   storyId: string;
   claimId: string;
+}
+
+interface StoryItemJoin {
+  id: string;
+  storyId: string;
+  itemId: string;
 }
 
 // ─── In-Memory Storage Implementation ────────────────────────────────
@@ -116,6 +140,7 @@ export class MemStorage implements IStorage {
   private resolutions: Map<string, Resolution> = new Map();
   private stories: Map<string, Story> = new Map();
   private storyClaims: Map<string, StoryClaim> = new Map();
+  private storyItemJoins: Map<string, StoryItemJoin> = new Map();
   private sourceScores: Map<string, SourceScore> = new Map();
   private users: Map<string, User> = new Map();
   private lastPipelineRun: string | null = null;
@@ -388,6 +413,8 @@ export class MemStorage implements IStorage {
       summary: data.summary ?? null,
       imageUrl: data.imageUrl ?? null,
       category: data.category ?? null,
+      assetSymbols: (data.assetSymbols as string[] | null) ?? [],
+      sourceCount: data.sourceCount ?? 0,
       createdAt: now,
       updatedAt: now,
       metadata: data.metadata ?? {},
@@ -404,9 +431,25 @@ export class MemStorage implements IStorage {
     return Array.from(this.stories.values());
   }
 
+  async updateStory(id: string, data: Partial<Pick<Story, "title" | "summary" | "imageUrl" | "category" | "assetSymbols" | "sourceCount">>): Promise<void> {
+    const story = this.stories.get(id);
+    if (!story) return;
+    Object.assign(story, data, { updatedAt: new Date() });
+  }
+
   async addClaimToStory(storyId: string, claimId: string): Promise<void> {
     const id = crypto.randomUUID();
     this.storyClaims.set(id, { id, storyId, claimId });
+  }
+
+  async addItemToStory(storyId: string, itemId: string): Promise<void> {
+    // Avoid duplicates
+    const exists = Array.from(this.storyItemJoins.values()).some(
+      (si) => si.storyId === storyId && si.itemId === itemId
+    );
+    if (exists) return;
+    const id = crypto.randomUUID();
+    this.storyItemJoins.set(id, { id, storyId, itemId });
   }
 
   async getStoryWithClaims(
@@ -424,6 +467,93 @@ export class MemStorage implements IStorage {
       .filter((c): c is Claim => c !== undefined);
 
     return { story, claims };
+  }
+
+  async getStoriesForFeed(limit: number = 50, offset: number = 0): Promise<StoryFeedItem[]> {
+    const allStories = Array.from(this.stories.values())
+      .sort((a, b) => ((b.updatedAt?.getTime() || 0) - (a.updatedAt?.getTime() || 0)));
+
+    const paged = allStories.slice(offset, offset + limit);
+    const result: StoryFeedItem[] = [];
+
+    for (const story of paged) {
+      // Get claims for this story
+      const claimIds = Array.from(this.storyClaims.values())
+        .filter((sc) => sc.storyId === story.id)
+        .map((sc) => sc.claimId);
+
+      // Get items for this story
+      const itemIds = Array.from(this.storyItemJoins.values())
+        .filter((si) => si.storyId === story.id)
+        .map((si) => si.itemId);
+
+      // Get unique sources from items
+      const sourceMap = new Map<string, Source>();
+      let latestItemTimestamp: Date | null = null;
+
+      for (const itemId of itemIds) {
+        const item = this.items.get(itemId);
+        if (!item) continue;
+        const source = this.sources.get(item.sourceId);
+        if (source) sourceMap.set(source.id, source);
+        if (item.publishedAt && (!latestItemTimestamp || item.publishedAt > latestItemTimestamp)) {
+          latestItemTimestamp = item.publishedAt;
+        }
+      }
+
+      // If no storyItems yet, fall back to deriving sources from claims->items
+      if (sourceMap.size === 0) {
+        for (const cid of claimIds) {
+          const claim = this.claims.get(cid);
+          if (!claim) continue;
+          const item = this.items.get(claim.itemId);
+          if (!item) continue;
+          const source = this.sources.get(item.sourceId);
+          if (source) sourceMap.set(source.id, source);
+          if (item.publishedAt && (!latestItemTimestamp || item.publishedAt > latestItemTimestamp)) {
+            latestItemTimestamp = item.publishedAt;
+          }
+        }
+      }
+
+      // Compute credibility distribution
+      const dist = { high: 0, medium: 0, low: 0 };
+      const topSources: StoryFeedItem["topSources"] = [];
+
+      for (const source of sourceMap.values()) {
+        const score = Array.from(this.sourceScores.values()).find((ss) => ss.sourceId === source.id);
+        const tr = score?.trackRecord ?? 50;
+        if (tr >= 70) dist.high++;
+        else if (tr >= 50) dist.medium++;
+        else dist.low++;
+        topSources.push({
+          id: source.id,
+          displayName: source.displayName,
+          logoUrl: source.logoUrl,
+          trackRecord: tr,
+        });
+      }
+
+      // Sort topSources by trackRecord descending
+      topSources.sort((a, b) => (b.trackRecord ?? 0) - (a.trackRecord ?? 0));
+
+      result.push({
+        id: story.id,
+        title: story.title,
+        summary: story.summary,
+        imageUrl: story.imageUrl,
+        category: story.category,
+        createdAt: story.createdAt,
+        assetSymbols: story.assetSymbols ?? [],
+        sourceCount: sourceMap.size || story.sourceCount || 0,
+        claimCount: claimIds.length,
+        credibilityDistribution: dist,
+        topSources: topSources.slice(0, 5),
+        latestItemTimestamp,
+      });
+    }
+
+    return result;
   }
 
   // ── Source Scores ────────────────────────────────────────────────
@@ -573,6 +703,46 @@ export async function seedInitialData(storage: MemStorage): Promise<void> {
     metadata: { description: "Anonymous DeFi alpha Telegram channel" },
   });
 
+  const cryptoSlateSource = await storage.createSource({
+    type: "publisher",
+    handleOrDomain: "cryptoslate.com",
+    displayName: "CryptoSlate",
+    logoUrl: "https://logo.clearbit.com/cryptoslate.com",
+    metadata: { description: "Crypto news and data" },
+  });
+
+  const theDefiantSource = await storage.createSource({
+    type: "publisher",
+    handleOrDomain: "thedefiant.io",
+    displayName: "The Defiant",
+    logoUrl: "https://logo.clearbit.com/thedefiant.io",
+    metadata: { description: "DeFi news and analysis" },
+  });
+
+  const blockworksSource = await storage.createSource({
+    type: "publisher",
+    handleOrDomain: "blockworks.co",
+    displayName: "Blockworks",
+    logoUrl: "https://logo.clearbit.com/blockworks.co",
+    metadata: { description: "Crypto and blockchain news" },
+  });
+
+  const dlNewsSource = await storage.createSource({
+    type: "publisher",
+    handleOrDomain: "dlnews.com",
+    displayName: "DL News",
+    logoUrl: "https://logo.clearbit.com/dlnews.com",
+    metadata: { description: "Digital asset news" },
+  });
+
+  const unchainedSource = await storage.createSource({
+    type: "publisher",
+    handleOrDomain: "unchainedcrypto.com",
+    displayName: "Unchained",
+    logoUrl: "https://logo.clearbit.com/unchainedcrypto.com",
+    metadata: { description: "Crypto news and podcasts" },
+  });
+
   const allSources = [
     secSource,
     reutersSource,
@@ -582,6 +752,11 @@ export async function seedInitialData(storage: MemStorage): Promise<void> {
     coinTelegraphSource,
     cryptoWhaleSource,
     defiAlphaSource,
+    cryptoSlateSource,
+    theDefiantSource,
+    blockworksSource,
+    dlNewsSource,
+    unchainedSource,
   ];
 
   // ── 2. Source Scores ───────────────────────────────────────────
@@ -601,6 +776,11 @@ export async function seedInitialData(storage: MemStorage): Promise<void> {
     { source: coinTelegraphSource, trackRecord: 58, methodDiscipline: 52, sampleSize: 312, ci: { lower: 54, upper: 62 } },
     { source: cryptoWhaleSource, trackRecord: 34, methodDiscipline: 22, sampleSize: 89, ci: { lower: 28, upper: 40 } },
     { source: defiAlphaSource, trackRecord: 28, methodDiscipline: 18, sampleSize: 67, ci: { lower: 20, upper: 36 } },
+    { source: cryptoSlateSource, trackRecord: 68, methodDiscipline: 72, sampleSize: 150, ci: { lower: 64, upper: 72 } },
+    { source: theDefiantSource, trackRecord: 75, methodDiscipline: 78, sampleSize: 120, ci: { lower: 71, upper: 79 } },
+    { source: blockworksSource, trackRecord: 80, methodDiscipline: 82, sampleSize: 140, ci: { lower: 76, upper: 84 } },
+    { source: dlNewsSource, trackRecord: 74, methodDiscipline: 76, sampleSize: 100, ci: { lower: 70, upper: 78 } },
+    { source: unchainedSource, trackRecord: 78, methodDiscipline: 80, sampleSize: 110, ci: { lower: 74, upper: 82 } },
   ];
 
   for (const sd of scoreData) {

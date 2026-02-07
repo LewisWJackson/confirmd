@@ -2,7 +2,7 @@
  * Production seed script for Confirmd sources and source scores.
  *
  * Idempotent: safe to run multiple times.
- *   - Upserts all 14 sources (inserts if missing, updates logoUrl/metadata if existing)
+ *   - Upserts all 13 sources (inserts if missing, updates logoUrl/metadata if existing)
  *   - Upserts source scores for each source (inserts if missing, updates if existing)
  *
  * Usage:
@@ -77,49 +77,40 @@ const SOURCE_DATA = [
     logoUrl: "https://logo.clearbit.com/telegram.org",
     metadata: { description: "Anonymous DeFi alpha Telegram channel" },
   },
-
-  // XRP YouTube channels
   {
-    type: "youtube" as const,
-    handleOrDomain: "youtube.com/@TheBearableBull",
-    displayName: "Bearable Bull",
-    logoUrl: "https://yt3.googleusercontent.com/ytc/APkrFKZyDQCPm9XD9vTfN2RVKkZ8VpzSMW0G91ZP1r3n=s176-c-k-c0x00ffffff-no-rj",
-    metadata: { channelUrl: "https://www.youtube.com/@TheBearableBull", maxVideos: 10, community: "xrp" },
+    type: "publisher" as const,
+    handleOrDomain: "cryptoslate.com",
+    displayName: "CryptoSlate",
+    logoUrl: "https://logo.clearbit.com/cryptoslate.com",
+    metadata: { description: "Crypto news and data" },
   },
   {
-    type: "youtube" as const,
-    handleOrDomain: "youtube.com/@DigitalAssetInvestor",
-    displayName: "Digital Asset Investor",
-    logoUrl: "https://yt3.googleusercontent.com/ytc/APkrFKbyq5x2E2gMEI_3GQbBHBkKj0M0HOLwRnVMwQ=s176-c-k-c0x00ffffff-no-rj",
-    metadata: { channelUrl: "https://www.youtube.com/@DigitalAssetInvestor", maxVideos: 10, community: "xrp" },
+    type: "publisher" as const,
+    handleOrDomain: "thedefiant.io",
+    displayName: "The Defiant",
+    logoUrl: "https://logo.clearbit.com/thedefiant.io",
+    metadata: { description: "DeFi news and analysis" },
   },
   {
-    type: "youtube" as const,
-    handleOrDomain: "youtube.com/@BlockchainBacker",
-    displayName: "Blockchain Backer",
-    logoUrl: "https://yt3.googleusercontent.com/ytc/APkrFKZwVq4LSylSOUzO_2I__Ob0s_qjS3FD9EmV_w=s176-c-k-c0x00ffffff-no-rj",
-    metadata: { channelUrl: "https://www.youtube.com/@BlockchainBacker", maxVideos: 10, community: "xrp" },
+    type: "publisher" as const,
+    handleOrDomain: "blockworks.co",
+    displayName: "Blockworks",
+    logoUrl: "https://logo.clearbit.com/blockworks.co",
+    metadata: { description: "Crypto and blockchain news" },
   },
   {
-    type: "youtube" as const,
-    handleOrDomain: "youtube.com/@CryptoEri",
-    displayName: "Crypto Eri",
-    logoUrl: "https://yt3.googleusercontent.com/ytc/APkrFKZaL_3PWGM-R85k3n8GZ8y5h8gXvuXUy85M=s176-c-k-c0x00ffffff-no-rj",
-    metadata: { channelUrl: "https://www.youtube.com/@CryptoEri", maxVideos: 10, community: "xrp" },
+    type: "publisher" as const,
+    handleOrDomain: "dlnews.com",
+    displayName: "DL News",
+    logoUrl: "https://logo.clearbit.com/dlnews.com",
+    metadata: { description: "Digital asset news" },
   },
   {
-    type: "youtube" as const,
-    handleOrDomain: "youtube.com/@DigitalPerspectives",
-    displayName: "Digital Perspectives",
-    logoUrl: "https://yt3.googleusercontent.com/ytc/APkrFKZWK2EqTYHhXPR5LEm0qX5K1xHq3VkLQFaQ=s176-c-k-c0x00ffffff-no-rj",
-    metadata: { channelUrl: "https://www.youtube.com/@DigitalPerspectives", maxVideos: 10, community: "xrp" },
-  },
-  {
-    type: "youtube" as const,
-    handleOrDomain: "youtube.com/@AlexCobb",
-    displayName: "Alex Cobb",
-    logoUrl: "https://yt3.googleusercontent.com/ytc/APkrFKY0wX4G3P1q3-0DCR0pVbPHq9LZ5PzQnLc=s176-c-k-c0x00ffffff-no-rj",
-    metadata: { channelUrl: "https://www.youtube.com/@AlexCobb", maxVideos: 10, community: "xrp" },
+    type: "publisher" as const,
+    handleOrDomain: "unchainedcrypto.com",
+    displayName: "Unchained",
+    logoUrl: "https://logo.clearbit.com/unchainedcrypto.com",
+    metadata: { description: "Crypto news and podcasts" },
   },
 ];
 
@@ -136,14 +127,11 @@ const SCORE_DATA: Record<
   "cointelegraph.com":  { trackRecord: 58, methodDiscipline: 52, sampleSize: 312, ci: { lower: 54, upper: 62  } },
   "@CryptoWhale":       { trackRecord: 34, methodDiscipline: 22, sampleSize: 89,  ci: { lower: 28, upper: 40  } },
   "t.me/defialpha":     { trackRecord: 28, methodDiscipline: 18, sampleSize: 67,  ci: { lower: 20, upper: 36  } },
-
-  // XRP YouTube channels
-  "youtube.com/@TheBearableBull":       { trackRecord: 58, methodDiscipline: 45, sampleSize: 50, ci: { lower: 45, upper: 70 } },
-  "youtube.com/@DigitalAssetInvestor":  { trackRecord: 62, methodDiscipline: 50, sampleSize: 50, ci: { lower: 45, upper: 70 } },
-  "youtube.com/@BlockchainBacker":      { trackRecord: 65, methodDiscipline: 55, sampleSize: 50, ci: { lower: 45, upper: 70 } },
-  "youtube.com/@CryptoEri":            { trackRecord: 60, methodDiscipline: 52, sampleSize: 50, ci: { lower: 45, upper: 70 } },
-  "youtube.com/@DigitalPerspectives":   { trackRecord: 57, methodDiscipline: 48, sampleSize: 50, ci: { lower: 45, upper: 70 } },
-  "youtube.com/@AlexCobb":             { trackRecord: 55, methodDiscipline: 40, sampleSize: 50, ci: { lower: 45, upper: 70 } },
+  "cryptoslate.com":    { trackRecord: 68, methodDiscipline: 72, sampleSize: 150, ci: { lower: 64, upper: 72  } },
+  "thedefiant.io":      { trackRecord: 75, methodDiscipline: 78, sampleSize: 120, ci: { lower: 71, upper: 79  } },
+  "blockworks.co":      { trackRecord: 80, methodDiscipline: 82, sampleSize: 140, ci: { lower: 76, upper: 84  } },
+  "dlnews.com":         { trackRecord: 74, methodDiscipline: 76, sampleSize: 100, ci: { lower: 70, upper: 78  } },
+  "unchainedcrypto.com": { trackRecord: 78, methodDiscipline: 80, sampleSize: 110, ci: { lower: 74, upper: 82  } },
 };
 
 // ---------------------------------------------------------------------------

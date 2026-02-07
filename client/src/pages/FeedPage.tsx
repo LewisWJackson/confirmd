@@ -1,371 +1,332 @@
 import React, { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { fetchClaims, fetchStories } from "../lib/api";
-import { VeracityAnalysis } from "../components/VeracityAnalysis";
-import { BlindspotWidget } from "../components/BlindspotWidget";
+import { fetchStories } from "../lib/api";
 
-const SIDEBAR_TOPICS = [
-  { id: "1", name: "Ethereum ETF", trend: "up" as const },
-  { id: "2", name: "SEC v. Ripple", trend: "neutral" as const },
-  { id: "3", name: "Layer 2 Season", trend: "up" as const },
-  { id: "4", name: "GameFi Revival", trend: "down" as const },
-  { id: "5", name: "Stablecoin Bills", trend: "up" as const },
-];
+const CATEGORIES = ["All", "Regulation", "DeFi", "Security", "Markets", "Technology"];
 
-const getVerdictColor = (label: string) => {
-  if (label === "verified") return "bg-cyan-500";
-  if (label === "speculative") return "bg-orange-500";
-  if (label === "misleading") return "bg-red-500";
-  return "bg-slate-400";
-};
+function timeAgo(dateStr: string): string {
+  const now = Date.now();
+  const then = new Date(dateStr).getTime();
+  const diffMs = now - then;
+  const diffMin = Math.floor(diffMs / 60000);
+  if (diffMin < 1) return "just now";
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}h ago`;
+  const diffDay = Math.floor(diffHr / 24);
+  if (diffDay < 7) return `${diffDay}d ago`;
+  return `${Math.floor(diffDay / 7)}w ago`;
+}
 
-const getVerdictBorderColor = (label: string) => {
-  if (label === "verified") return "border-l-cyan-500";
-  if (label === "speculative") return "border-l-orange-500";
-  if (label === "misleading") return "border-l-red-500";
-  return "border-l-slate-300";
-};
+function CredibilityBar({ distribution, size = "md" }: { distribution: { high: number; medium: number; low: number }; size?: "sm" | "md" | "lg" }) {
+  const total = distribution.high + distribution.medium + distribution.low;
+  if (total === 0) return null;
+  const highPct = (distribution.high / total) * 100;
+  const medPct = (distribution.medium / total) * 100;
+  const lowPct = (distribution.low / total) * 100;
+  const h = size === "lg" ? "h-3" : size === "md" ? "h-2.5" : "h-2";
 
-const getVerificationTierBadge = (claim: any) => {
-  const tier = claim.metadata?.verificationTier;
-  if (tier === "deep_verified") {
-    return (
-      <span className="px-2 py-0.5 text-[10px] rounded-full uppercase tracking-wider font-semibold bg-emerald-900/50 text-emerald-400 border border-emerald-700/50">
-        Deep Verified
-      </span>
-    );
-  }
-  if (tier === "reverified") {
-    return (
-      <span className="px-2 py-0.5 text-[10px] rounded-full uppercase tracking-wider font-semibold bg-blue-900/50 text-blue-400 border border-blue-700/50">
-        Re-verified
-      </span>
-    );
-  }
-  return null;
-};
+  return (
+    <div className={`w-full ${h} rounded-full overflow-hidden flex bg-slate-100`}>
+      {highPct > 0 && <div className="bg-emerald-500 h-full transition-all duration-700" style={{ width: `${highPct}%` }} />}
+      {medPct > 0 && <div className="bg-amber-400 h-full transition-all duration-700" style={{ width: `${medPct}%` }} />}
+      {lowPct > 0 && <div className="bg-red-500 h-full transition-all duration-700" style={{ width: `${lowPct}%` }} />}
+    </div>
+  );
+}
 
-const isYouTubeSource = (claim: any) => {
-  if (claim.source?.sourceType === "youtube") return true;
-  const domain = claim.source?.handleOrDomain || claim.source?.domain || "";
-  return domain.startsWith("youtube.com/") || domain.includes("youtube.com");
-};
+function SourceLogoStack({ sources }: { sources: any[] }) {
+  const shown = sources.slice(0, 4);
+  return (
+    <div className="flex items-center -space-x-2">
+      {shown.map((s: any, i: number) => (
+        <div
+          key={s.id || i}
+          className="w-7 h-7 rounded-full border-2 border-white bg-slate-100 flex items-center justify-center overflow-hidden shadow-sm"
+          style={{ zIndex: shown.length - i }}
+          title={s.displayName}
+        >
+          {s.logoUrl ? (
+            <img src={s.logoUrl} alt={s.displayName} className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+          ) : (
+            <span className="text-[9px] font-black text-slate-500">{s.displayName?.charAt(0) || "?"}</span>
+          )}
+        </div>
+      ))}
+      {sources.length > 4 && (
+        <div className="w-7 h-7 rounded-full border-2 border-white bg-slate-200 flex items-center justify-center shadow-sm" style={{ zIndex: 0 }}>
+          <span className="text-[8px] font-black text-slate-500">+{sources.length - 4}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FeaturedStoryCard({ story, onClick }: { story: any; onClick: () => void }) {
+  const dist = story.credibilityDistribution || { high: 0, medium: 0, low: 0 };
+  const topSources = story.topSources || [];
+
+  return (
+    <div
+      onClick={onClick}
+      className="group cursor-pointer rounded-2xl overflow-hidden border border-slate-200 bg-white hover:shadow-[0_8px_40px_rgba(0,0,0,0.08)] transition-all duration-500 hover:-translate-y-1"
+    >
+      <div className="relative aspect-[21/9] overflow-hidden bg-gradient-to-br from-slate-900 to-cyan-900">
+        {story.imageUrl ? (
+          <img
+            src={story.imageUrl}
+            alt={story.title}
+            loading="eager"
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+          />
+        ) : null}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
+        <div className="absolute top-5 left-6 flex items-center gap-2">
+          {story.category && (
+            <span className="text-[9px] font-black tracking-[0.2em] uppercase px-3 py-1.5 rounded-lg bg-cyan-500/90 text-white backdrop-blur-sm">
+              {story.category}
+            </span>
+          )}
+          <span className="text-[9px] font-black tracking-[0.2em] uppercase px-3 py-1.5 rounded-lg bg-white/20 text-white backdrop-blur-sm">
+            {story.sourceCount || 0} sources
+          </span>
+        </div>
+        <div className="absolute bottom-0 left-0 right-0 p-6 md:p-8">
+          <h2 className="text-2xl md:text-4xl font-black text-white tracking-tight leading-tight mb-4 group-hover:text-cyan-200 transition-colors">
+            {story.title}
+          </h2>
+          {story.summary && (
+            <p className="text-sm md:text-base text-white/70 line-clamp-2 max-w-3xl font-medium">{story.summary}</p>
+          )}
+        </div>
+      </div>
+
+      <div className="p-6 md:p-8 space-y-5">
+        {/* Credibility distribution bar */}
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Source Credibility</span>
+            <div className="flex items-center gap-4 text-[10px] font-bold">
+              <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-emerald-500" /> High {dist.high}</span>
+              <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-amber-400" /> Med {dist.medium}</span>
+              <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-red-500" /> Low {dist.low}</span>
+            </div>
+          </div>
+          <CredibilityBar distribution={dist} size="lg" />
+        </div>
+
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <SourceLogoStack sources={topSources} />
+            <div className="flex flex-wrap gap-1.5">
+              {(story.assetSymbols || []).map((s: string) => (
+                <span key={s} className="px-2.5 py-1 bg-slate-100 text-slate-600 rounded-lg text-[10px] font-black uppercase tracking-wider">
+                  {s}
+                </span>
+              ))}
+            </div>
+          </div>
+          <span className="text-xs font-medium text-slate-400">
+            {story.latestItemTimestamp ? timeAgo(story.latestItemTimestamp) : ""}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StoryCard({ story, onClick }: { story: any; onClick: () => void }) {
+  const dist = story.credibilityDistribution || { high: 0, medium: 0, low: 0 };
+  const topSources = story.topSources || [];
+
+  return (
+    <div
+      onClick={onClick}
+      className="group cursor-pointer rounded-2xl border border-slate-200 bg-white p-6 hover:shadow-[0_6px_30px_rgba(0,0,0,0.06)] transition-all duration-500 hover:-translate-y-1 flex flex-col"
+    >
+      {/* Category + time */}
+      <div className="flex items-center justify-between mb-4">
+        {story.category && (
+          <span className="text-[9px] font-black tracking-[0.2em] uppercase px-2.5 py-1 rounded-lg bg-cyan-50 text-cyan-600 border border-cyan-100">
+            {story.category}
+          </span>
+        )}
+        <span className="text-[10px] font-medium text-slate-400">
+          {story.latestItemTimestamp ? timeAgo(story.latestItemTimestamp) : ""}
+        </span>
+      </div>
+
+      {/* Title */}
+      <h3 className="text-lg font-black text-slate-900 tracking-tight leading-snug mb-4 group-hover:text-cyan-600 transition-colors line-clamp-3 flex-1">
+        {story.title}
+      </h3>
+
+      {/* Source count badge */}
+      <div className="flex items-center gap-2 mb-4">
+        <span className="text-[10px] font-bold text-slate-500">
+          {story.sourceCount || 0} sources covering this story
+        </span>
+      </div>
+
+      {/* Credibility bar */}
+      <div className="mb-4">
+        <CredibilityBar distribution={dist} size="sm" />
+        <div className="flex items-center gap-3 mt-1.5 text-[9px] font-bold text-slate-400">
+          {dist.high > 0 && <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />{dist.high}</span>}
+          {dist.medium > 0 && <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-amber-400" />{dist.medium}</span>}
+          {dist.low > 0 && <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-red-500" />{dist.low}</span>}
+        </div>
+      </div>
+
+      {/* Bottom row */}
+      <div className="flex items-center justify-between pt-4 border-t border-slate-100">
+        <SourceLogoStack sources={topSources} />
+        <div className="flex flex-wrap gap-1">
+          {(story.assetSymbols || []).slice(0, 3).map((s: string) => (
+            <span key={s} className="px-2 py-0.5 bg-slate-100 text-slate-500 rounded-md text-[9px] font-black uppercase tracking-wider">
+              {s}
+            </span>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function LoadingSkeleton() {
+  return (
+    <>
+      {/* Featured skeleton */}
+      <div className="rounded-2xl overflow-hidden border border-slate-200 bg-white animate-pulse">
+        <div className="aspect-[21/9] bg-slate-200" />
+        <div className="p-8 space-y-4">
+          <div className="h-3 bg-slate-200 rounded-full w-full" />
+          <div className="flex gap-4">
+            <div className="h-4 bg-slate-100 rounded w-20" />
+            <div className="h-4 bg-slate-100 rounded w-16" />
+            <div className="h-4 bg-slate-100 rounded w-16" />
+          </div>
+        </div>
+      </div>
+      {/* Grid skeletons */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-8">
+        {[1, 2, 3, 4, 5, 6].map((i) => (
+          <div key={i} className="rounded-2xl border border-slate-200 bg-white p-6 animate-pulse">
+            <div className="flex items-center justify-between mb-4">
+              <div className="h-5 bg-slate-200 rounded-lg w-20" />
+              <div className="h-4 bg-slate-100 rounded w-12" />
+            </div>
+            <div className="h-5 bg-slate-200 rounded-lg w-full mb-2" />
+            <div className="h-5 bg-slate-200 rounded-lg w-3/4 mb-4" />
+            <div className="h-2 bg-slate-100 rounded-full w-full mb-4" />
+            <div className="flex gap-2">
+              <div className="w-7 h-7 bg-slate-200 rounded-full" />
+              <div className="w-7 h-7 bg-slate-200 rounded-full" />
+              <div className="w-7 h-7 bg-slate-200 rounded-full" />
+            </div>
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
 
 export default function FeedPage() {
   const [, setLocation] = useLocation();
-  const [feedFilter, setFeedFilter] = useState<"latest" | "trusted" | "original">("latest");
+  const [activeCategory, setActiveCategory] = useState("All");
 
-  const { data: claims = [], isLoading } = useQuery({
-    queryKey: ["claims", "feed"],
-    queryFn: () => fetchClaims({ sort: "newest", limit: 20 }),
-  });
-
-  const { data: stories = [] } = useQuery({
+  const { data: stories = [], isLoading } = useQuery({
     queryKey: ["stories"],
-    queryFn: fetchStories,
+    queryFn: () => fetchStories(),
   });
 
-  const filteredClaims = useMemo(() => {
-    if (feedFilter === "trusted") {
-      return claims.filter((c: any) => c.verdict?.verdictLabel === "verified" || c.verdict?.verdictLabel === "plausible_unverified");
-    }
-    return claims;
-  }, [claims, feedFilter]);
+  const filteredStories = useMemo(() => {
+    if (activeCategory === "All") return stories;
+    return stories.filter((s: any) => s.category === activeCategory);
+  }, [stories, activeCategory]);
 
-  const speculativeClaims = useMemo(() => {
-    return claims.filter((c: any) => c.verdict?.verdictLabel === "speculative" || c.verdict?.verdictLabel === "misleading");
-  }, [claims]);
-
-  const blindspotClaim = speculativeClaims[0];
-
-  // Build a story-like object for the blindspot widget
-  const blindspotStory = blindspotClaim ? {
-    id: blindspotClaim.id,
-    title: blindspotClaim.claimText,
-    summary: blindspotClaim.verdict?.reasoningSummary || "This claim has high speculative content and needs verification.",
-    imageUrl: "https://images.unsplash.com/photo-1523475496153-3d6cc0f0bf19?auto=format&fit=crop&q=80&w=800",
-    sources: [],
-    timeLabel: "Recent",
-    category: "Alert",
-    veracity: { verified: 5, balanced: 15, speculative: 80 },
-    isBlindspot: true,
-  } : null;
+  const featuredStory = filteredStories[0];
+  const gridStories = filteredStories.slice(1);
 
   return (
-    <div className="max-w-7xl mx-auto px-6 md:px-12 py-16 w-full animate-in fade-in duration-1000 relative z-10">
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-16">
-        <div className="lg:col-span-8 space-y-20">
-          {/* Top Stories with images */}
-          {stories.length > 0 && (
-            <section className="mb-20">
-              <div className="flex items-end justify-between mb-8">
-                <div>
-                  <span className="text-[10px] font-black tracking-[0.5em] text-cyan-600 uppercase">Developing</span>
-                  <h3 className="text-3xl font-black tracking-tighter text-slate-900 mt-1">Top Stories</h3>
-                </div>
-                <button onClick={() => setLocation("/claims")} className="text-[10px] font-black tracking-widest uppercase text-slate-400 hover:text-cyan-600 transition-colors">
-                  View All Claims &rarr;
-                </button>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {stories.slice(0, 6).map((story: any, i: number) => (
-                  <div
-                    key={story.id}
-                    onClick={() => setLocation(`/stories/${story.id}`)}
-                    className={`relative rounded-[2rem] overflow-hidden cursor-pointer group ${
-                      i === 0 ? "md:col-span-2 md:row-span-2 aspect-[16/9]" : "aspect-[4/3]"
-                    }`}
-                  >
-                    {story.imageUrl ? (
-                      <img
-                        src={story.imageUrl}
-                        alt={story.title}
-                        loading="lazy"
-                        className="w-full h-full object-cover absolute inset-0 group-hover:scale-105 transition-transform duration-700"
-                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                      />
-                    ) : null}
-                    <div className="w-full h-full absolute inset-0 bg-gradient-to-br from-slate-900 to-cyan-900 -z-10" />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
-                    <div className="absolute bottom-0 left-0 right-0 p-6">
-                      {story.category && (
-                        <span className="text-[9px] font-black tracking-[0.3em] uppercase px-3 py-1 rounded-full bg-cyan-500/80 text-white mb-3 inline-block">
-                          {story.category}
-                        </span>
-                      )}
-                      <h4 className={`font-black text-white tracking-tight leading-tight ${i === 0 ? "text-2xl" : "text-sm"}`}>
-                        {story.title}
-                      </h4>
-                      <div className="flex items-center space-x-3 mt-2">
-                        <span className="text-[10px] font-bold text-white/70">{story.claimCount || 0} claims</span>
-                        <span className="text-[10px] font-bold text-white/70">{story.sourceCount || 0} sources</span>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </section>
-          )}
+    <div className="animate-in fade-in duration-1000 relative z-10">
+      {/* Hero Section */}
+      <section className="max-w-7xl mx-auto px-6 md:px-12 pt-16 pb-8">
+        <div className="max-w-3xl">
+          <span className="text-[10px] font-black tracking-[0.5em] text-cyan-600 uppercase">Crypto News Intelligence</span>
+          <h1 className="text-4xl md:text-6xl font-black tracking-tighter text-slate-900 mt-2 leading-[0.95]">
+            See the full picture<br />of crypto news
+          </h1>
+          <p className="text-lg text-slate-500 mt-4 font-medium max-w-xl">
+            Compare how multiple sources cover the same story. Spot credibility gaps, detect blindspots, and read with clarity.
+          </p>
+        </div>
+      </section>
 
-          <section>
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-12 gap-8">
-              <div className="flex flex-col">
-                <span className="text-[10px] font-black tracking-[0.5em] text-cyan-600 uppercase mb-3">Verified Stream</span>
-                <h2 className="text-3xl md:text-5xl font-black tracking-tighter uppercase">
-                  <span className="bg-gradient-to-r from-slate-900 via-cyan-700 to-slate-900 bg-clip-text text-transparent">XRP Claim Tracker</span>
-                </h2>
-                <p className="text-sm text-slate-500 mt-2 font-medium">Every claim from XRP's top voices — verified in real-time</p>
-                <span className="mt-3 inline-block self-start px-3 py-1.5 bg-cyan-50 text-cyan-600 rounded-full text-[10px] font-bold uppercase tracking-widest border border-cyan-200/50">
-                  More communities coming soon
-                </span>
-              </div>
-              <div className="flex space-x-1 bg-slate-100 p-1.5 rounded-2xl border border-slate-200 shadow-sm">
-                {(["latest", "trusted", "original"] as const).map((filter) => (
-                  <button
-                    key={filter}
-                    onClick={() => setFeedFilter(filter)}
-                    className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
-                      feedFilter === filter
-                        ? filter === "original" ? "bg-cyan-600 text-white shadow-lg" : "bg-white text-slate-900 shadow-lg"
-                        : "text-slate-500 hover:text-slate-900"
-                    }`}
-                  >
-                    {filter === "original" ? "Confirmd Original" : filter}
-                  </button>
-                ))}
-              </div>
+      {/* Filter Bar */}
+      <section className="max-w-7xl mx-auto px-6 md:px-12 pb-8">
+        <div className="flex flex-wrap gap-2">
+          {CATEGORIES.map((cat) => (
+            <button
+              key={cat}
+              onClick={() => setActiveCategory(cat)}
+              className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+                activeCategory === cat
+                  ? "bg-slate-900 text-white shadow-lg"
+                  : "bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-700"
+              }`}
+            >
+              {cat}
+            </button>
+          ))}
+        </div>
+      </section>
+
+      {/* Content */}
+      <section className="max-w-7xl mx-auto px-6 md:px-12 pb-24">
+        {isLoading ? (
+          <LoadingSkeleton />
+        ) : filteredStories.length === 0 ? (
+          <div className="rounded-2xl border border-slate-200 bg-white p-16 text-center">
+            <div className="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-6">
+              <svg className="w-8 h-8 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z" />
+              </svg>
             </div>
-
-            {feedFilter === "original" ? (
-              <div className="glass rounded-[3rem] p-20 text-center border-dashed border-2 border-slate-200 bg-white/50">
-                <div className="w-20 h-20 bg-cyan-100 rounded-3xl flex items-center justify-center text-cyan-600 mx-auto mb-8 shadow-xl">
-                  <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
-                </div>
-                <h3 className="text-3xl font-black text-slate-900 tracking-tight">Access Confirmd Original</h3>
-                <p className="text-slate-500 mt-4 max-w-md mx-auto font-medium">Synthesized, noise-free original reports. Unlock the full data synthesis for members.</p>
-                <button onClick={() => setLocation("/plus")} className="mt-10 px-10 py-4 bg-slate-900 text-white text-xs font-black uppercase tracking-widest rounded-2xl shadow-2xl hover:bg-cyan-600 transition-all">Start Membership</button>
-              </div>
-            ) : isLoading ? (
-              <div className="space-y-6">
-                {[1, 2, 3].map((i) => (
-                  <div key={i} className="glass rounded-[2rem] p-8 animate-pulse bg-white/50">
-                    <div className="h-6 bg-slate-200 rounded-xl w-3/4 mb-4" />
-                    <div className="h-4 bg-slate-100 rounded-lg w-full mb-2" />
-                    <div className="h-4 bg-slate-100 rounded-lg w-2/3" />
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <>
-                {/* Featured claim */}
-                {filteredClaims[0] && (
-                  <div
-                    onClick={() => setLocation(`/claims/${filteredClaims[0].id}`)}
-                    className="group cursor-pointer glass p-8 rounded-[2.5rem] transition-all duration-500 hover:-translate-y-2 border border-slate-100 hover:shadow-[0_10px_50px_rgba(0,0,0,0.05)] bg-white"
-                  >
-                    <div className="relative rounded-[2rem] overflow-hidden mb-8 aspect-[21/9] shadow-2xl bg-gradient-to-br from-slate-900 to-cyan-900 flex items-center justify-center">
-                      {filteredClaims[0].source?.logoUrl ? (
-                        <img src={filteredClaims[0].source.logoUrl} alt={filteredClaims[0].source?.displayName || "Source"} className="w-full h-full object-cover absolute inset-0 opacity-20 scale-150 blur-sm" />
-                      ) : null}
-                      <span className="text-6xl font-black text-white/10 uppercase tracking-tighter">{(filteredClaims[0].assetSymbols && filteredClaims[0].assetSymbols[0]) || filteredClaims[0].claimType?.replace(/_/g, " ") || "CRYPTO"}</span>
-                      <div className="absolute top-6 left-6">
-                        <span className="bg-cyan-600 text-white text-[10px] font-black px-4 py-2 rounded-xl uppercase tracking-widest shadow-xl">Latest Signal</span>
-                      </div>
-                      <div className="absolute inset-0 bg-gradient-to-t from-slate-900/60 to-transparent" />
-                    </div>
-                    <div className="space-y-6">
-                      <div className="flex items-center space-x-3 text-[10px] font-black tracking-[0.3em] text-cyan-600 uppercase">
-                        {filteredClaims[0].source?.logoUrl ? (
-                          <div className="w-8 h-8 rounded-lg bg-white border border-slate-100 p-1 flex-shrink-0 shadow-sm">
-                            <img src={filteredClaims[0].source.logoUrl} alt={filteredClaims[0].source.displayName} className="w-full h-full object-contain rounded" />
-                          </div>
-                        ) : (
-                          <div className="w-8 h-8 rounded-lg bg-slate-900 flex items-center justify-center flex-shrink-0 shadow-sm">
-                            <span className="text-white font-black text-[10px]">{filteredClaims[0].source?.displayName?.charAt(0) || "?"}</span>
-                          </div>
-                        )}
-                        <span>{filteredClaims[0].claimType?.replace(/_/g, " ") || "Claim"}</span>
-                        <span className="text-slate-300">&bull;</span>
-                        <span>{filteredClaims[0].source?.displayName || "Source"}</span>
-                        {isYouTubeSource(filteredClaims[0]) && (
-                          <span className="px-2 py-0.5 bg-red-600 text-white text-[9px] font-black rounded tracking-widest">YT</span>
-                        )}
-                        {getVerificationTierBadge(filteredClaims[0])}
-                      </div>
-                      <h2 className="text-4xl md:text-5xl font-black leading-tight text-slate-900 group-hover:text-cyan-600 transition-colors tracking-tighter">
-                        {filteredClaims[0].claimText}
-                      </h2>
-                      {filteredClaims[0].verdict && (
-                        <div className="flex items-center space-x-3">
-                          <div className={`w-3 h-3 rounded-full ${getVerdictColor(filteredClaims[0].verdict.verdictLabel)}`} />
-                          <span className="text-sm font-bold text-slate-600 uppercase">{filteredClaims[0].verdict.verdictLabel.replace(/_/g, " ")}</span>
-                          <span className="text-sm text-slate-400">|</span>
-                          <span className="text-sm text-slate-500">{Math.round((filteredClaims[0].verdict.probabilityTrue ?? 0) * 100)}% probability</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* Rest of claims */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-10 mt-20">
-                  {filteredClaims.slice(1).map((claim: any) => (
-                    <div
-                      key={claim.id}
-                      onClick={() => setLocation(`/claims/${claim.id}`)}
-                      className={`glass p-7 rounded-[2rem] bg-white transition-all duration-500 hover:shadow-[0_10px_40px_rgba(0,0,0,0.04)] cursor-pointer group hover:-translate-y-2 border border-slate-100 border-l-4 ${
-                        claim.verdict ? getVerdictBorderColor(claim.verdict.verdictLabel) : "border-l-slate-200"
-                      }`}
-                    >
-                      <div className="space-y-5">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center space-x-3">
-                            {claim.source?.logoUrl ? (
-                              <div className="w-8 h-8 rounded-lg bg-white border border-slate-100 p-1 flex-shrink-0 shadow-sm">
-                                <img src={claim.source.logoUrl} alt={claim.source.displayName} className="w-full h-full object-contain rounded" />
-                              </div>
-                            ) : (
-                              <div className="w-8 h-8 rounded-lg bg-slate-900 flex items-center justify-center flex-shrink-0 shadow-sm">
-                                <span className="text-white font-black text-[10px]">{claim.source?.displayName?.charAt(0) || "?"}</span>
-                              </div>
-                            )}
-                            <span className="text-[10px] font-black text-cyan-600 uppercase tracking-[0.3em]">{claim.claimType?.replace(/_/g, " ")}</span>
-                            {isYouTubeSource(claim) && (
-                              <span className="px-2 py-0.5 bg-red-600 text-white text-[9px] font-black rounded tracking-widest">YT</span>
-                            )}
-                          </div>
-                          <div className="flex items-center space-x-2">
-                            {getVerificationTierBadge(claim)}
-                            {claim.verdict && (
-                              <div className={`w-2.5 h-2.5 rounded-full ${getVerdictColor(claim.verdict.verdictLabel)}`} />
-                            )}
-                          </div>
-                        </div>
-                        <h3 className="font-black text-xl leading-tight text-slate-900 group-hover:text-cyan-600 transition-colors tracking-tight line-clamp-3">
-                          {claim.claimText}
-                        </h3>
-                        <div className="flex items-center text-[10px] font-bold text-slate-400 space-x-3">
-                          <span>{claim.source?.displayName || "Source"}</span>
-                          <span className="text-slate-300">&bull;</span>
-                          <span>{claim.evidenceCount || 0} evidence</span>
-                        </div>
-                        {claim.verdict && (
-                          <div className="pt-5 border-t border-slate-100">
-                            <div className="flex h-2 w-full rounded-full overflow-hidden bg-slate-100">
-                              <div className={`h-full ${getVerdictColor(claim.verdict.verdictLabel)} rounded-full`} style={{ width: `${(claim.verdict.probabilityTrue ?? 0) * 100}%` }} />
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </>
+            <h3 className="text-xl font-black text-slate-900 tracking-tight">No stories yet</h3>
+            <p className="text-sm text-slate-500 mt-2 font-medium">
+              {activeCategory !== "All"
+                ? `No stories in the ${activeCategory} category right now. Try a different filter.`
+                : "Stories will appear here once the pipeline processes incoming news."}
+            </p>
+          </div>
+        ) : (
+          <>
+            {/* Featured Story */}
+            {featuredStory && (
+              <FeaturedStoryCard
+                story={featuredStory}
+                onClick={() => setLocation(`/stories/${featuredStory.id}`)}
+              />
             )}
-          </section>
 
-          {/* Anomaly Scanner */}
-          {speculativeClaims.length > 0 && (
-            <section className="glass rounded-[3rem] p-12 relative overflow-hidden group bg-white/50 border-slate-100">
-              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-cyan-500 via-transparent to-orange-500" />
-              <div className="flex items-center justify-between mb-12">
-                <h3 className="text-3xl font-black tracking-tighter uppercase text-slate-900">Anomaly Scanner</h3>
-                <div className="flex items-center space-x-2">
-                  <div className="w-2 h-2 bg-cyan-500 rounded-full animate-ping" />
-                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Network Pulse</span>
-                </div>
-              </div>
-              <div className="space-y-8">
-                {speculativeClaims.slice(0, 3).map((claim: any) => (
-                  <div
-                    key={claim.id}
-                    onClick={() => setLocation(`/claims/${claim.id}`)}
-                    className="glass-light hover:bg-slate-50 p-8 rounded-[2rem] flex items-center justify-between hover:shadow-2xl transition-all duration-500 cursor-pointer border border-transparent hover:border-orange-500/20 group/item"
-                  >
-                    <div className="flex-1">
-                      <span className="text-[10px] font-black text-orange-600 tracking-widest uppercase mb-2 block">High Noise Amplitude</span>
-                      <h4 className="font-black text-xl text-slate-800 group-hover/item:text-cyan-600 transition-colors tracking-tight">{claim.claimText}</h4>
-                    </div>
-                    <div className="ml-8 w-20 h-20 rounded-2xl bg-white flex flex-col items-center justify-center border border-orange-100 shadow-xl">
-                      <span className="text-2xl font-black text-orange-600">{Math.round((1 - (claim.verdict?.probabilityTrue ?? 0.5)) * 100)}%</span>
-                      <span className="text-[8px] font-black text-slate-400 uppercase tracking-tighter">NOISE</span>
-                    </div>
-                  </div>
+            {/* Story Grid */}
+            {gridStories.length > 0 && (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-8">
+                {gridStories.map((story: any) => (
+                  <StoryCard
+                    key={story.id}
+                    story={story}
+                    onClick={() => setLocation(`/stories/${story.id}`)}
+                  />
                 ))}
               </div>
-            </section>
-          )}
-        </div>
-
-        {/* Sidebar */}
-        <div className="lg:col-span-4 space-y-16">
-          {blindspotStory && <BlindspotWidget story={blindspotStory as any} />}
-
-          <section className="glass rounded-[2.5rem] p-10 shadow-xl border border-slate-100 bg-white/50">
-            <div className="flex items-center justify-between mb-10">
-              <h3 className="font-black text-xs tracking-[0.3em] text-slate-400 uppercase">Protocol Status</h3>
-              <div className="px-3 py-1 bg-cyan-500/10 text-cyan-600 rounded-full text-[9px] font-black uppercase tracking-widest border border-cyan-500/20">Active</div>
-            </div>
-            <div className="space-y-10">
-              {SIDEBAR_TOPICS.map((topic) => (
-                <div key={topic.id} className="flex items-center justify-between group cursor-pointer">
-                  <div className="flex items-center">
-                    <div className={`w-2 h-2 rounded-full mr-5 ${topic.trend === "up" ? "bg-cyan-500 shadow-[0_0_8px_cyan]" : topic.trend === "down" ? "bg-orange-500" : "bg-slate-400"}`} />
-                    <span className="text-sm font-black text-slate-700 group-hover:text-cyan-600 transition-colors uppercase tracking-tight">{topic.name}</span>
-                  </div>
-                  <div className="flex flex-col items-end">
-                    <span className="text-[9px] font-black text-slate-400 tracking-[0.2em] uppercase leading-none mb-1">Index</span>
-                    <span className="text-xs font-black text-slate-900">82.4</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          <VeracityAnalysis />
-        </div>
-      </div>
+            )}
+          </>
+        )}
+      </section>
     </div>
   );
 }

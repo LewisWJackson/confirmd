@@ -113,6 +113,8 @@ export const stories = pgTable("story", {
   summary: text("summary"),
   imageUrl: text("image_url"),
   category: text("category"),
+  assetSymbols: text("asset_symbols").array().default([]),
+  sourceCount: integer("source_count").default(0),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
   metadata: jsonb("metadata").default({}),
@@ -122,6 +124,12 @@ export const storyClaims = pgTable("story_claim", {
   id: uuid("id").primaryKey().defaultRandom(),
   storyId: uuid("story_id").notNull().references(() => stories.id),
   claimId: uuid("claim_id").notNull().references(() => claims.id),
+});
+
+export const storyItems = pgTable("story_item", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  storyId: uuid("story_id").notNull().references(() => stories.id),
+  itemId: uuid("item_id").notNull().references(() => items.id),
 });
 
 export const sourceScores = pgTable("source_score", {
@@ -153,6 +161,7 @@ export const insertClaimSchema = createInsertSchema(claims).omit({ id: true, cre
 export const insertEvidenceSchema = createInsertSchema(evidenceItems).omit({ id: true, retrievedAt: true });
 export const insertVerdictSchema = createInsertSchema(verdicts).omit({ id: true, createdAt: true });
 export const insertStorySchema = createInsertSchema(stories).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertStoryItemSchema = createInsertSchema(storyItems).omit({ id: true });
 
 // Types
 export type Source = typeof sources.$inferSelect;
@@ -169,5 +178,7 @@ export type Resolution = typeof resolutions.$inferSelect;
 export type Story = typeof stories.$inferSelect;
 export type InsertStory = z.infer<typeof insertStorySchema>;
 export type SourceScore = typeof sourceScores.$inferSelect;
+export type StoryItem = typeof storyItems.$inferSelect;
+export type InsertStoryItem = z.infer<typeof insertStoryItemSchema>;
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;

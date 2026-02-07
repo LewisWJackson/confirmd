@@ -1,6 +1,6 @@
 import { eq, desc, asc, sql } from "drizzle-orm";
 import type { DrizzleDB } from "./db.js";
-import type { IStorage, ClaimFilters, PipelineStats } from "./storage.js";
+import type { IStorage, ClaimFilters, PipelineStats, StoryFeedItem } from "./storage.js";
 import {
   sources,
   items,
@@ -10,6 +10,7 @@ import {
   resolutions,
   stories,
   storyClaims,
+  storyItems,
   sourceScores,
   users,
 } from "../shared/schema.js";
@@ -240,8 +241,23 @@ export class DrizzleStorage implements IStorage {
     return this.db.select().from(stories);
   }
 
+  async updateStory(id: string, data: Partial<Pick<Story, "title" | "summary" | "imageUrl" | "category" | "assetSymbols" | "sourceCount">>): Promise<void> {
+    await this.db.update(stories).set({ ...data, updatedAt: new Date() }).where(eq(stories.id, id));
+  }
+
   async addClaimToStory(storyId: string, claimId: string): Promise<void> {
     await this.db.insert(storyClaims).values({ storyId, claimId });
+  }
+
+  async addItemToStory(storyId: string, itemId: string): Promise<void> {
+    // Avoid duplicates: check if already linked
+    const existing = await this.db
+      .select()
+      .from(storyItems)
+      .where(sql`${storyItems.storyId} = ${storyId} AND ${storyItems.itemId} = ${itemId}`)
+      .limit(1);
+    if (existing.length > 0) return;
+    await this.db.insert(storyItems).values({ storyId, itemId });
   }
 
   async getStoryWithClaims(
@@ -265,6 +281,99 @@ export class DrizzleStorage implements IStorage {
     }
 
     return { story, claims: claimResults };
+  }
+
+  async getStoriesForFeed(limit: number = 50, offset: number = 0): Promise<StoryFeedItem[]> {
+    const allStories = await this.db
+      .select()
+      .from(stories)
+      .orderBy(desc(stories.updatedAt))
+      .limit(limit)
+      .offset(offset);
+
+    const result: StoryFeedItem[] = [];
+
+    for (const story of allStories) {
+      // Get items linked to this story
+      const itemLinks = await this.db
+        .select()
+        .from(storyItems)
+        .where(eq(storyItems.storyId, story.id));
+
+      // Get claims linked to this story
+      const claimLinks = await this.db
+        .select()
+        .from(storyClaims)
+        .where(eq(storyClaims.storyId, story.id));
+
+      // Get unique sources from items (or fall back to claims->items)
+      const sourceMap = new Map<string, Source>();
+      let latestItemTimestamp: Date | null = null;
+
+      const itemIds = itemLinks.map((l) => l.itemId);
+
+      // If no storyItems, derive from claims
+      if (itemIds.length === 0) {
+        for (const cl of claimLinks) {
+          const [claim] = await this.db.select().from(claims).where(eq(claims.id, cl.claimId));
+          if (claim) itemIds.push(claim.itemId);
+        }
+      }
+
+      for (const itemId of itemIds) {
+        const [item] = await this.db.select().from(items).where(eq(items.id, itemId));
+        if (!item) continue;
+        if (!sourceMap.has(item.sourceId)) {
+          const [source] = await this.db.select().from(sources).where(eq(sources.id, item.sourceId));
+          if (source) sourceMap.set(source.id, source);
+        }
+        if (item.publishedAt && (!latestItemTimestamp || item.publishedAt > latestItemTimestamp)) {
+          latestItemTimestamp = item.publishedAt;
+        }
+      }
+
+      // Compute credibility distribution
+      const dist = { high: 0, medium: 0, low: 0 };
+      const topSources: StoryFeedItem["topSources"] = [];
+
+      for (const source of sourceMap.values()) {
+        const [score] = await this.db
+          .select()
+          .from(sourceScores)
+          .where(eq(sourceScores.sourceId, source.id))
+          .orderBy(desc(sourceScores.computedAt))
+          .limit(1);
+        const tr = score?.trackRecord ?? 50;
+        if (tr >= 70) dist.high++;
+        else if (tr >= 50) dist.medium++;
+        else dist.low++;
+        topSources.push({
+          id: source.id,
+          displayName: source.displayName,
+          logoUrl: source.logoUrl,
+          trackRecord: tr,
+        });
+      }
+
+      topSources.sort((a, b) => (b.trackRecord ?? 0) - (a.trackRecord ?? 0));
+
+      result.push({
+        id: story.id,
+        title: story.title,
+        summary: story.summary,
+        imageUrl: story.imageUrl,
+        category: story.category,
+        createdAt: story.createdAt,
+        assetSymbols: story.assetSymbols ?? [],
+        sourceCount: sourceMap.size || story.sourceCount || 0,
+        claimCount: claimLinks.length,
+        credibilityDistribution: dist,
+        topSources: topSources.slice(0, 5),
+        latestItemTimestamp,
+      });
+    }
+
+    return result;
   }
 
   // ── Source Scores ────────────────────────────────────────────────

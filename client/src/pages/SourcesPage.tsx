@@ -5,6 +5,25 @@ import { fetchSources } from "../lib/api";
 
 type SortField = "trackRecord" | "methodDiscipline" | "sampleSize";
 
+function getTierFromTrackRecord(trackRecord: number): "high" | "medium" | "low" {
+  if (trackRecord >= 70) return "high";
+  if (trackRecord >= 50) return "medium";
+  return "low";
+}
+
+function TierBadge({ tier }: { tier: "high" | "medium" | "low" }) {
+  const styles = {
+    high: "bg-emerald-50 text-emerald-700 border-emerald-200",
+    medium: "bg-amber-50 text-amber-700 border-amber-200",
+    low: "bg-red-50 text-red-700 border-red-200",
+  };
+  return (
+    <span className={`px-3 py-1 text-[9px] font-black uppercase tracking-widest rounded-lg border ${styles[tier]}`}>
+      {tier}
+    </span>
+  );
+}
+
 export default function SourcesPage() {
   const [, setLocation] = useLocation();
   const [sortBy, setSortBy] = useState<SortField>("trackRecord");
@@ -71,7 +90,7 @@ export default function SourcesPage() {
       {isLoading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
           {[1, 2, 3, 4, 5, 6].map((i) => (
-            <div key={i} className="glass rounded-[2rem] p-8 animate-pulse bg-white/50">
+            <div key={i} className="rounded-2xl p-8 animate-pulse bg-white border border-slate-200">
               <div className="flex items-center space-x-4 mb-6">
                 <div className="w-14 h-14 bg-slate-200 rounded-2xl" />
                 <div className="flex-1"><div className="h-5 bg-slate-200 rounded-lg w-2/3" /></div>
@@ -85,28 +104,32 @@ export default function SourcesPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
           {filtered.map((source: any) => {
             const score = source.score || { trackRecord: 50, methodDiscipline: 50, sampleSize: 0, confidenceInterval: { lower: 0, upper: 100 } };
-            const trackColor = score.trackRecord >= 70 ? "text-cyan-600" : score.trackRecord >= 50 ? "text-slate-600" : "text-orange-600";
-            const trackBg = score.trackRecord >= 70 ? "bg-cyan-500" : score.trackRecord >= 50 ? "bg-slate-500" : "bg-orange-500";
-            const trackGlow = score.trackRecord >= 70 ? "shadow-[0_0_10px_rgba(6,182,212,0.5)]" : "";
+            const tier = getTierFromTrackRecord(score.trackRecord);
+            const trackColor = tier === "high" ? "text-emerald-600" : tier === "medium" ? "text-amber-600" : "text-red-600";
+            const trackBg = tier === "high" ? "bg-emerald-500" : tier === "medium" ? "bg-amber-400" : "bg-red-500";
+            const trackGlow = tier === "high" ? "shadow-[0_0_10px_rgba(16,185,129,0.5)]" : "";
 
             return (
-              <div key={source.id} onClick={() => setLocation(`/sources/${source.id}`)} className={`glass rounded-[2rem] p-8 border hover:shadow-2xl transition-all duration-500 cursor-pointer group bg-white/50 ${source.type === "youtube" ? "border-red-200/60 hover:border-red-300" : "border-slate-200"}`}>
-                <div className="flex items-center space-x-4 mb-6">
-                  <div className={`w-14 h-14 rounded-2xl flex items-center justify-center font-black text-lg shadow-xl group-hover:scale-110 transition-transform ${
-                    source.logoUrl ? "bg-white p-1.5" :
-                    score.trackRecord >= 70 ? "bg-cyan-500 text-white"
-                    : score.trackRecord >= 50 ? "bg-slate-400 text-white" : "bg-orange-500 text-white"
-                  }`}>
-                    {source.logoUrl ? (
-                      <img src={source.logoUrl} alt={source.displayName} className="w-full h-full object-contain rounded-lg" />
-                    ) : (
-                      <span className="text-white font-black text-sm">{source.logo || source.displayName?.charAt(0) || "?"}</span>
-                    )}
+              <div key={source.id} onClick={() => setLocation(`/sources/${source.id}`)} className="rounded-2xl p-8 border border-slate-200 hover:shadow-xl transition-all duration-500 cursor-pointer group bg-white">
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center space-x-4">
+                    <div className={`w-14 h-14 rounded-2xl flex items-center justify-center font-black text-lg shadow-xl group-hover:scale-110 transition-transform ${
+                      source.logoUrl ? "bg-white p-1.5 border border-slate-100" :
+                      tier === "high" ? "bg-emerald-500 text-white"
+                      : tier === "medium" ? "bg-amber-400 text-white" : "bg-red-500 text-white"
+                    }`}>
+                      {source.logoUrl ? (
+                        <img src={source.logoUrl} alt={source.displayName} className="w-full h-full object-contain rounded-lg" />
+                      ) : (
+                        <span className="text-white font-black text-sm">{source.logo || source.displayName?.charAt(0) || "?"}</span>
+                      )}
+                    </div>
+                    <div>
+                      <div className="font-black text-lg text-slate-900 group-hover:text-cyan-600 transition-colors tracking-tight">{source.displayName}</div>
+                      <div className="text-xs text-slate-400">{source.handleOrDomain}</div>
+                    </div>
                   </div>
-                  <div>
-                    <div className="font-black text-lg text-slate-900 group-hover:text-cyan-600 transition-colors tracking-tight">{source.displayName}</div>
-                    <div className="text-xs text-slate-400">{source.handleOrDomain}</div>
-                  </div>
+                  <TierBadge tier={tier} />
                 </div>
 
                 <div className="grid grid-cols-2 gap-6 mb-6">
@@ -136,16 +159,12 @@ export default function SourcesPage() {
 
                 <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between">
                   <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{score.sampleSize} resolved claims</span>
-                  <span className={`text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full flex items-center gap-1.5 ${
+                  <span className={`text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full ${
                     source.type === "regulator" ? "bg-cyan-100 text-cyan-700"
                     : source.type === "publisher" ? "bg-slate-100 text-slate-600"
                     : source.type === "x_handle" ? "bg-orange-100 text-orange-700"
-                    : source.type === "youtube" ? "bg-red-50 text-red-600 border border-red-200/50"
                     : "bg-slate-100 text-slate-500"
                   }`}>
-                    {source.type === "youtube" && (
-                      <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
-                    )}
                     {(source.type || "unknown").replace(/_/g, " ")}
                   </span>
                 </div>
