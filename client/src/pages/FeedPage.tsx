@@ -43,11 +43,7 @@ const getVerificationTierBadge = (claim: any) => {
       </span>
     );
   }
-  return (
-    <span className="px-2 py-0.5 text-[10px] rounded-full uppercase tracking-wider font-semibold bg-slate-700 text-slate-300">
-      Initial
-    </span>
-  );
+  return null;
 };
 
 const isYouTubeSource = (claim: any) => {
@@ -156,9 +152,11 @@ export default function FeedPage() {
             <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-12 gap-8">
               <div className="flex flex-col">
                 <span className="text-[10px] font-black tracking-[0.5em] text-cyan-600 uppercase mb-3">Verified Stream</span>
-                <h2 className="text-5xl font-black tracking-tighter text-slate-900 uppercase">XRP Claim Tracker</h2>
+                <h2 className="text-3xl md:text-5xl font-black tracking-tighter uppercase">
+                  <span className="bg-gradient-to-r from-slate-900 via-cyan-700 to-slate-900 bg-clip-text text-transparent">XRP Claim Tracker</span>
+                </h2>
                 <p className="text-sm text-slate-500 mt-2 font-medium">Every claim from XRP's top voices — verified in real-time</p>
-                <span className="mt-3 inline-block self-start px-3 py-1 bg-slate-100 text-slate-500 rounded-full text-[10px] font-bold uppercase tracking-widest border border-slate-200">
+                <span className="mt-3 inline-block self-start px-3 py-1.5 bg-cyan-50 text-cyan-600 rounded-full text-[10px] font-bold uppercase tracking-widest border border-cyan-200/50">
                   More communities coming soon
                 </span>
               </div>

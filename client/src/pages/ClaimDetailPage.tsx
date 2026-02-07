@@ -58,11 +58,7 @@ const getVerificationTierBadge = (tier?: string) => {
       </span>
     );
   }
-  return (
-    <span className="px-2 py-0.5 text-[10px] rounded-full uppercase tracking-wider font-semibold bg-slate-700 text-slate-300">
-      Initial
-    </span>
-  );
+  return null;
 };
 
 const getTimelineVerdictColor = (label: string) => {

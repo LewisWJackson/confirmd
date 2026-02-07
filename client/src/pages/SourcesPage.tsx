@@ -34,7 +34,7 @@ export default function SourcesPage() {
     <div className="max-w-7xl mx-auto px-6 md:px-12 py-16 w-full animate-in fade-in duration-1000 relative z-10">
       <div className="flex flex-col mb-12">
         <span className="text-[10px] font-black tracking-[0.5em] text-cyan-600 uppercase mb-3">Source Intelligence</span>
-        <h2 className="text-5xl font-black tracking-tighter text-slate-900 uppercase">Credibility Directory</h2>
+        <h2 className="text-3xl md:text-5xl font-black tracking-tighter text-slate-900 uppercase">Credibility Directory</h2>
         <p className="text-slate-500 mt-4 max-w-2xl font-medium">
           Source scores derived from historical claim accuracy using Bayesian shrinkage methodology. Track record represents verified claim ratio; method discipline measures evidence quality standards.
         </p>
@@ -90,7 +90,7 @@ export default function SourcesPage() {
             const trackGlow = score.trackRecord >= 70 ? "shadow-[0_0_10px_rgba(6,182,212,0.5)]" : "";
 
             return (
-              <div key={source.id} onClick={() => setLocation(`/sources/${source.id}`)} className="glass rounded-[2rem] p-8 border border-slate-200 hover:shadow-2xl transition-all duration-500 cursor-pointer group bg-white/50">
+              <div key={source.id} onClick={() => setLocation(`/sources/${source.id}`)} className={`glass rounded-[2rem] p-8 border hover:shadow-2xl transition-all duration-500 cursor-pointer group bg-white/50 ${source.type === "youtube" ? "border-red-200/60 hover:border-red-300" : "border-slate-200"}`}>
                 <div className="flex items-center space-x-4 mb-6">
                   <div className={`w-14 h-14 rounded-2xl flex items-center justify-center font-black text-lg shadow-xl group-hover:scale-110 transition-transform ${
                     source.logoUrl ? "bg-white p-1.5" :
@@ -136,12 +136,16 @@ export default function SourcesPage() {
 
                 <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between">
                   <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{score.sampleSize} resolved claims</span>
-                  <span className={`text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full ${
+                  <span className={`text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full flex items-center gap-1.5 ${
                     source.type === "regulator" ? "bg-cyan-100 text-cyan-700"
                     : source.type === "publisher" ? "bg-slate-100 text-slate-600"
                     : source.type === "x_handle" ? "bg-orange-100 text-orange-700"
+                    : source.type === "youtube" ? "bg-red-50 text-red-600 border border-red-200/50"
                     : "bg-slate-100 text-slate-500"
                   }`}>
+                    {source.type === "youtube" && (
+                      <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                    )}
                     {(source.type || "unknown").replace(/_/g, " ")}
                   </span>
                 </div>
