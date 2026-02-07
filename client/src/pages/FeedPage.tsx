@@ -96,11 +96,12 @@ export default function FeedPage() {
                       <img
                         src={story.imageUrl}
                         alt={story.title}
+                        loading="lazy"
                         className="w-full h-full object-cover absolute inset-0 group-hover:scale-105 transition-transform duration-700"
+                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
                       />
-                    ) : (
-                      <div className="w-full h-full absolute inset-0 bg-gradient-to-br from-slate-900 to-cyan-900" />
-                    )}
+                    ) : null}
+                    <div className="w-full h-full absolute inset-0 bg-gradient-to-br from-slate-900 to-cyan-900 -z-10" />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
                     <div className="absolute bottom-0 left-0 right-0 p-6">
                       {story.category && (
