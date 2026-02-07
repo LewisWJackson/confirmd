@@ -40,6 +40,7 @@ export interface IStorage {
   getClaims(filters?: ClaimFilters): Promise<Claim[]>;
   getClaimsBySource(sourceId: string): Promise<Claim[]>;
   getClaimsByItem(itemId: string): Promise<Claim[]>;
+  updateClaimMetadata(claimId: string, metadata: Record<string, any>): Promise<void>;
 
   // Evidence
   createEvidence(data: InsertEvidence): Promise<EvidenceItem>;
@@ -48,6 +49,7 @@ export interface IStorage {
   // Verdicts
   createVerdict(data: InsertVerdict): Promise<Verdict>;
   getVerdictByClaim(claimId: string): Promise<Verdict | undefined>;
+  getVerdictHistoryByClaim(claimId: string): Promise<Verdict[]>;
   deleteVerdictByClaim(claimId: string): Promise<void>;
 
   // Resolutions
@@ -277,6 +279,13 @@ export class MemStorage implements IStorage {
     );
   }
 
+  async updateClaimMetadata(claimId: string, metadata: Record<string, any>): Promise<void> {
+    const claim = this.claims.get(claimId);
+    if (claim) {
+      claim.metadata = { ...(claim.metadata as any || {}), ...metadata };
+    }
+  }
+
   // ── Evidence ─────────────────────────────────────────────────────
 
   async createEvidence(data: InsertEvidence): Promise<EvidenceItem> {
@@ -329,6 +338,12 @@ export class MemStorage implements IStorage {
     return Array.from(this.verdicts.values()).find(
       (v) => v.claimId === claimId
     );
+  }
+
+  async getVerdictHistoryByClaim(claimId: string): Promise<Verdict[]> {
+    return Array.from(this.verdicts.values())
+      .filter(v => v.claimId === claimId)
+      .sort((a, b) => new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime());
   }
 
   async deleteVerdictByClaim(claimId: string): Promise<void> {

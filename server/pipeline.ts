@@ -10,6 +10,8 @@
 
 import Parser from "rss-parser";
 import Anthropic from "@anthropic-ai/sdk";
+import { ingestYouTubeTranscripts } from "./youtube.js";
+import { runDeepVerificationBatch, runReverificationBatch } from "./deep-verify.js";
 import type {
   Source,
   InsertSource,
@@ -204,6 +206,10 @@ interface ParsedArticle {
   publishedAt: Date | null;
   feedName: string;
   feedDomain: string;
+  /** Optional hint about the content type (e.g. "youtube_transcript") for claim extraction. */
+  contentHint?: string;
+  /** Optional extra metadata to store on the Item record. */
+  itemMetadata?: Record<string, unknown>;
 }
 
 interface PipelineStatus {
@@ -605,7 +611,12 @@ async function extractClaimsWithLLM(
   if (!anthropic) return extractClaimsSimulated(article);
 
   try {
-    const userPrompt = `ARTICLE TO ANALYZE:
+    const transcriptPreamble =
+      article.contentHint === "youtube_transcript"
+        ? "NOTE: This is a YouTube video transcript. The language is conversational. Extract only specific, falsifiable claims — not opinions, hedging, or speculation phrased as questions.\n\n"
+        : "";
+
+    const userPrompt = `${transcriptPreamble}ARTICLE TO ANALYZE:
 - Title: ${article.title}
 - Source: ${article.feedName} (${article.feedDomain})
 - Published: ${article.publishedAt?.toISOString() || "Unknown"}
@@ -1813,12 +1824,78 @@ export class VerificationPipeline {
         }
       }
 
+      // ── YouTube Transcript Ingestion ──────────────────────
+      console.log("[Pipeline] Ingesting YouTube transcripts...");
+      try {
+        const youtubeResults = await ingestYouTubeTranscripts(this);
+        console.log(`[Pipeline] Got ${youtubeResults.length} new YouTube transcripts`);
+
+        for (const yt of youtubeResults) {
+          try {
+            // Build a ParsedArticle from the YouTube transcript so we can
+            // reuse the existing processArticle() pipeline (claim extraction,
+            // evidence gathering, verdict generation, status update).
+            const ytArticle: ParsedArticle = {
+              title: yt.title,
+              content: `[YouTube Transcript] ${yt.transcript.slice(0, 10000)}`, // longer limit for transcripts
+              link: yt.videoUrl,
+              publishedAt: yt.publishedAt,
+              feedName: "YouTube",
+              feedDomain: "youtube.com",
+              contentHint: "youtube_transcript",
+              itemMetadata: {
+                sourceType: "youtube_transcript",
+                videoId: yt.videoUrl.split("v=")[1],
+                thumbnailUrl: yt.thumbnailUrl,
+              },
+            };
+
+            const result = await this.processArticle(ytArticle);
+            batchArticlesProcessed++;
+            batchClaimsExtracted += result.claimIds.length;
+
+            // Collect for story grouping
+            for (const claimId of result.claimIds) {
+              allClaimsForGrouping.push({
+                claimId,
+                claimText: result.claimTexts[result.claimIds.indexOf(claimId)] || "",
+                assetSymbols: result.assetSymbols[result.claimIds.indexOf(claimId)] || [],
+                publishedAt: yt.publishedAt,
+                title: yt.title,
+              });
+            }
+          } catch (err) {
+            console.error(`[Pipeline] Failed to process YouTube video "${yt.title}":`, (err as Error).message);
+          }
+        }
+      } catch (err) {
+        console.error("[Pipeline] YouTube ingestion failed:", (err as Error).message);
+      }
+
       // Step 5: Group claims into stories
       if (allClaimsForGrouping.length > 0) {
         console.log(
           `[Pipeline] Grouping ${allClaimsForGrouping.length} claims into stories`,
         );
         await this.groupAndPersistStories(allClaimsForGrouping);
+      }
+
+      // ── Deep Verification ──────────────────────────────────
+      console.log("[Pipeline] Running deep verification batch...");
+      try {
+        const deepStats = await runDeepVerificationBatch(20); // top 20 claims
+        console.log(`[Pipeline] Deep verification: ${deepStats.claimsProcessed} claims, ${deepStats.evidenceAdded} evidence items`);
+      } catch (err) {
+        console.error("[Pipeline] Deep verification failed:", (err as Error).message);
+      }
+
+      // ── Re-verification ────────────────────────────────────
+      console.log("[Pipeline] Running re-verification batch...");
+      try {
+        const reStats = await runReverificationBatch(10); // top 10 claims
+        console.log(`[Pipeline] Re-verification: ${reStats.claimsProcessed} claims re-verified`);
+      } catch (err) {
+        console.error("[Pipeline] Re-verification failed:", (err as Error).message);
       }
 
       // Update cumulative stats
@@ -1873,7 +1950,7 @@ export class VerificationPipeline {
       title: article.title,
       contentHash,
       itemType: "article",
-      metadata: {
+      metadata: article.itemMetadata ?? {
         feedName: article.feedName,
         feedDomain: article.feedDomain,
       },

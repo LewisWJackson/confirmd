@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams, useLocation } from "wouter";
-import { fetchClaim, submitEvidence } from "../lib/api";
+import { fetchClaim, submitEvidence, fetchVerdictHistory } from "../lib/api";
 
 const getVerdictStyle = (label: string) => {
   const styles: Record<string, { bg: string; text: string; light: string; border: string; glow: string }> = {
@@ -43,6 +43,41 @@ const getClaimTypeLabel = (type: string) => {
   return labels[type] || "Claim";
 };
 
+const getVerificationTierBadge = (tier?: string) => {
+  if (tier === "deep_verified") {
+    return (
+      <span className="px-2 py-0.5 text-[10px] rounded-full uppercase tracking-wider font-semibold bg-emerald-900/50 text-emerald-400 border border-emerald-700/50">
+        Deep Verified
+      </span>
+    );
+  }
+  if (tier === "reverified") {
+    return (
+      <span className="px-2 py-0.5 text-[10px] rounded-full uppercase tracking-wider font-semibold bg-blue-900/50 text-blue-400 border border-blue-700/50">
+        Re-verified
+      </span>
+    );
+  }
+  return (
+    <span className="px-2 py-0.5 text-[10px] rounded-full uppercase tracking-wider font-semibold bg-slate-700 text-slate-300">
+      Initial
+    </span>
+  );
+};
+
+const getTimelineVerdictColor = (label: string) => {
+  if (label === "verified") return "bg-cyan-500";
+  if (label === "plausible_unverified") return "bg-slate-500";
+  if (label === "speculative") return "bg-orange-500";
+  if (label === "misleading") return "bg-red-500";
+  return "bg-slate-400";
+};
+
+const formatDate = (dateStr: string) => {
+  const d = new Date(dateStr);
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+};
+
 export default function ClaimDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [, setLocation] = useLocation();
@@ -54,6 +89,12 @@ export default function ClaimDetailPage() {
   const { data: claim, isLoading, error } = useQuery({
     queryKey: ["claim", id],
     queryFn: () => fetchClaim(id!),
+    enabled: !!id,
+  });
+
+  const { data: verdictHistory = [] } = useQuery({
+    queryKey: ["verdictHistory", id],
+    queryFn: () => fetchVerdictHistory(id!),
     enabled: !!id,
   });
 
@@ -146,6 +187,7 @@ export default function ClaimDetailPage() {
                 <div className="flex items-center space-x-3">
                   <div className={`w-4 h-4 rounded-full ${style?.bg} ${verdict.verdictLabel === "verified" ? "shadow-[0_0_12px_cyan]" : ""}`} />
                   <span className={`text-2xl font-black uppercase tracking-tight ${style?.text}`}>{verdict.verdictLabel.replace(/_/g, " ")}</span>
+                  {getVerificationTierBadge(claim.metadata?.verificationTier)}
                 </div>
                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{getClaimTypeLabel(claim.claimType)}</span>
               </div>
@@ -190,6 +232,48 @@ export default function ClaimDetailPage() {
                   <div className="text-[10px] font-black uppercase tracking-widest text-orange-600 mb-3">What Would Change This Verdict?</div>
                   <p className="text-sm text-orange-800">{verdict.invalidationTriggers}</p>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* Verdict History Timeline */}
+          {verdictHistory.length >= 2 && (
+            <div className="glass rounded-[2rem] p-10 border border-slate-100 bg-white/50">
+              <h3 className="text-xs font-black uppercase tracking-[0.3em] text-slate-400 mb-8">Verdict History</h3>
+              <div className="relative">
+                {verdictHistory.map((entry: any, i: number) => {
+                  const isLast = i === verdictHistory.length - 1;
+                  const dotColor = getTimelineVerdictColor(entry.verdictLabel);
+                  return (
+                    <div key={entry.id || i} className="relative flex gap-6">
+                      {/* Timeline track */}
+                      <div className="flex flex-col items-center">
+                        <div className={`w-3.5 h-3.5 rounded-full ${dotColor} flex-shrink-0 mt-1 shadow-lg`} />
+                        {!isLast && (
+                          <div className="w-0.5 bg-slate-200 flex-1 min-h-[2rem]" />
+                        )}
+                      </div>
+                      {/* Content */}
+                      <div className={`pb-8 ${isLast ? "pb-0" : ""}`}>
+                        <div className="flex items-center gap-3 flex-wrap">
+                          <span className="text-sm font-bold text-slate-700">
+                            {entry.createdAt ? formatDate(entry.createdAt) : "Unknown date"}
+                          </span>
+                          <span className="text-sm text-slate-400">&mdash;</span>
+                          <span className="text-sm font-black uppercase text-slate-900">
+                            {(entry.verdictLabel || "unknown").replace(/_/g, " ")}
+                          </span>
+                          {getVerificationTierBadge(entry.verificationTier)}
+                        </div>
+                        {entry.reasoningSummary && (
+                          <p className="text-sm text-slate-500 mt-2 leading-relaxed line-clamp-2">
+                            "{entry.reasoningSummary}"
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}

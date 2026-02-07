@@ -69,6 +69,11 @@ export function fetchEvidence(claimId: string) {
   return fetchJson<{ data: any[] }>(`/evidence/${claimId}`).then(r => r.data);
 }
 
+// Verdict History
+export function fetchVerdictHistory(claimId: string) {
+  return fetchJson<{ data: any[] }>(`/claims/${claimId}/verdict-history`).then(r => r.data);
+}
+
 // Community Evidence Submission
 export async function submitEvidence(
   claimId: string,

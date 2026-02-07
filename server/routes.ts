@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import { storage } from "./storage.js";
 import { validateCommunityEvidence } from "./pipeline.js";
 import { pipeline } from "./pipeline-instance.js";
+import { deepVerifyClaim, calculateVerificationPriority } from "./deep-verify.js";
 import type { Claim, Verdict, EvidenceItem, Resolution, Source, SourceScore } from "../shared/schema.js";
 
 declare module "express-session" {
@@ -636,6 +637,75 @@ router.post("/evidence/:claimId/submit", async (req: Request, res: Response) => 
   } catch (err) {
     console.error("POST /evidence/:claimId/submit error:", err);
     res.status(500).json({ error: "Failed to process evidence submission" });
+  }
+});
+
+// ─── GET /claims/:id/verdict-history ─────────────────────────────────
+
+router.get("/claims/:id/verdict-history", async (req: Request, res: Response) => {
+  try {
+    const verdicts = await storage.getVerdictHistoryByClaim(param(req, "id"));
+    res.json({ data: verdicts });
+  } catch (err) {
+    console.error("Error fetching verdict history:", (err as Error).message);
+    res.status(500).json({ error: "Failed to fetch verdict history" });
+  }
+});
+
+// ─── POST /verification/deep/:claimId ───────────────────────────────
+
+router.post("/verification/deep/:claimId", async (req: Request, res: Response) => {
+  try {
+    const claim = await storage.getClaim(param(req, "claimId"));
+    if (!claim) {
+      res.status(404).json({ error: "Claim not found" });
+      return;
+    }
+
+    const evidence = await storage.getEvidenceByClaim(claim.id);
+
+    // Run deep verification async
+    res.status(202).json({ message: "Deep verification started", claimId: claim.id });
+
+    try {
+      const result = await deepVerifyClaim(claim, evidence);
+      // Store new evidence
+      for (const ev of result.evidence) {
+        await storage.createEvidence({
+          claimId: claim.id,
+          url: ev.url,
+          publisher: ev.publisher,
+          excerpt: ev.excerpt,
+          stance: ev.stance,
+          evidenceGrade: ev.evidenceGrade,
+          primaryFlag: false,
+          metadata: { tier: "deep", searchQuery: ev.searchQuery },
+        });
+      }
+      // Store new verdict
+      await storage.createVerdict({
+        claimId: claim.id,
+        model: "claude-sonnet-4-5-20250929",
+        promptVersion: "deep-v1.0.0",
+        verdictLabel: result.verdict.verdictLabel,
+        probabilityTrue: result.verdict.probabilityTrue,
+        evidenceStrength: result.verdict.evidenceStrength,
+        reasoningSummary: result.verdict.reasoningSummary,
+        invalidationTriggers: result.verdict.invalidationTriggers,
+      });
+      // Update claim metadata
+      await storage.updateClaimMetadata(claim.id, {
+        verificationTier: "deep_verified",
+        lastDeepVerifiedAt: new Date().toISOString(),
+        deepVerificationCount: ((claim.metadata as any)?.deepVerificationCount || 0) + 1,
+      });
+      console.log(`[Route] Deep verification completed for claim ${claim.id}`);
+    } catch (err) {
+      console.error(`[Route] Deep verification failed for claim ${claim.id}:`, (err as Error).message);
+    }
+  } catch (err) {
+    console.error("Error triggering deep verification:", (err as Error).message);
+    res.status(500).json({ error: "Failed to trigger deep verification" });
   }
 });
 

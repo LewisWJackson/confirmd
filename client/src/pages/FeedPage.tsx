@@ -27,6 +27,35 @@ const getVerdictBorderColor = (label: string) => {
   return "border-l-slate-300";
 };
 
+const getVerificationTierBadge = (claim: any) => {
+  const tier = claim.metadata?.verificationTier;
+  if (tier === "deep_verified") {
+    return (
+      <span className="px-2 py-0.5 text-[10px] rounded-full uppercase tracking-wider font-semibold bg-emerald-900/50 text-emerald-400 border border-emerald-700/50">
+        Deep Verified
+      </span>
+    );
+  }
+  if (tier === "reverified") {
+    return (
+      <span className="px-2 py-0.5 text-[10px] rounded-full uppercase tracking-wider font-semibold bg-blue-900/50 text-blue-400 border border-blue-700/50">
+        Re-verified
+      </span>
+    );
+  }
+  return (
+    <span className="px-2 py-0.5 text-[10px] rounded-full uppercase tracking-wider font-semibold bg-slate-700 text-slate-300">
+      Initial
+    </span>
+  );
+};
+
+const isYouTubeSource = (claim: any) => {
+  if (claim.source?.sourceType === "youtube") return true;
+  const domain = claim.source?.handleOrDomain || claim.source?.domain || "";
+  return domain.startsWith("youtube.com/") || domain.includes("youtube.com");
+};
+
 export default function FeedPage() {
   const [, setLocation] = useLocation();
   const [feedFilter, setFeedFilter] = useState<"latest" | "trusted" | "original">("latest");
@@ -127,7 +156,11 @@ export default function FeedPage() {
             <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-12 gap-8">
               <div className="flex flex-col">
                 <span className="text-[10px] font-black tracking-[0.5em] text-cyan-600 uppercase mb-3">Verified Stream</span>
-                <h2 className="text-5xl font-black tracking-tighter text-slate-900 uppercase">Intelligence Feed</h2>
+                <h2 className="text-5xl font-black tracking-tighter text-slate-900 uppercase">XRP Claim Tracker</h2>
+                <p className="text-sm text-slate-500 mt-2 font-medium">Every claim from XRP's top voices — verified in real-time</p>
+                <span className="mt-3 inline-block self-start px-3 py-1 bg-slate-100 text-slate-500 rounded-full text-[10px] font-bold uppercase tracking-widest border border-slate-200">
+                  More communities coming soon
+                </span>
               </div>
               <div className="flex space-x-1 bg-slate-100 p-1.5 rounded-2xl border border-slate-200 shadow-sm">
                 {(["latest", "trusted", "original"] as const).map((filter) => (
@@ -197,6 +230,10 @@ export default function FeedPage() {
                         <span>{filteredClaims[0].claimType?.replace(/_/g, " ") || "Claim"}</span>
                         <span className="text-slate-300">&bull;</span>
                         <span>{filteredClaims[0].source?.displayName || "Source"}</span>
+                        {isYouTubeSource(filteredClaims[0]) && (
+                          <span className="px-2 py-0.5 bg-red-600 text-white text-[9px] font-black rounded tracking-widest">YT</span>
+                        )}
+                        {getVerificationTierBadge(filteredClaims[0])}
                       </div>
                       <h2 className="text-4xl md:text-5xl font-black leading-tight text-slate-900 group-hover:text-cyan-600 transition-colors tracking-tighter">
                         {filteredClaims[0].claimText}
@@ -236,10 +273,16 @@ export default function FeedPage() {
                               </div>
                             )}
                             <span className="text-[10px] font-black text-cyan-600 uppercase tracking-[0.3em]">{claim.claimType?.replace(/_/g, " ")}</span>
+                            {isYouTubeSource(claim) && (
+                              <span className="px-2 py-0.5 bg-red-600 text-white text-[9px] font-black rounded tracking-widest">YT</span>
+                            )}
                           </div>
-                          {claim.verdict && (
-                            <div className={`w-2.5 h-2.5 rounded-full ${getVerdictColor(claim.verdict.verdictLabel)}`} />
-                          )}
+                          <div className="flex items-center space-x-2">
+                            {getVerificationTierBadge(claim)}
+                            {claim.verdict && (
+                              <div className={`w-2.5 h-2.5 rounded-full ${getVerdictColor(claim.verdict.verdictLabel)}`} />
+                            )}
+                          </div>
                         </div>
                         <h3 className="font-black text-xl leading-tight text-slate-900 group-hover:text-cyan-600 transition-colors tracking-tight line-clamp-3">
                           {claim.claimText}

@@ -162,6 +162,14 @@ export class DrizzleStorage implements IStorage {
     return this.db.select().from(claims).where(eq(claims.itemId, itemId));
   }
 
+  async updateClaimMetadata(claimId: string, metadata: Record<string, any>): Promise<void> {
+    const claim = await this.getClaim(claimId);
+    if (claim) {
+      const merged = { ...(claim.metadata as any || {}), ...metadata };
+      await this.db.update(claims).set({ metadata: merged }).where(eq(claims.id, claimId));
+    }
+  }
+
   // ── Evidence ─────────────────────────────────────────────────────
 
   async createEvidence(data: InsertEvidence): Promise<EvidenceItem> {
@@ -191,6 +199,10 @@ export class DrizzleStorage implements IStorage {
       .orderBy(desc(verdicts.createdAt))
       .limit(1);
     return verdict;
+  }
+
+  async getVerdictHistoryByClaim(claimId: string): Promise<Verdict[]> {
+    return await this.db.select().from(verdicts).where(eq(verdicts.claimId, claimId)).orderBy(desc(verdicts.createdAt));
   }
 
   async deleteVerdictByClaim(claimId: string): Promise<void> {
