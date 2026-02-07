@@ -4,7 +4,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import apiRouter from "./routes.js";
 import stripeRouter from "./stripe.js";
-import { storage, seedInitialData } from "./storage.js";
+import { storage, seedInitialData, MemStorage } from "./storage.js";
 import { pipeline } from "./pipeline-instance.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -120,9 +120,13 @@ app.use(
 // ─── Start ──────────────────────────────────────────────────────────
 
 async function main() {
-  // Seed in-memory data
-  await seedInitialData(storage);
-  console.log("Seed data loaded");
+  // Seed data only for in-memory storage (DB persists its own data)
+  if (storage instanceof MemStorage) {
+    await seedInitialData(storage);
+    console.log("Seed data loaded (in-memory)");
+  } else {
+    console.log("Using PostgreSQL — skipping seed data");
+  }
 
   // Set up frontend serving
   await setupFrontend();

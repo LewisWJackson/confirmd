@@ -16,6 +16,8 @@ import type {
   User,
   InsertUser,
 } from "../shared/schema.js";
+import { db } from "./db.js";
+import { DrizzleStorage } from "./drizzle-storage.js";
 
 // ─── Storage Interface ───────────────────────────────────────────────
 
@@ -1143,4 +1145,15 @@ export async function seedInitialData(storage: MemStorage): Promise<void> {
 
 // ─── Singleton ───────────────────────────────────────────────────────
 
-export const storage = new MemStorage();
+export type StorageInstance = IStorage & { setLastPipelineRun(ts: string): void };
+
+function createStorage(): StorageInstance {
+  if (db) {
+    console.log("[Storage] Using PostgreSQL (Drizzle) storage");
+    return new DrizzleStorage(db);
+  }
+  console.log("[Storage] Using in-memory storage");
+  return new MemStorage();
+}
+
+export const storage: StorageInstance = createStorage();
