@@ -69,6 +69,23 @@ export function fetchEvidence(claimId: string) {
   return fetchJson<{ data: any[] }>(`/evidence/${claimId}`).then(r => r.data);
 }
 
+// Community Evidence Submission
+export async function submitEvidence(
+  claimId: string,
+  data: { url: string; notes?: string },
+) {
+  const res = await fetch(`${BASE}/evidence/${claimId}/submit`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  const body = await res.json();
+  if (!res.ok) {
+    throw new Error(body.reason || body.error || "Submission failed");
+  }
+  return body;
+}
+
 // Pipeline
 export function fetchPipelineStatus() {
   return fetchJson<any>("/pipeline/status");

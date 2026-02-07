@@ -1,7 +1,7 @@
-import React from "react";
-import { useQuery } from "@tanstack/react-query";
+import React, { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams, useLocation } from "wouter";
-import { fetchClaim } from "../lib/api";
+import { fetchClaim, submitEvidence } from "../lib/api";
 
 const getVerdictStyle = (label: string) => {
   const styles: Record<string, { bg: string; text: string; light: string; border: string; glow: string }> = {
@@ -46,11 +46,25 @@ const getClaimTypeLabel = (type: string) => {
 export default function ClaimDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [, setLocation] = useLocation();
+  const queryClient = useQueryClient();
+  const [submitUrl, setSubmitUrl] = useState("");
+  const [submitNotes, setSubmitNotes] = useState("");
+  const [showForm, setShowForm] = useState(false);
 
   const { data: claim, isLoading, error } = useQuery({
     queryKey: ["claim", id],
     queryFn: () => fetchClaim(id!),
     enabled: !!id,
+  });
+
+  const submitMutation = useMutation({
+    mutationFn: () => submitEvidence(id!, { url: submitUrl, notes: submitNotes || undefined }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["claim", id] });
+      setSubmitUrl("");
+      setSubmitNotes("");
+      setShowForm(false);
+    },
   });
 
   if (isLoading) {
@@ -214,6 +228,67 @@ export default function ClaimDetailPage() {
               })}
               {evidence.length === 0 && (
                 <p className="text-slate-400 text-center py-8">No evidence items available</p>
+              )}
+            </div>
+
+            {/* Community Evidence Submission */}
+            <div className="mt-8 pt-8 border-t border-slate-100">
+              {!showForm ? (
+                <button
+                  onClick={() => { setShowForm(true); submitMutation.reset(); }}
+                  className="w-full py-4 border-2 border-dashed border-slate-200 rounded-2xl text-sm font-bold text-slate-400 hover:text-cyan-600 hover:border-cyan-300 transition-all"
+                >
+                  + Submit Evidence
+                </button>
+              ) : (
+                <div className="space-y-4">
+                  <h4 className="text-xs font-black uppercase tracking-[0.3em] text-slate-400">Submit Evidence</h4>
+                  <input
+                    type="url"
+                    placeholder="https://example.com/article"
+                    value={submitUrl}
+                    onChange={(e) => setSubmitUrl(e.target.value)}
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+                    disabled={submitMutation.isPending}
+                  />
+                  <textarea
+                    placeholder="Optional notes about this evidence..."
+                    value={submitNotes}
+                    onChange={(e) => setSubmitNotes(e.target.value)}
+                    rows={2}
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent resize-none"
+                    disabled={submitMutation.isPending}
+                  />
+                  {submitMutation.isError && (
+                    <div className="p-4 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">
+                      {(submitMutation.error as Error).message}
+                    </div>
+                  )}
+                  {submitMutation.isSuccess && (
+                    <div className="p-4 bg-cyan-50 border border-cyan-200 rounded-xl text-sm text-cyan-700">
+                      Evidence accepted! The verdict has been recalculated.
+                    </div>
+                  )}
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => submitMutation.mutate()}
+                      disabled={!submitUrl || submitMutation.isPending}
+                      className="px-6 py-3 bg-cyan-600 text-white text-xs font-black uppercase tracking-widest rounded-xl hover:bg-cyan-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {submitMutation.isPending ? "Analyzing..." : "Submit"}
+                    </button>
+                    <button
+                      onClick={() => { setShowForm(false); setSubmitUrl(""); setSubmitNotes(""); submitMutation.reset(); }}
+                      className="px-6 py-3 text-slate-500 text-xs font-black uppercase tracking-widest hover:text-slate-700"
+                      disabled={submitMutation.isPending}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-slate-400 font-medium">
+                    AI will analyze the URL content for relevance, extract key excerpts, and determine if it supports or contradicts this claim.
+                  </p>
+                </div>
               )}
             </div>
           </div>

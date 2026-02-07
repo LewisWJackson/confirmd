@@ -2026,3 +2026,220 @@ export class VerificationPipeline {
     }
   }
 }
+
+// ============================================
+// COMMUNITY EVIDENCE SUBMISSION
+// ============================================
+
+export interface CommunityEvidenceResult {
+  accepted: boolean;
+  reason?: string;
+  evidence?: {
+    url: string;
+    publisher: string;
+    excerpt: string;
+    grade: EvidenceGrade;
+    stance: EvidenceStance;
+    primaryFlag: boolean;
+  };
+  verdict?: VerdictResult;
+}
+
+/**
+ * Validate community-submitted evidence for a claim.
+ * Fetches the URL, analyzes relevance via AI or heuristics,
+ * and returns the evidence data + recalculated verdict if accepted.
+ */
+export async function validateCommunityEvidence(
+  url: string,
+  notes: string | undefined,
+  claimText: string,
+  claimType: string,
+  existingEvidence: Array<{
+    url: string;
+    publisher: string;
+    excerpt: string;
+    grade: string;
+    stance: string;
+    primaryFlag: boolean;
+  }>,
+): Promise<CommunityEvidenceResult> {
+  // Step 1: Parse URL and extract domain
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(url);
+  } catch {
+    return { accepted: false, reason: "Invalid URL" };
+  }
+  const domain = extractDomain(url);
+
+  // Step 2: Fetch URL content
+  let pageContent: string;
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+    const response = await fetch(url, {
+      signal: controller.signal,
+      headers: { "User-Agent": "Confirmd/1.0 Evidence Validator" },
+    });
+    clearTimeout(timeout);
+
+    if (!response.ok) {
+      return { accepted: false, reason: `Could not retrieve content (HTTP ${response.status})` };
+    }
+    const html = await response.text();
+    pageContent = stripHtml(html).slice(0, 3000);
+  } catch (err) {
+    return { accepted: false, reason: "Could not retrieve content from the provided URL" };
+  }
+
+  if (pageContent.length < 50) {
+    return { accepted: false, reason: "Page content too short to analyze" };
+  }
+
+  const grade = gradeByDomain(url);
+  let excerpt: string;
+  let stance: EvidenceStance;
+
+  // Step 3: Validate relevance and extract evidence
+  if (openai) {
+    // AI path
+    try {
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [
+          {
+            role: "system",
+            content: `You are a crypto evidence validator. Given a claim and page content from a submitted URL, determine:
+1. Is the content relevant to the claim? (yes/no)
+2. What is the most meaningful excerpt (1-3 sentences)?
+3. What is the stance? (supports/contradicts/mentions)
+
+Output JSON only: { "relevant": boolean, "reason": "string", "excerpt": "string", "stance": "supports|contradicts|mentions" }`,
+          },
+          {
+            role: "user",
+            content: `CLAIM: ${claimText}\nCLAIM TYPE: ${claimType}\nURL: ${url}\nDOMAIN: ${domain}\nPAGE CONTENT: ${pageContent}\nSUBMITTER NOTES: ${notes || "None"}`,
+          },
+        ],
+        temperature: 0.2,
+        max_tokens: 500,
+      });
+
+      const rawContent = response.choices[0]?.message?.content;
+      if (!rawContent) {
+        return { accepted: false, reason: "AI validation returned empty response" };
+      }
+
+      const cleaned = cleanJsonResponse(rawContent);
+      const parsed = JSON.parse(cleaned);
+
+      if (!parsed.relevant) {
+        return { accepted: false, reason: parsed.reason || "Content is not relevant to this claim" };
+      }
+
+      excerpt = parsed.excerpt || pageContent.slice(0, 200);
+      stance = (["supports", "contradicts", "mentions"].includes(parsed.stance)
+        ? parsed.stance
+        : "mentions") as EvidenceStance;
+    } catch (err) {
+      // Fall through to heuristic path on AI failure
+      console.warn("[Pipeline] AI evidence validation failed, using heuristic:", err);
+      const heuristic = validateHeuristic(pageContent, claimText, notes);
+      if (!heuristic.accepted) return heuristic;
+      excerpt = heuristic.excerpt!;
+      stance = heuristic.stance!;
+    }
+  } else {
+    // Heuristic path
+    const heuristic = validateHeuristic(pageContent, claimText, notes);
+    if (!heuristic.accepted) return heuristic;
+    excerpt = heuristic.excerpt!;
+    stance = heuristic.stance!;
+  }
+
+  // Step 4: Build new evidence and recalculate verdict
+  const newEvidence: GatheredEvidence = {
+    url,
+    publisher: domain,
+    excerpt,
+    grade,
+    stance,
+    primaryFlag: grade === "A",
+    publishedAt: null,
+    metadata: { sourceType: "community_submission" },
+  };
+
+  const allEvidence: GatheredEvidence[] = [
+    ...existingEvidence.map((e) => ({
+      url: e.url,
+      publisher: e.publisher,
+      excerpt: e.excerpt,
+      grade: e.grade as EvidenceGrade,
+      stance: e.stance as EvidenceStance,
+      primaryFlag: e.primaryFlag,
+      publishedAt: null as Date | null,
+      metadata: {} as Record<string, unknown>,
+    })),
+    newEvidence,
+  ];
+
+  const simClaim: ExtractedClaim = {
+    claimText,
+    claimType: claimType as ClaimType,
+    assetSymbols: [],
+    resolutionType: "indefinite",
+    resolveBy: null,
+    falsifiabilityScore: 0.5,
+    llmConfidence: 0.5,
+  };
+
+  const verdict = await generateVerdict(simClaim, allEvidence);
+
+  return {
+    accepted: true,
+    evidence: {
+      url,
+      publisher: domain,
+      excerpt,
+      grade,
+      stance,
+      primaryFlag: grade === "A",
+    },
+    verdict,
+  };
+}
+
+/** Heuristic evidence validation when no OpenAI key is available. */
+function validateHeuristic(
+  pageContent: string,
+  claimText: string,
+  notes: string | undefined,
+): { accepted: boolean; reason?: string; excerpt?: string; stance?: EvidenceStance } {
+  const contentLower = pageContent.toLowerCase();
+  const claimKeywords = claimText
+    .toLowerCase()
+    .split(/\s+/)
+    .filter((w) => w.length > 4);
+
+  const matchCount = claimKeywords.filter((k) => contentLower.includes(k)).length;
+  if (matchCount < 2) {
+    return { accepted: false, reason: "Content does not appear relevant to this claim" };
+  }
+
+  const stance = determineStance(pageContent, claimText);
+  if (stance === "irrelevant") {
+    return { accepted: false, reason: "Content does not appear relevant to this claim" };
+  }
+
+  // Extract first sentence containing a claim keyword
+  const sentences = pageContent.split(/[.!?]+/).map((s) => s.trim()).filter((s) => s.length > 20);
+  let excerpt = sentences.find((s) =>
+    claimKeywords.some((k) => s.toLowerCase().includes(k))
+  );
+  if (!excerpt) {
+    excerpt = pageContent.slice(0, 200);
+  }
+
+  return { accepted: true, excerpt: excerpt.slice(0, 500), stance };
+}

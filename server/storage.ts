@@ -44,6 +44,7 @@ export interface IStorage {
   // Verdicts
   createVerdict(data: InsertVerdict): Promise<Verdict>;
   getVerdictByClaim(claimId: string): Promise<Verdict | undefined>;
+  deleteVerdictByClaim(claimId: string): Promise<void>;
 
   // Resolutions
   createResolution(data: Omit<Resolution, "id">): Promise<Resolution>;
@@ -317,6 +318,15 @@ export class MemStorage implements IStorage {
     return Array.from(this.verdicts.values()).find(
       (v) => v.claimId === claimId
     );
+  }
+
+  async deleteVerdictByClaim(claimId: string): Promise<void> {
+    for (const [id, v] of this.verdicts.entries()) {
+      if (v.claimId === claimId) {
+        this.verdicts.delete(id);
+        return;
+      }
+    }
   }
 
   // ── Resolutions ──────────────────────────────────────────────────

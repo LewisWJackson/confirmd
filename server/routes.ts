@@ -1,5 +1,6 @@
 import { Router, type Request, type Response } from "express";
 import { storage } from "./storage.js";
+import { validateCommunityEvidence } from "./pipeline.js";
 import type { Claim, Verdict, EvidenceItem, Resolution, Source, SourceScore } from "../shared/schema.js";
 
 const router = Router();
@@ -523,6 +524,110 @@ router.get("/evidence/:claimId", async (req: Request, res: Response) => {
   } catch (err) {
     console.error("GET /evidence/:claimId error:", err);
     res.status(500).json({ error: "Failed to fetch evidence" });
+  }
+});
+
+// ─── POST /evidence/:claimId/submit ─────────────────────────────────
+
+router.post("/evidence/:claimId/submit", async (req: Request, res: Response) => {
+  try {
+    const claimId = param(req, "claimId");
+    const { url, notes } = req.body || {};
+
+    if (!url || typeof url !== "string") {
+      res.status(400).json({ error: "URL is required" });
+      return;
+    }
+
+    try {
+      new URL(url);
+    } catch {
+      res.status(400).json({ error: "Invalid URL format" });
+      return;
+    }
+
+    const claim = await storage.getClaim(claimId);
+    if (!claim) {
+      res.status(404).json({ error: "Claim not found" });
+      return;
+    }
+
+    const existingEvidence = await storage.getEvidenceByClaim(claimId);
+    if (existingEvidence.some((e) => e.url === url)) {
+      res.status(409).json({ error: "This URL has already been submitted as evidence for this claim" });
+      return;
+    }
+
+    const result = await validateCommunityEvidence(
+      url,
+      notes,
+      claim.claimText,
+      claim.claimType,
+      existingEvidence.map((e) => ({
+        url: e.url,
+        publisher: e.publisher || "",
+        excerpt: e.excerpt,
+        grade: e.evidenceGrade,
+        stance: e.stance,
+        primaryFlag: e.primaryFlag || false,
+      })),
+    );
+
+    if (!result.accepted || !result.evidence) {
+      res.status(422).json({
+        error: "Evidence rejected",
+        reason: result.reason || "Content was not relevant to the claim",
+      });
+      return;
+    }
+
+    const storedEvidence = await storage.createEvidence({
+      claimId,
+      url: result.evidence.url,
+      publisher: result.evidence.publisher,
+      excerpt: result.evidence.excerpt,
+      stance: result.evidence.stance as any,
+      evidenceGrade: result.evidence.grade as any,
+      primaryFlag: result.evidence.primaryFlag,
+      metadata: {
+        communitySubmitted: true,
+        submittedAt: new Date().toISOString(),
+        submitterNotes: notes || null,
+      },
+    });
+
+    if (result.verdict) {
+      await storage.deleteVerdictByClaim(claimId);
+      const allEvidence = await storage.getEvidenceByClaim(claimId);
+      await storage.createVerdict({
+        claimId,
+        model: "community-recalc",
+        promptVersion: "v1.0.0",
+        verdictLabel: result.verdict.verdictLabel as any,
+        probabilityTrue: result.verdict.probabilityTrue,
+        evidenceStrength: result.verdict.evidenceStrength,
+        keyEvidenceIds: allEvidence.map((e) => e.id),
+        reasoningSummary: result.verdict.reasoningSummary,
+        invalidationTriggers: result.verdict.invalidationTriggers,
+      });
+    }
+
+    res.status(201).json({
+      message: "Evidence accepted",
+      evidence: {
+        id: storedEvidence.id,
+        url: storedEvidence.url,
+        publisher: storedEvidence.publisher,
+        excerpt: storedEvidence.excerpt,
+        stance: storedEvidence.stance,
+        grade: storedEvidence.evidenceGrade,
+        primaryFlag: storedEvidence.primaryFlag,
+      },
+      verdictUpdated: !!result.verdict,
+    });
+  } catch (err) {
+    console.error("POST /evidence/:claimId/submit error:", err);
+    res.status(500).json({ error: "Failed to process evidence submission" });
   }
 });
 
