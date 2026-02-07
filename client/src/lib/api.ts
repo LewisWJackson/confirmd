@@ -39,7 +39,7 @@ export function fetchClaims(params?: {
   if (params?.limit) qs.set("limit", String(params.limit));
   if (params?.offset) qs.set("offset", String(params.offset));
   const query = qs.toString();
-  return fetchJson<any[]>(`/claims${query ? `?${query}` : ""}`);
+  return fetchJson<{ data: any[] }>(`/claims${query ? `?${query}` : ""}`).then(r => r.data);
 }
 
 export function fetchClaim(id: string) {
@@ -48,7 +48,7 @@ export function fetchClaim(id: string) {
 
 // Sources
 export function fetchSources() {
-  return fetchJson<any[]>("/sources");
+  return fetchJson<{ data: any[] }>("/sources").then(r => r.data);
 }
 
 export function fetchSource(id: string) {
@@ -57,7 +57,7 @@ export function fetchSource(id: string) {
 
 // Stories
 export function fetchStories() {
-  return fetchJson<any[]>("/stories");
+  return fetchJson<{ data: any[] }>("/stories").then(r => r.data);
 }
 
 export function fetchStory(id: string) {
@@ -66,7 +66,7 @@ export function fetchStory(id: string) {
 
 // Evidence
 export function fetchEvidence(claimId: string) {
-  return fetchJson<any[]>(`/evidence/${claimId}`);
+  return fetchJson<{ data: any[] }>(`/evidence/${claimId}`).then(r => r.data);
 }
 
 // Pipeline
