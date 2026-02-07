@@ -20,6 +20,13 @@ const getVerdictColor = (label: string) => {
   return "bg-slate-400";
 };
 
+const getVerdictBorderColor = (label: string) => {
+  if (label === "verified") return "border-l-cyan-500";
+  if (label === "speculative") return "border-l-orange-500";
+  if (label === "misleading") return "border-l-red-500";
+  return "border-l-slate-300";
+};
+
 export default function FeedPage() {
   const [, setLocation] = useLocation();
   const [feedFilter, setFeedFilter] = useState<"latest" | "trusted" | "original">("latest");
@@ -64,6 +71,57 @@ export default function FeedPage() {
     <div className="max-w-7xl mx-auto px-6 md:px-12 py-16 w-full animate-in fade-in duration-1000 relative z-10">
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-16">
         <div className="lg:col-span-8 space-y-20">
+          {/* Top Stories with images */}
+          {stories.length > 0 && (
+            <section className="mb-20">
+              <div className="flex items-end justify-between mb-8">
+                <div>
+                  <span className="text-[10px] font-black tracking-[0.5em] text-cyan-600 uppercase">Developing</span>
+                  <h3 className="text-3xl font-black tracking-tighter text-slate-900 mt-1">Top Stories</h3>
+                </div>
+                <button onClick={() => setLocation("/claims")} className="text-[10px] font-black tracking-widest uppercase text-slate-400 hover:text-cyan-600 transition-colors">
+                  View All Claims &rarr;
+                </button>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {stories.slice(0, 6).map((story: any, i: number) => (
+                  <div
+                    key={story.id}
+                    onClick={() => setLocation(`/stories/${story.id}`)}
+                    className={`relative rounded-[2rem] overflow-hidden cursor-pointer group ${
+                      i === 0 ? "md:col-span-2 md:row-span-2 aspect-[16/9]" : "aspect-[4/3]"
+                    }`}
+                  >
+                    {story.imageUrl ? (
+                      <img
+                        src={story.imageUrl}
+                        alt={story.title}
+                        className="w-full h-full object-cover absolute inset-0 group-hover:scale-105 transition-transform duration-700"
+                      />
+                    ) : (
+                      <div className="w-full h-full absolute inset-0 bg-gradient-to-br from-slate-900 to-cyan-900" />
+                    )}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+                    <div className="absolute bottom-0 left-0 right-0 p-6">
+                      {story.category && (
+                        <span className="text-[9px] font-black tracking-[0.3em] uppercase px-3 py-1 rounded-full bg-cyan-500/80 text-white mb-3 inline-block">
+                          {story.category}
+                        </span>
+                      )}
+                      <h4 className={`font-black text-white tracking-tight leading-tight ${i === 0 ? "text-2xl" : "text-sm"}`}>
+                        {story.title}
+                      </h4>
+                      <div className="flex items-center space-x-3 mt-2">
+                        <span className="text-[10px] font-bold text-white/70">{story.claimCount || 0} claims</span>
+                        <span className="text-[10px] font-bold text-white/70">{story.sourceCount || 0} sources</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
           <section>
             <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-12 gap-8">
               <div className="flex flex-col">
@@ -126,6 +184,15 @@ export default function FeedPage() {
                     </div>
                     <div className="space-y-6">
                       <div className="flex items-center space-x-3 text-[10px] font-black tracking-[0.3em] text-cyan-600 uppercase">
+                        {filteredClaims[0].source?.logoUrl ? (
+                          <div className="w-8 h-8 rounded-lg bg-white border border-slate-100 p-1 flex-shrink-0 shadow-sm">
+                            <img src={filteredClaims[0].source.logoUrl} alt={filteredClaims[0].source.displayName} className="w-full h-full object-contain rounded" />
+                          </div>
+                        ) : (
+                          <div className="w-8 h-8 rounded-lg bg-slate-900 flex items-center justify-center flex-shrink-0 shadow-sm">
+                            <span className="text-white font-black text-[10px]">{filteredClaims[0].source?.displayName?.charAt(0) || "?"}</span>
+                          </div>
+                        )}
                         <span>{filteredClaims[0].claimType?.replace(/_/g, " ") || "Claim"}</span>
                         <span className="text-slate-300">&bull;</span>
                         <span>{filteredClaims[0].source?.displayName || "Source"}</span>
@@ -151,13 +218,26 @@ export default function FeedPage() {
                     <div
                       key={claim.id}
                       onClick={() => setLocation(`/claims/${claim.id}`)}
-                      className="glass p-6 rounded-[2rem] bg-white transition-all duration-500 hover:shadow-[0_10px_40px_rgba(0,0,0,0.04)] cursor-pointer group hover:-translate-y-2 border border-slate-100"
+                      className={`glass p-7 rounded-[2rem] bg-white transition-all duration-500 hover:shadow-[0_10px_40px_rgba(0,0,0,0.04)] cursor-pointer group hover:-translate-y-2 border border-slate-100 border-l-4 ${
+                        claim.verdict ? getVerdictBorderColor(claim.verdict.verdictLabel) : "border-l-slate-200"
+                      }`}
                     >
-                      <div className="space-y-4">
+                      <div className="space-y-5">
                         <div className="flex items-center justify-between">
-                          <span className="text-[10px] font-black text-cyan-600 uppercase tracking-[0.3em]">{claim.claimType?.replace(/_/g, " ")}</span>
+                          <div className="flex items-center space-x-3">
+                            {claim.source?.logoUrl ? (
+                              <div className="w-8 h-8 rounded-lg bg-white border border-slate-100 p-1 flex-shrink-0 shadow-sm">
+                                <img src={claim.source.logoUrl} alt={claim.source.displayName} className="w-full h-full object-contain rounded" />
+                              </div>
+                            ) : (
+                              <div className="w-8 h-8 rounded-lg bg-slate-900 flex items-center justify-center flex-shrink-0 shadow-sm">
+                                <span className="text-white font-black text-[10px]">{claim.source?.displayName?.charAt(0) || "?"}</span>
+                              </div>
+                            )}
+                            <span className="text-[10px] font-black text-cyan-600 uppercase tracking-[0.3em]">{claim.claimType?.replace(/_/g, " ")}</span>
+                          </div>
                           {claim.verdict && (
-                            <div className={`w-2 h-2 rounded-full ${getVerdictColor(claim.verdict.verdictLabel)}`} />
+                            <div className={`w-2.5 h-2.5 rounded-full ${getVerdictColor(claim.verdict.verdictLabel)}`} />
                           )}
                         </div>
                         <h3 className="font-black text-xl leading-tight text-slate-900 group-hover:text-cyan-600 transition-colors tracking-tight line-clamp-3">
@@ -169,7 +249,7 @@ export default function FeedPage() {
                           <span>{claim.evidenceCount || 0} evidence</span>
                         </div>
                         {claim.verdict && (
-                          <div className="pt-4 border-t border-slate-100">
+                          <div className="pt-5 border-t border-slate-100">
                             <div className="flex h-2 w-full rounded-full overflow-hidden bg-slate-100">
                               <div className={`h-full ${getVerdictColor(claim.verdict.verdictLabel)} rounded-full`} style={{ width: `${(claim.verdict.probabilityTrue ?? 0) * 100}%` }} />
                             </div>

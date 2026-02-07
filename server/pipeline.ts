@@ -4,12 +4,12 @@
  * verdict generation -> story grouping
  *
  * Operates in two modes:
- * - Full mode: Uses OpenAI GPT-4o for extraction and verdicts (OPENAI_API_KEY set)
+ * - Full mode: Uses Anthropic Claude for extraction and verdicts (ANTHROPIC_API_KEY set)
  * - Simulation mode: Deterministic pattern matching and heuristics (no API key)
  */
 
 import Parser from "rss-parser";
-import OpenAI from "openai";
+import Anthropic from "@anthropic-ai/sdk";
 import type {
   Source,
   InsertSource,
@@ -126,10 +126,10 @@ OUTPUT FORMAT (strict JSON):
 Be conservative. Only use "verified" when A/B grade evidence directly confirms. Output ONLY valid JSON.`;
 
 // ============================================
-// OPENAI CLIENT
+// ANTHROPIC CLIENT
 // ============================================
 
-const openai = process.env.OPENAI_API_KEY ? new OpenAI() : null;
+const anthropic = process.env.ANTHROPIC_API_KEY ? new Anthropic() : null;
 
 // ============================================
 // TYPES
@@ -597,12 +597,12 @@ async function fetchAllFeeds(): Promise<ParsedArticle[]> {
 // ============================================
 
 /**
- * Extract claims from an article using OpenAI GPT-4o.
+ * Extract claims from an article using Anthropic Claude.
  */
 async function extractClaimsWithLLM(
   article: ParsedArticle,
 ): Promise<ExtractedClaim[]> {
-  if (!openai) return extractClaimsSimulated(article);
+  if (!anthropic) return extractClaimsSimulated(article);
 
   try {
     const userPrompt = `ARTICLE TO ANALYZE:
@@ -616,23 +616,21 @@ ${article.content}
 ---
 Extract all atomic, falsifiable claims from this article. Output JSON only.`;
 
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o",
-      messages: [
-        { role: "system", content: CLAIM_EXTRACTION_SYSTEM_PROMPT },
-        { role: "user", content: userPrompt },
-      ],
+    const response = await anthropic.messages.create({
+      model: "claude-sonnet-4-5-20250929",
+      max_tokens: 4096,
       temperature: 0.2,
-      max_tokens: 2000,
+      system: CLAIM_EXTRACTION_SYSTEM_PROMPT,
+      messages: [{ role: "user", content: userPrompt }],
     });
 
-    const rawContent = response.choices[0]?.message?.content;
-    if (!rawContent) {
+    const content = response.content[0].type === 'text' ? response.content[0].text : '';
+    if (!content) {
       console.warn("[Pipeline] Empty LLM response for claim extraction");
       return extractClaimsSimulated(article);
     }
 
-    return parseClaimExtractionResponse(rawContent);
+    return parseClaimExtractionResponse(content);
   } catch (error) {
     console.error(
       "[Pipeline] LLM claim extraction failed, falling back to simulation:",
@@ -890,19 +888,70 @@ interface WebSearchResult {
 }
 
 /**
- * Search DuckDuckGo's HTML endpoint for web results.
- * Parses the HTML response with regex to extract result URLs, titles, and snippets.
- * DuckDuckGo wraps result URLs in redirects -- we extract the real URL from the `uddg=` parameter.
+ * Search the web using Anthropic's web search tool, with DuckDuckGo fallback.
  */
 async function searchWeb(query: string, maxResults: number = WEB_SEARCH_MAX_RESULTS): Promise<WebSearchResult[]> {
   if (!WEB_SEARCH_ENABLED) {
     return [];
   }
 
+  if (!anthropic) {
+    return searchWebDuckDuckGo(query, maxResults);
+  }
+
+  try {
+    console.log(`[Pipeline] Searching web (Anthropic) for: ${query}`);
+
+    const response = await anthropic.messages.create({
+      model: "claude-sonnet-4-5-20250929",
+      max_tokens: 2048,
+      tools: [{
+        type: "web_search_20250305" as any,
+        name: "web_search",
+        max_uses: maxResults,
+      }],
+      messages: [{
+        role: "user",
+        content: `Search the web for recent news and evidence about: ${query}\n\nReturn factual search results only.`,
+      }],
+    });
+
+    const results: WebSearchResult[] = [];
+
+    for (const block of response.content) {
+      if (block.type === "web_search_tool_result") {
+        const searchResults = (block as any).content;
+        if (Array.isArray(searchResults)) {
+          for (const sr of searchResults) {
+            if (sr.type === "web_search_result" && sr.url) {
+              results.push({
+                title: sr.title || "",
+                url: sr.url,
+                snippet: sr.snippet || sr.description || "",
+              });
+            }
+          }
+        }
+      }
+    }
+
+    console.log(`[Pipeline] Found ${results.length} web results (Anthropic)`);
+    return results.slice(0, maxResults);
+  } catch (err) {
+    console.warn(`[Pipeline] Anthropic web search failed for "${query}":`, (err as Error).message);
+    return [];
+  }
+}
+
+/**
+ * Fallback: Search DuckDuckGo's HTML endpoint for web results.
+ * Used when Anthropic API key is not configured.
+ */
+async function searchWebDuckDuckGo(query: string, maxResults: number = WEB_SEARCH_MAX_RESULTS): Promise<WebSearchResult[]> {
   try {
     const encodedQuery = encodeURIComponent(query);
     const url = `https://html.duckduckgo.com/html/?q=${encodedQuery}`;
-    console.log(`[Pipeline] Searching web for: ${query}`);
+    console.log(`[Pipeline] Searching web (DuckDuckGo) for: ${query}`);
 
     const response = await fetch(url, {
       headers: {
@@ -919,12 +968,6 @@ async function searchWeb(query: string, maxResults: number = WEB_SEARCH_MAX_RESU
     const html = await response.text();
     const results: WebSearchResult[] = [];
 
-    // DuckDuckGo HTML results are structured as:
-    //   <a rel="nofollow" class="result__a" href="//duckduckgo.com/l/?uddg=ENCODED_URL&...">TITLE</a>
-    //   <a class="result__snippet" href="...">SNIPPET</a>
-    // We use regex to extract these.
-
-    // Match each result block: the link contains uddg= with the real destination URL
     const resultLinkRegex = /<a[^>]*class="result__a"[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi;
     const snippetRegex = /<a[^>]*class="result__snippet"[^>]*>([\s\S]*?)<\/a>/gi;
 
@@ -947,22 +990,18 @@ async function searchWeb(query: string, maxResults: number = WEB_SEARCH_MAX_RESU
       const link = links[i];
       const snippet = snippets[i] || "";
 
-      // Extract real URL from DuckDuckGo redirect: look for uddg= parameter
       let realUrl = link.href;
       const uddgMatch = link.href.match(/[?&]uddg=([^&]+)/);
       if (uddgMatch) {
         try {
           realUrl = decodeURIComponent(uddgMatch[1]);
         } catch {
-          // If decoding fails, use the raw value
           realUrl = uddgMatch[1];
         }
       }
 
-      // Skip empty or invalid URLs
       if (!realUrl || realUrl.length < 10) continue;
 
-      // Ensure URL starts with http
       if (!realUrl.startsWith("http")) {
         if (realUrl.startsWith("//")) {
           realUrl = "https:" + realUrl;
@@ -978,11 +1017,11 @@ async function searchWeb(query: string, maxResults: number = WEB_SEARCH_MAX_RESU
       });
     }
 
-    console.log(`[Pipeline] Found ${results.length} web results`);
+    console.log(`[Pipeline] Found ${results.length} web results (DuckDuckGo)`);
     return results;
   } catch (error) {
     console.error(
-      "[Pipeline] Web search failed:",
+      "[Pipeline] DuckDuckGo web search failed:",
       error instanceof Error ? error.message : error,
     );
     return [];
@@ -1001,80 +1040,13 @@ function delay(ms: number): Promise<void> {
 // ============================================
 
 /**
- * Map story categories and keywords to curated Unsplash photo URLs.
- * Returns a direct Unsplash image URL for the best matching category.
+ * Generate a news-photography-style image URL using Pollinations.ai.
+ * Creates a unique image from the story title and category -- no API key needed.
  */
 function getStoryImageUrl(title: string, category: string): string {
-  const text = `${title} ${category}`.toLowerCase();
-
-  // Curated Unsplash photo IDs mapped to crypto topic categories
-  const categoryImages: Record<string, string> = {
-    // Regulation / government / legal
-    regulation: "photo-1589829545856-d10d557cf95f",
-    // Security / hack / exploit
-    security: "photo-1563986768609-322da13575f2",
-    // Market / price / trading
-    market: "photo-1611974789855-9c2a0a7236a3",
-    // DeFi / decentralized finance
-    defi: "photo-1639762681485-074b7f938ba0",
-    // NFT / digital art
-    nft: "photo-1620321023374-d1a68fbc720d",
-    // Stablecoin / USDT / USDC
-    stablecoin: "photo-1621761191319-c6fb62004040",
-    // Exchange / trading platform
-    exchange: "photo-1642790106117-e829e14a795f",
-    // General crypto / blockchain
-    general: "photo-1518546305927-5a555bb7020d",
-  };
-
-  // Keyword matching for each category
-  const categoryKeywords: Record<string, string[]> = {
-    regulation: [
-      "sec", "cftc", "regulation", "regulatory", "lawsuit", "legal",
-      "enforcement", "compliance", "filing", "approved", "denied",
-      "legislation", "congress", "ban", "sanctions", "license",
-    ],
-    security: [
-      "hack", "exploit", "stolen", "breach", "vulnerability", "attack",
-      "drained", "security", "phishing", "scam", "fraud", "malware",
-    ],
-    market: [
-      "price", "market", "trading", "rally", "crash", "surge", "drop",
-      "bull", "bear", "ath", "all-time", "volume", "liquidation",
-      "whale", "pump", "dump",
-    ],
-    defi: [
-      "defi", "decentralized finance", "yield", "lending", "borrowing",
-      "liquidity", "amm", "dex", "swap", "protocol", "tvl",
-    ],
-    nft: [
-      "nft", "non-fungible", "digital art", "collectible", "opensea",
-      "metaverse", "token",
-    ],
-    stablecoin: [
-      "stablecoin", "usdt", "usdc", "tether", "dai", "busd", "peg",
-      "depeg", "reserve",
-    ],
-    exchange: [
-      "exchange", "coinbase", "binance", "kraken", "listing", "delist",
-      "trading halt", "withdrawal", "deposit",
-    ],
-  };
-
-  // Find the best matching category
-  let bestCategory = "general";
-  let bestScore = 0;
-
-  for (const [cat, keywords] of Object.entries(categoryKeywords)) {
-    const score = keywords.filter((kw) => text.includes(kw)).length;
-    if (score > bestScore) {
-      bestScore = score;
-      bestCategory = cat;
-    }
-  }
-
-  const photoId = categoryImages[bestCategory] || categoryImages.general;
-  return `https://images.unsplash.com/${photoId}?auto=format&fit=crop&w=1200&q=80`;
+  const topic = title.replace(/[^a-zA-Z0-9 ]/g, '').slice(0, 100);
+  const prompt = `Professional editorial news photography, photojournalistic style, ${topic}, dramatic natural lighting, shallow depth of field, high quality Reuters AP style, no text no watermarks`;
+  return `https://pollinations.ai/p/${encodeURIComponent(prompt)}?width=1200&height=675&nologo=true&model=flux`;
 }
 
 // ============================================
@@ -1157,8 +1129,8 @@ async function gatherEvidence(
     }
   }
 
-  // Evidence from AI analysis (if OpenAI available)
-  if (openai) {
+  // Evidence from AI analysis (if Anthropic available)
+  if (anthropic) {
     try {
       const aiEvidence = await generateAIAnalysis(claim, article);
       if (aiEvidence) {
@@ -1176,34 +1148,30 @@ async function gatherEvidence(
 }
 
 /**
- * Generate an AI analysis evidence item using OpenAI.
+ * Generate an AI analysis evidence item using Anthropic Claude.
  * This is always Grade D since it is AI-generated, not a primary source.
  */
 async function generateAIAnalysis(
   claim: ExtractedClaim,
   article: ParsedArticle,
 ): Promise<GatheredEvidence | null> {
-  if (!openai) return null;
+  if (!anthropic) return null;
 
   try {
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o",
+    const response = await anthropic.messages.create({
+      model: "claude-sonnet-4-5-20250929",
+      max_tokens: 4096,
+      temperature: 0.3,
+      system: "You are a crypto news analyst. Briefly assess the plausibility of the following claim based on the provided article context. Be concise (2-3 sentences).",
       messages: [
-        {
-          role: "system",
-          content:
-            "You are a crypto news analyst. Briefly assess the plausibility of the following claim based on the provided article context. Be concise (2-3 sentences).",
-        },
         {
           role: "user",
           content: `Claim: "${claim.claimText}"\n\nArticle: ${article.title}\nContent: ${article.content.slice(0, 2000)}`,
         },
       ],
-      temperature: 0.3,
-      max_tokens: 300,
     });
 
-    const analysis = response.choices[0]?.message?.content;
+    const analysis = response.content[0].type === 'text' ? response.content[0].text : '';
     if (!analysis) return null;
 
     // Determine stance from AI analysis text
@@ -1219,7 +1187,7 @@ async function generateAIAnalysis(
       publishedAt: new Date(),
       metadata: {
         aiGenerated: true,
-        model: "gpt-4o",
+        model: "claude-sonnet-4-5-20250929",
         sourceArticle: article.link,
       },
     };
@@ -1243,14 +1211,14 @@ async function generateVerdict(
   claim: ExtractedClaim,
   evidence: GatheredEvidence[],
 ): Promise<VerdictResult> {
-  if (openai) {
+  if (anthropic) {
     return generateVerdictWithLLM(claim, evidence);
   }
   return generateVerdictSimulated(claim, evidence);
 }
 
 /**
- * Generate a verdict using OpenAI GPT-4o.
+ * Generate a verdict using Anthropic Claude.
  */
 async function generateVerdictWithLLM(
   claim: ExtractedClaim,
@@ -1278,23 +1246,21 @@ ${JSON.stringify(evidenceJson, null, 2)}
 ---
 Provide your verdict. Output JSON only.`;
 
-    const response = await openai!.chat.completions.create({
-      model: "gpt-4o",
-      messages: [
-        { role: "system", content: VERDICT_SYSTEM_PROMPT },
-        { role: "user", content: userPrompt },
-      ],
+    const response = await anthropic!.messages.create({
+      model: "claude-sonnet-4-5-20250929",
+      max_tokens: 4096,
       temperature: 0.2,
-      max_tokens: 1000,
+      system: VERDICT_SYSTEM_PROMPT,
+      messages: [{ role: "user", content: userPrompt }],
     });
 
-    const rawContent = response.choices[0]?.message?.content;
-    if (!rawContent) {
+    const content = response.content[0].type === 'text' ? response.content[0].text : '';
+    if (!content) {
       console.warn("[Pipeline] Empty LLM response for verdict, falling back");
       return generateVerdictSimulated(claim, evidence);
     }
 
-    return parseVerdictResponse(rawContent);
+    return parseVerdictResponse(content);
   } catch (error) {
     console.error(
       "[Pipeline] LLM verdict generation failed, falling back:",
@@ -1670,7 +1636,7 @@ export class VerificationPipeline {
       `[Pipeline] Starting scheduler (interval: ${(intervalMs / 1000 / 60 / 60).toFixed(1)}h)`,
     );
     console.log(
-      `[Pipeline] OpenAI mode: ${openai ? "ENABLED (GPT-4o)" : "DISABLED (simulation mode)"}`,
+      `[Pipeline] Anthropic mode: ${anthropic ? "ENABLED (Claude)" : "DISABLED (simulation mode)"}`,
     );
 
     // Run immediately
@@ -1898,7 +1864,7 @@ export class VerificationPipeline {
         try {
           await this.storage.createVerdict({
             claimId: claim.id,
-            model: openai ? "gpt-4o" : "simulation",
+            model: anthropic ? "claude-sonnet-4-5-20250929" : "simulation",
             promptVersion: "v1.0.0",
             verdictLabel: verdict.verdictLabel,
             probabilityTrue: verdict.probabilityTrue,
@@ -2102,31 +2068,28 @@ export async function validateCommunityEvidence(
   let stance: EvidenceStance;
 
   // Step 3: Validate relevance and extract evidence
-  if (openai) {
+  if (anthropic) {
     // AI path
     try {
-      const response = await openai.chat.completions.create({
-        model: "gpt-4o",
-        messages: [
-          {
-            role: "system",
-            content: `You are a crypto evidence validator. Given a claim and page content from a submitted URL, determine:
+      const response = await anthropic.messages.create({
+        model: "claude-sonnet-4-5-20250929",
+        max_tokens: 4096,
+        temperature: 0.2,
+        system: `You are a crypto evidence validator. Given a claim and page content from a submitted URL, determine:
 1. Is the content relevant to the claim? (yes/no)
 2. What is the most meaningful excerpt (1-3 sentences)?
 3. What is the stance? (supports/contradicts/mentions)
 
 Output JSON only: { "relevant": boolean, "reason": "string", "excerpt": "string", "stance": "supports|contradicts|mentions" }`,
-          },
+        messages: [
           {
             role: "user",
             content: `CLAIM: ${claimText}\nCLAIM TYPE: ${claimType}\nURL: ${url}\nDOMAIN: ${domain}\nPAGE CONTENT: ${pageContent}\nSUBMITTER NOTES: ${notes || "None"}`,
           },
         ],
-        temperature: 0.2,
-        max_tokens: 500,
       });
 
-      const rawContent = response.choices[0]?.message?.content;
+      const rawContent = response.content[0].type === 'text' ? response.content[0].text : '';
       if (!rawContent) {
         return { accepted: false, reason: "AI validation returned empty response" };
       }
@@ -2210,7 +2173,7 @@ Output JSON only: { "relevant": boolean, "reason": "string", "excerpt": "string"
   };
 }
 
-/** Heuristic evidence validation when no OpenAI key is available. */
+/** Heuristic evidence validation when no Anthropic key is available. */
 function validateHeuristic(
   pageContent: string,
   claimText: string,
