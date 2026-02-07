@@ -81,6 +81,14 @@ export default function StoryDetailPage() {
             )}
           </div>
 
+          {/* Story Hero Image */}
+          {story.imageUrl && (
+            <div className="relative rounded-[2rem] overflow-hidden aspect-[21/9] mb-10 shadow-2xl">
+              <img src={story.imageUrl} alt={story.title} className="w-full h-full object-cover" />
+              <div className="absolute inset-0 bg-gradient-to-t from-slate-900/60 to-transparent" />
+            </div>
+          )}
+
           {/* Claims in this story */}
           <div className="space-y-6">
             <h3 className="text-xs font-black uppercase tracking-[0.3em] text-slate-400">Source Coverage</h3>
@@ -93,10 +101,15 @@ export default function StoryDetailPage() {
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex items-center space-x-3">
                     <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm shadow-lg ${
+                      claim.source?.logoUrl ? "bg-white p-1.5" :
                       (claim.source?.score?.trackRecord || 0) >= 70 ? "bg-cyan-500 text-white"
                       : (claim.source?.score?.trackRecord || 0) >= 50 ? "bg-slate-400 text-white" : "bg-orange-500 text-white"
                     }`}>
-                      {claim.source?.logo || "?"}
+                      {claim.source?.logoUrl ? (
+                        <img src={claim.source.logoUrl} alt={claim.source.displayName} className="w-full h-full object-contain rounded-lg" />
+                      ) : (
+                        <span className="text-white font-black text-sm">{claim.source?.logo || "?"}</span>
+                      )}
                     </div>
                     <div>
                       <span className="text-sm font-bold text-slate-800">{claim.source?.displayName || "Source"}</span>
@@ -164,8 +177,14 @@ export default function StoryDetailPage() {
                 {sources.map((source: any, i: number) => (
                   <div key={i} className="flex items-center justify-between p-3 rounded-xl bg-slate-50">
                     <div className="flex items-center space-x-3">
-                      <div className="w-8 h-8 rounded-lg bg-slate-400 flex items-center justify-center text-white text-xs font-black">
-                        {source.logo || source.displayName?.charAt(0) || "?"}
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-black ${
+                        source.logoUrl ? "bg-white p-1" : "bg-slate-400 text-white"
+                      }`}>
+                        {source.logoUrl ? (
+                          <img src={source.logoUrl} alt={source.displayName} className="w-full h-full object-contain rounded" />
+                        ) : (
+                          <span className="text-white font-black text-xs">{source.logo || source.displayName?.charAt(0) || "?"}</span>
+                        )}
                       </div>
                       <span className="text-sm font-bold text-slate-700">{source.displayName}</span>
                     </div>

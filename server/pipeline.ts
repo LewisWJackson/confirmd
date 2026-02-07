@@ -60,6 +60,8 @@ const RSS_FEEDS: { name: string; url: string; domain: string }[] = [
 
 const MAX_ARTICLES_PER_BATCH = 30;
 const DEFAULT_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
+const WEB_SEARCH_ENABLED = process.env.WEB_SEARCH_ENABLED !== "false"; // default true
+const WEB_SEARCH_MAX_RESULTS = 5;
 
 const CLAIM_EXTRACTION_SYSTEM_PROMPT = `You are a specialized claim extraction agent for crypto news analysis. Your task is to extract atomic, falsifiable claims from news content.
 
@@ -878,11 +880,210 @@ function extractAssetSymbols(text: string): string[] {
 }
 
 // ============================================
+// WEB SEARCH
+// ============================================
+
+interface WebSearchResult {
+  url: string;
+  title: string;
+  snippet: string;
+}
+
+/**
+ * Search DuckDuckGo's HTML endpoint for web results.
+ * Parses the HTML response with regex to extract result URLs, titles, and snippets.
+ * DuckDuckGo wraps result URLs in redirects -- we extract the real URL from the `uddg=` parameter.
+ */
+async function searchWeb(query: string, maxResults: number = WEB_SEARCH_MAX_RESULTS): Promise<WebSearchResult[]> {
+  if (!WEB_SEARCH_ENABLED) {
+    return [];
+  }
+
+  try {
+    const encodedQuery = encodeURIComponent(query);
+    const url = `https://html.duckduckgo.com/html/?q=${encodedQuery}`;
+    console.log(`[Pipeline] Searching web for: ${query}`);
+
+    const response = await fetch(url, {
+      headers: {
+        "User-Agent": "Confirmd/1.0 Verification Pipeline",
+        "Accept": "text/html",
+      },
+    });
+
+    if (!response.ok) {
+      console.warn(`[Pipeline] Web search returned status ${response.status}`);
+      return [];
+    }
+
+    const html = await response.text();
+    const results: WebSearchResult[] = [];
+
+    // DuckDuckGo HTML results are structured as:
+    //   <a rel="nofollow" class="result__a" href="//duckduckgo.com/l/?uddg=ENCODED_URL&...">TITLE</a>
+    //   <a class="result__snippet" href="...">SNIPPET</a>
+    // We use regex to extract these.
+
+    // Match each result block: the link contains uddg= with the real destination URL
+    const resultLinkRegex = /<a[^>]*class="result__a"[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi;
+    const snippetRegex = /<a[^>]*class="result__snippet"[^>]*>([\s\S]*?)<\/a>/gi;
+
+    const links: { href: string; title: string }[] = [];
+    let linkMatch: RegExpExecArray | null;
+    while ((linkMatch = resultLinkRegex.exec(html)) !== null) {
+      links.push({
+        href: linkMatch[1],
+        title: stripHtml(linkMatch[2]),
+      });
+    }
+
+    const snippets: string[] = [];
+    let snippetMatch: RegExpExecArray | null;
+    while ((snippetMatch = snippetRegex.exec(html)) !== null) {
+      snippets.push(stripHtml(snippetMatch[1]));
+    }
+
+    for (let i = 0; i < Math.min(links.length, maxResults); i++) {
+      const link = links[i];
+      const snippet = snippets[i] || "";
+
+      // Extract real URL from DuckDuckGo redirect: look for uddg= parameter
+      let realUrl = link.href;
+      const uddgMatch = link.href.match(/[?&]uddg=([^&]+)/);
+      if (uddgMatch) {
+        try {
+          realUrl = decodeURIComponent(uddgMatch[1]);
+        } catch {
+          // If decoding fails, use the raw value
+          realUrl = uddgMatch[1];
+        }
+      }
+
+      // Skip empty or invalid URLs
+      if (!realUrl || realUrl.length < 10) continue;
+
+      // Ensure URL starts with http
+      if (!realUrl.startsWith("http")) {
+        if (realUrl.startsWith("//")) {
+          realUrl = "https:" + realUrl;
+        } else {
+          continue;
+        }
+      }
+
+      results.push({
+        url: realUrl,
+        title: link.title,
+        snippet,
+      });
+    }
+
+    console.log(`[Pipeline] Found ${results.length} web results`);
+    return results;
+  } catch (error) {
+    console.error(
+      "[Pipeline] Web search failed:",
+      error instanceof Error ? error.message : error,
+    );
+    return [];
+  }
+}
+
+/**
+ * Small delay helper to avoid rate limiting between web searches.
+ */
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// ============================================
+// STORY IMAGE MAPPING
+// ============================================
+
+/**
+ * Map story categories and keywords to curated Unsplash photo URLs.
+ * Returns a direct Unsplash image URL for the best matching category.
+ */
+function getStoryImageUrl(title: string, category: string): string {
+  const text = `${title} ${category}`.toLowerCase();
+
+  // Curated Unsplash photo IDs mapped to crypto topic categories
+  const categoryImages: Record<string, string> = {
+    // Regulation / government / legal
+    regulation: "photo-1589829545856-d10d557cf95f",
+    // Security / hack / exploit
+    security: "photo-1563986768609-322da13575f2",
+    // Market / price / trading
+    market: "photo-1611974789855-9c2a0a7236a3",
+    // DeFi / decentralized finance
+    defi: "photo-1639762681485-074b7f938ba0",
+    // NFT / digital art
+    nft: "photo-1620321023374-d1a68fbc720d",
+    // Stablecoin / USDT / USDC
+    stablecoin: "photo-1621761191319-c6fb62004040",
+    // Exchange / trading platform
+    exchange: "photo-1642790106117-e829e14a795f",
+    // General crypto / blockchain
+    general: "photo-1518546305927-5a555bb7020d",
+  };
+
+  // Keyword matching for each category
+  const categoryKeywords: Record<string, string[]> = {
+    regulation: [
+      "sec", "cftc", "regulation", "regulatory", "lawsuit", "legal",
+      "enforcement", "compliance", "filing", "approved", "denied",
+      "legislation", "congress", "ban", "sanctions", "license",
+    ],
+    security: [
+      "hack", "exploit", "stolen", "breach", "vulnerability", "attack",
+      "drained", "security", "phishing", "scam", "fraud", "malware",
+    ],
+    market: [
+      "price", "market", "trading", "rally", "crash", "surge", "drop",
+      "bull", "bear", "ath", "all-time", "volume", "liquidation",
+      "whale", "pump", "dump",
+    ],
+    defi: [
+      "defi", "decentralized finance", "yield", "lending", "borrowing",
+      "liquidity", "amm", "dex", "swap", "protocol", "tvl",
+    ],
+    nft: [
+      "nft", "non-fungible", "digital art", "collectible", "opensea",
+      "metaverse", "token",
+    ],
+    stablecoin: [
+      "stablecoin", "usdt", "usdc", "tether", "dai", "busd", "peg",
+      "depeg", "reserve",
+    ],
+    exchange: [
+      "exchange", "coinbase", "binance", "kraken", "listing", "delist",
+      "trading halt", "withdrawal", "deposit",
+    ],
+  };
+
+  // Find the best matching category
+  let bestCategory = "general";
+  let bestScore = 0;
+
+  for (const [cat, keywords] of Object.entries(categoryKeywords)) {
+    const score = keywords.filter((kw) => text.includes(kw)).length;
+    if (score > bestScore) {
+      bestScore = score;
+      bestCategory = cat;
+    }
+  }
+
+  const photoId = categoryImages[bestCategory] || categoryImages.general;
+  return `https://images.unsplash.com/${photoId}?auto=format&fit=crop&w=1200&q=80`;
+}
+
+// ============================================
 // EVIDENCE GATHERING
 // ============================================
 
 /**
- * Gather evidence for a claim from the source article and optionally via AI analysis.
+ * Gather evidence for a claim from the source article, web search results,
+ * and optionally via AI analysis.
  */
 async function gatherEvidence(
   claim: ExtractedClaim,
@@ -906,7 +1107,57 @@ async function gatherEvidence(
     },
   });
 
-  // Evidence item 2: AI analysis (if OpenAI available)
+  // Evidence from web search: search for corroborating / contradicting sources
+  if (WEB_SEARCH_ENABLED) {
+    try {
+      // Build a search query from the claim text and asset symbols
+      const assetPart = claim.assetSymbols.length > 0
+        ? ` ${claim.assetSymbols.join(" ")}`
+        : "";
+      // Use a trimmed version of the claim text to form a focused query
+      const claimQueryText = claim.claimText
+        .replace(/^(Unverified claim:|Security incident reported:|ETF-related regulatory development reported:|Regulatory development reported:|Exchange listing reported:|Partnership or integration reported:|Price prediction reported:|Protocol launch or upgrade reported:)\s*/i, "")
+        .slice(0, 120);
+      const searchQuery = `${claimQueryText}${assetPart} crypto`;
+
+      // Add a small delay to avoid rate limiting
+      await delay(500);
+
+      const webResults = await searchWeb(searchQuery);
+
+      for (const result of webResults) {
+        // Skip if the result URL is the same as the source article
+        const resultDomain = extractDomain(result.url);
+        if (result.url === article.link) continue;
+
+        const grade = gradeByDomain(result.url);
+        const excerptText = result.snippet || result.title;
+        const stance = determineStance(excerptText, claim.claimText);
+
+        evidence.push({
+          url: result.url,
+          publisher: resultDomain,
+          excerpt: excerptText.slice(0, 500),
+          grade,
+          stance,
+          primaryFlag: grade === "A",
+          publishedAt: null, // We don't know the publish date from search results
+          metadata: {
+            sourceType: "web_search",
+            searchQuery,
+            resultTitle: result.title,
+          },
+        });
+      }
+    } catch (error) {
+      console.warn(
+        "[Pipeline] Web search evidence gathering failed:",
+        error instanceof Error ? error.message : error,
+      );
+    }
+  }
+
+  // Evidence from AI analysis (if OpenAI available)
   if (openai) {
     try {
       const aiEvidence = await generateAIAnalysis(claim, article);
@@ -1740,10 +1991,13 @@ export class VerificationPipeline {
           );
         } else {
           // Create new story
+          const storyCategory = "crypto";
+          const imageUrl = getStoryImageUrl(group.title, storyCategory);
           const story = await this.storage.createStory({
             title: group.title,
             summary: `Story covering ${group.claimIds.length} related claims`,
-            category: "crypto",
+            category: storyCategory,
+            imageUrl,
             metadata: {
               claimCount: group.claimIds.length,
               createdByPipeline: true,

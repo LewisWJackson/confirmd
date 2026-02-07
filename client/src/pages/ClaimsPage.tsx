@@ -110,10 +110,15 @@ export default function ClaimsPage() {
                   <div className="flex items-start justify-between mb-6">
                     <div className="flex items-center space-x-4">
                       <div className={`w-12 h-12 rounded-xl flex items-center justify-center font-black text-sm shadow-lg ${
+                        claim.source?.logoUrl ? "bg-white p-1.5" :
                         (claim.source?.score?.trackRecord || 0) >= 70 ? "bg-cyan-500 text-white"
                         : (claim.source?.score?.trackRecord || 0) >= 50 ? "bg-slate-400 text-white" : "bg-orange-500 text-white"
                       }`}>
-                        {claim.source?.logo || "?"}
+                        {claim.source?.logoUrl ? (
+                          <img src={claim.source.logoUrl} alt={claim.source.displayName} className="w-full h-full object-contain rounded-lg" />
+                        ) : (
+                          <span className="text-white font-black text-sm">{claim.source?.logo || "?"}</span>
+                        )}
                       </div>
                       <div>
                         <span className="text-sm font-bold text-slate-800">{claim.source?.displayName || "Unknown"}</span>

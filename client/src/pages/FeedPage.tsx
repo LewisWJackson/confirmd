@@ -115,10 +115,17 @@ export default function FeedPage() {
                     className="group cursor-pointer glass p-8 rounded-[2.5rem] transition-all duration-500 hover:-translate-y-2 border border-slate-100 hover:shadow-[0_10px_50px_rgba(0,0,0,0.05)] bg-white"
                   >
                     <div className="relative rounded-[2rem] overflow-hidden mb-8 aspect-[21/9] shadow-2xl bg-gradient-to-br from-slate-900 to-cyan-900 flex items-center justify-center">
-                      <span className="text-6xl font-black text-white/10 uppercase tracking-tighter">{filteredClaims[0].assetSymbols?.[0] || "CRYPTO"}</span>
+                      {stories[0]?.imageUrl ? (
+                        <img src={stories[0].imageUrl} alt={stories[0].title || "Story"} className="w-full h-full object-cover absolute inset-0" />
+                      ) : (
+                        <span className="text-6xl font-black text-white/10 uppercase tracking-tighter">{filteredClaims[0].assetSymbols?.[0] || "CRYPTO"}</span>
+                      )}
                       <div className="absolute top-6 left-6">
                         <span className="bg-cyan-600 text-white text-[10px] font-black px-4 py-2 rounded-xl uppercase tracking-widest shadow-xl">Latest Signal</span>
                       </div>
+                      {stories[0]?.imageUrl && (
+                        <div className="absolute inset-0 bg-gradient-to-t from-slate-900/60 to-transparent" />
+                      )}
                     </div>
                     <div className="space-y-6">
                       <div className="flex items-center space-x-3 text-[10px] font-black tracking-[0.3em] text-cyan-600 uppercase">

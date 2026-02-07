@@ -444,7 +444,7 @@ export async function seedInitialData(storage: MemStorage): Promise<void> {
     type: "regulator",
     handleOrDomain: "sec.gov",
     displayName: "SEC",
-    logoUrl: null,
+    logoUrl: "https://logo.clearbit.com/sec.gov",
     metadata: { description: "U.S. Securities and Exchange Commission" },
   });
 
@@ -452,7 +452,7 @@ export async function seedInitialData(storage: MemStorage): Promise<void> {
     type: "publisher",
     handleOrDomain: "reuters.com",
     displayName: "Reuters",
-    logoUrl: null,
+    logoUrl: "https://logo.clearbit.com/reuters.com",
     metadata: { description: "Global news wire service" },
   });
 
@@ -460,7 +460,7 @@ export async function seedInitialData(storage: MemStorage): Promise<void> {
     type: "publisher",
     handleOrDomain: "bloomberg.com",
     displayName: "Bloomberg Crypto",
-    logoUrl: null,
+    logoUrl: "https://logo.clearbit.com/bloomberg.com",
     metadata: { description: "Bloomberg digital asset coverage" },
   });
 
@@ -468,7 +468,7 @@ export async function seedInitialData(storage: MemStorage): Promise<void> {
     type: "publisher",
     handleOrDomain: "theblock.co",
     displayName: "The Block",
-    logoUrl: null,
+    logoUrl: "https://logo.clearbit.com/theblock.co",
     metadata: { description: "Crypto research and journalism" },
   });
 
@@ -476,7 +476,7 @@ export async function seedInitialData(storage: MemStorage): Promise<void> {
     type: "publisher",
     handleOrDomain: "coindesk.com",
     displayName: "CoinDesk",
-    logoUrl: null,
+    logoUrl: "https://logo.clearbit.com/coindesk.com",
     metadata: { description: "Crypto news and media" },
   });
 
@@ -484,7 +484,7 @@ export async function seedInitialData(storage: MemStorage): Promise<void> {
     type: "publisher",
     handleOrDomain: "cointelegraph.com",
     displayName: "Cointelegraph",
-    logoUrl: null,
+    logoUrl: "https://logo.clearbit.com/cointelegraph.com",
     metadata: { description: "Crypto and blockchain media" },
   });
 
@@ -492,7 +492,7 @@ export async function seedInitialData(storage: MemStorage): Promise<void> {
     type: "x_handle",
     handleOrDomain: "@CryptoWhale",
     displayName: "Crypto Whale",
-    logoUrl: null,
+    logoUrl: "https://logo.clearbit.com/x.com",
     metadata: { description: "Anonymous crypto Twitter personality" },
   });
 
@@ -500,7 +500,7 @@ export async function seedInitialData(storage: MemStorage): Promise<void> {
     type: "telegram",
     handleOrDomain: "t.me/defialpha",
     displayName: "DeFi Alpha Leaks",
-    logoUrl: null,
+    logoUrl: "https://logo.clearbit.com/telegram.org",
     metadata: { description: "Anonymous DeFi alpha Telegram channel" },
   });
 
@@ -1075,7 +1075,7 @@ export async function seedInitialData(storage: MemStorage): Promise<void> {
   const story1 = await storage.createStory({
     title: "Ethereum ETF: Regulatory Progress vs. Speculation",
     summary: "Tracking verified SEC activity alongside speculative claims about Ethereum ETF approval timelines. Official SEC calendar confirms February meeting while anonymous sources push unsubstantiated acceleration narratives.",
-    imageUrl: "https://images.unsplash.com/photo-1639762681485-074b7f938ba0?auto=format&fit=crop&q=80&w=800",
+    imageUrl: "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?auto=format&fit=crop&w=1200&q=80",
     category: "Regulation",
     metadata: {},
   });
@@ -1086,7 +1086,7 @@ export async function seedInitialData(storage: MemStorage): Promise<void> {
   const story2 = await storage.createStory({
     title: "DeFi Security: The Nexus Protocol Exploit",
     summary: "A verified smart contract exploit drained $45M from Nexus Protocol via a reentrancy vulnerability. On-chain evidence and independent security audits confirm the attack vector and fund movement.",
-    imageUrl: "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&q=80&w=800",
+    imageUrl: "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&w=1200&q=80",
     category: "Security",
     metadata: {},
   });

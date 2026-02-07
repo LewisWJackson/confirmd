@@ -264,10 +264,15 @@ export default function ClaimDetailPage() {
               <h3 className="font-black text-xs tracking-[0.3em] text-slate-400 uppercase mb-8">Asserting Source</h3>
               <div className="flex items-center space-x-4 mb-8">
                 <div className={`w-16 h-16 rounded-2xl flex items-center justify-center font-black text-xl shadow-xl ${
+                  source.logoUrl ? "bg-white p-1.5" :
                   (source.score?.trackRecord || 0) >= 70 ? "bg-cyan-500 text-white"
                   : (source.score?.trackRecord || 0) >= 50 ? "bg-slate-400 text-white" : "bg-orange-500 text-white"
                 }`}>
-                  {source.logo}
+                  {source.logoUrl ? (
+                    <img src={source.logoUrl} alt={source.displayName} className="w-full h-full object-contain rounded-lg" />
+                  ) : (
+                    <span className="text-white font-black text-xl">{source.logo || source.displayName?.charAt(0) || "?"}</span>
+                  )}
                 </div>
                 <div>
                   <div className="font-black text-xl text-slate-900">{source.displayName}</div>

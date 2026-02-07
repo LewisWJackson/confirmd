@@ -86,6 +86,7 @@ async function enrichClaim(claim: Claim): Promise<EnrichedClaim> {
           displayName: source.displayName,
           handleOrDomain: source.handleOrDomain,
           logo: logoAbbrev,
+          logoUrl: source.logoUrl || null,
           type: source.type,
           score: sourceScore
             ? {
@@ -198,6 +199,7 @@ router.get("/claims/:id", async (req: Request, res: Response) => {
             id: source.id,
             displayName: source.displayName,
             logo: logoAbbrev,
+            logoUrl: source.logoUrl || null,
             type: source.type,
             handleOrDomain: source.handleOrDomain,
             score: sourceScore
@@ -272,6 +274,7 @@ router.get("/sources", async (_req: Request, res: Response) => {
           handleOrDomain: source.handleOrDomain,
           displayName: source.displayName,
           logo: logoAbbrev,
+          logoUrl: source.logoUrl,
           score: score
             ? {
                 trackRecord: score.trackRecord,
@@ -338,6 +341,7 @@ router.get("/sources/:id", async (req: Request, res: Response) => {
       handleOrDomain: source.handleOrDomain,
       displayName: source.displayName,
       logo: logoAbbrev,
+      logoUrl: source.logoUrl,
       metadata: source.metadata,
       createdAt: source.createdAt,
       score: score
@@ -432,6 +436,7 @@ router.get("/stories/:id", async (req: Request, res: Response) => {
       id: string;
       displayName: string;
       logo: string;
+      logoUrl: string | null;
       type: string;
       score: { trackRecord: number | null } | null;
     }> = [];
@@ -450,6 +455,7 @@ router.get("/stories/:id", async (req: Request, res: Response) => {
           id: source.id,
           displayName: source.displayName,
           logo: logoAbbrev,
+          logoUrl: source.logoUrl,
           type: source.type,
           score: score ? { trackRecord: score.trackRecord } : null,
         });

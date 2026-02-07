@@ -91,10 +91,15 @@ export default function SourcesPage() {
               <div key={source.id} className="glass rounded-[2rem] p-8 border border-slate-200 hover:shadow-2xl transition-all duration-500 cursor-pointer group bg-white/50">
                 <div className="flex items-center space-x-4 mb-6">
                   <div className={`w-14 h-14 rounded-2xl flex items-center justify-center font-black text-lg shadow-xl group-hover:scale-110 transition-transform ${
+                    source.logoUrl ? "bg-white p-1.5" :
                     score.trackRecord >= 70 ? "bg-cyan-500 text-white"
                     : score.trackRecord >= 50 ? "bg-slate-400 text-white" : "bg-orange-500 text-white"
                   }`}>
-                    {source.logo || source.displayName?.charAt(0) || "?"}
+                    {source.logoUrl ? (
+                      <img src={source.logoUrl} alt={source.displayName} className="w-full h-full object-contain rounded-lg" />
+                    ) : (
+                      <span className="text-white font-black text-sm">{source.logo || source.displayName?.charAt(0) || "?"}</span>
+                    )}
                   </div>
                   <div>
                     <div className="font-black text-lg text-slate-900 group-hover:text-cyan-600 transition-colors tracking-tight">{source.displayName}</div>
