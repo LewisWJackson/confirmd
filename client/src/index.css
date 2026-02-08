@@ -3,7 +3,7 @@
 @tailwind utilities;
 
 :root {
-    --bg-color: #ffffff;
+    --bg-color: #f5f0e8;
     --text-color: #0f172a;
 }
 
@@ -15,9 +15,9 @@ body {
 }
 
 .glass {
-    background: rgba(255, 255, 255, 0.7);
+    background: rgba(245, 240, 232, 0.85);
     backdrop-filter: blur(16px) saturate(180%);
-    border: 1px solid rgba(0, 0, 0, 0.05);
+    border: 1px solid rgba(0, 0, 0, 0.06);
 }
 
 .glass-light {

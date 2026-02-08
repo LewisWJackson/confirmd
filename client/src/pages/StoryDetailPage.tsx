@@ -312,86 +312,61 @@ export default function StoryDetailPage() {
           <h3 className="text-xs font-black uppercase tracking-[0.3em] text-slate-400 mb-6">
             Creator Predictions ({story.creatorPredictions.length})
           </h3>
-          {tier === "free" ? (
-            <div className="relative">
-              <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-white/70 backdrop-blur-[2px] rounded-2xl">
-                <svg className="w-10 h-10 text-violet-400 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                </svg>
-                <span className="text-base font-bold text-slate-700 mb-1">
-                  {story.creatorPredictions.length} creator prediction{story.creatorPredictions.length !== 1 ? "s" : ""} available
-                </span>
-                <span className="text-sm text-slate-500 mb-4">Unlock with Confirmd Tribune</span>
-                <button
-                  onClick={() => setLocation("/plus")}
-                  className="px-6 py-2.5 bg-violet-600 text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-violet-700 transition-all shadow-lg shadow-violet-500/20"
-                >
-                  View Plans
-                </button>
-              </div>
-              <div className="space-y-4 blur-sm select-none pointer-events-none">
-                {story.creatorPredictions.slice(0, 2).map((pred: any, idx: number) => (
-                  <div key={pred.id || idx} className="rounded-2xl border border-violet-200 bg-white p-6">
-                    <div className="flex items-center gap-3 mb-3">
-                      <div className="w-10 h-10 rounded-full bg-violet-100 flex items-center justify-center">
-                        <span className="text-sm font-black text-violet-500">{(pred.creatorName || "?").charAt(0)}</span>
-                      </div>
-                      <div>
-                        <span className="text-sm font-black text-slate-900">{pred.creatorName || "Creator"}</span>
-                      </div>
-                    </div>
-                    <p className="text-sm text-slate-600">{pred.claimText || pred.claim || "Prediction content"}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-4">
+          <div className="space-y-4">
               {story.creatorPredictions.map((pred: any, idx: number) => (
-                <div key={pred.id || idx} className="rounded-2xl border border-violet-200 bg-white p-6 hover:shadow-md transition-all">
+                <div
+                  key={pred.claim?.id || idx}
+                  className="rounded-2xl border border-violet-200 bg-white p-6 hover:shadow-md transition-all cursor-pointer"
+                  onClick={() => {
+                    if (tier === "free") {
+                      setLocation("/plus");
+                    } else {
+                      setLocation(`/creators/${pred.creator?.id}`);
+                    }
+                  }}
+                >
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-full bg-violet-100 flex items-center justify-center overflow-hidden flex-shrink-0 border-2 border-violet-200">
-                        {pred.creatorAvatarUrl ? (
-                          <img src={pred.creatorAvatarUrl} alt={pred.creatorName} className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                        {pred.creator?.avatarUrl ? (
+                          <img src={pred.creator.avatarUrl} alt={pred.creator?.channelName} className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                         ) : (
-                          <span className="text-sm font-black text-violet-500">{(pred.creatorName || "?").charAt(0)}</span>
+                          <span className="text-sm font-black text-violet-500">{(pred.creator?.channelName || "?").charAt(0)}</span>
                         )}
                       </div>
                       <div>
                         <div className="flex items-center gap-2">
-                          <span className="text-sm font-black text-slate-900">{pred.creatorName || "Unknown Creator"}</span>
-                          {pred.creatorTier && <TierBadge tier={pred.creatorTier} size="sm" />}
+                          <span className="text-sm font-black text-slate-900">{pred.creator?.channelName || "Unknown Creator"}</span>
+                          {pred.creator?.tier && <TierBadge tier={pred.creator.tier} size="sm" />}
                         </div>
-                        {pred.accuracy != null && (
+                        {pred.creator?.overallAccuracy != null && (
                           <span className="text-[10px] font-bold text-violet-500">
-                            {Math.round(pred.accuracy)}% accuracy from {pred.totalClaims || 0} claims
+                            {Math.round(pred.creator.overallAccuracy)}% accuracy from {pred.creator?.totalClaims || 0} claims
                           </span>
                         )}
                       </div>
                     </div>
-                    {pred.confidence && (
+                    {pred.claim?.confidenceLanguage && (
                       <span className={`px-2 py-0.5 text-[9px] font-black uppercase tracking-wider rounded-lg border ${
-                        pred.confidence.toLowerCase() === "strong" ? "bg-red-50 text-red-600 border-red-200" :
-                        pred.confidence.toLowerCase() === "medium" ? "bg-amber-50 text-amber-600 border-amber-200" :
+                        pred.claim.confidenceLanguage.toLowerCase() === "strong" ? "bg-red-50 text-red-600 border-red-200" :
+                        pred.claim.confidenceLanguage.toLowerCase() === "medium" ? "bg-amber-50 text-amber-600 border-amber-200" :
                         "bg-slate-50 text-slate-500 border-slate-200"
                       }`}>
-                        {pred.confidence}
+                        {pred.claim.confidenceLanguage}
                       </span>
                     )}
                   </div>
                   <p className="text-base font-bold text-slate-800 leading-relaxed">
-                    {pred.claimText || pred.claim || ""}
+                    {pred.claim?.claimText || ""}
                   </p>
-                  {pred.timeframe && (
+                  {pred.claim?.statedTimeframe && (
                     <div className="text-[10px] font-bold text-slate-400 mt-2">
-                      Timeframe: {pred.timeframe}
+                      Timeframe: {pred.claim.statedTimeframe}
                     </div>
                   )}
                 </div>
               ))}
             </div>
-          )}
         </div>
       )}
 
