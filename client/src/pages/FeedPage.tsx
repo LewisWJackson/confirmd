@@ -259,7 +259,17 @@ function CreatorPredictionsSection({
   onPredictionClick: (prediction: any) => void;
   onViewAll: () => void;
 }) {
-  const items = predictions.slice(0, 6);
+  // Deduplicate: one prediction per creator (pick the first/latest for each)
+  const seen = new Set<string>();
+  const unique: any[] = [];
+  for (const p of predictions) {
+    const cid = p.creator?.id || p.creator?.channelName || "";
+    if (seen.has(cid)) continue;
+    seen.add(cid);
+    unique.push(p);
+    if (unique.length >= 6) break;
+  }
+  const items = unique;
   if (items.length === 0) return null;
 
   return (
