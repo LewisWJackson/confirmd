@@ -412,9 +412,6 @@ router.get("/stories", async (req: Request, res: Response) => {
 
     let feedItems = await storage.getStoriesForFeed(limit, offset);
 
-    // Require at least 2 sources covering a story
-    feedItems = feedItems.filter(s => s.sourceCount >= 2);
-
     // Filter by category if provided
     if (category) {
       feedItems = feedItems.filter(s => s.category?.toLowerCase() === category.toLowerCase());
@@ -426,7 +423,13 @@ router.get("/stories", async (req: Request, res: Response) => {
       feedItems = feedItems.filter(s => s.assetSymbols.some(a => a.toUpperCase() === assetUpper));
     }
 
-    res.json({ data: feedItems });
+    // Add singleSource flag for stories with 0 or 1 sources
+    const data = feedItems.map(s => ({
+      ...s,
+      singleSource: s.sourceCount <= 1,
+    }));
+
+    res.json({ data });
   } catch (err) {
     console.error("Error fetching stories for feed:", (err as Error).message);
     res.status(500).json({ error: "Failed to fetch stories" });
@@ -445,12 +448,6 @@ router.get("/stories/:id", async (req: Request, res: Response) => {
     }
 
     const { story, claims } = storyWithClaims;
-
-    // Require at least 2 sources covering a story
-    if ((story.sourceCount ?? 0) < 2) {
-      res.status(404).json({ error: "Story not found" });
-      return;
-    }
 
     const enrichedClaims = await Promise.all(claims.map(enrichClaim));
 
@@ -536,6 +533,27 @@ router.get("/stories/:id", async (req: Request, res: Response) => {
       }
     }
 
+    // ── Related creator predictions ─────────────────────────────────
+    const storyAssets = (story.assetSymbols ?? []).map(a => a.toUpperCase());
+    let creatorPredictions: Array<{ claim: CreatorClaim; creator: Creator }> = [];
+
+    if (storyAssets.length > 0) {
+      const allCreatorClaims = await storage.getCreatorClaims({ limit: 100 });
+      const matching = allCreatorClaims.filter(cc =>
+        (cc.assetSymbols ?? []).some(a => storyAssets.includes(a.toUpperCase()))
+      );
+
+      // Enrich with creator data, limit to 5
+      const results: Array<{ claim: CreatorClaim; creator: Creator }> = [];
+      for (const cc of matching.slice(0, 5)) {
+        const creator = await storage.getCreator(cc.creatorId);
+        if (creator) {
+          results.push({ claim: cc, creator });
+        }
+      }
+      creatorPredictions = results;
+    }
+
     res.json({
       id: story.id,
       title: story.title,
@@ -547,6 +565,7 @@ router.get("/stories/:id", async (req: Request, res: Response) => {
       coverage,
       claims: enrichedClaims,
       verdictDistribution,
+      creatorPredictions,
     });
   } catch (err) {
     console.error("GET /stories/:id error:", err);
@@ -875,6 +894,76 @@ router.get("/auth/me", async (req: Request, res: Response) => {
   } catch (err) {
     console.error("GET /auth/me error:", err);
     res.status(500).json({ error: "Failed to fetch user" });
+  }
+});
+
+// ─── GET /creators/feed (mixed feed — NOT tier-gated) ───────────────
+
+router.get("/creators/feed", async (req: Request, res: Response) => {
+  try {
+    const limit = parseInt(req.query.limit as string) || 20;
+    const offset = parseInt(req.query.offset as string) || 0;
+
+    const claims = await storage.getCreatorClaims({ limit, offset });
+
+    // Fetch recent stories for relatedStoryId matching
+    const recentStories = await storage.getStoriesForFeed(100, 0);
+
+    const data = await Promise.all(
+      claims.map(async (cc) => {
+        const [creator, video] = await Promise.all([
+          storage.getCreator(cc.creatorId),
+          storage.getCreatorVideo(cc.videoId),
+        ]);
+
+        // Find a related story by overlapping asset symbols
+        let relatedStoryId: string | null = null;
+        const claimAssets = (cc.assetSymbols ?? []).map(a => a.toUpperCase());
+        if (claimAssets.length > 0) {
+          const match = recentStories.find(s =>
+            s.assetSymbols.some(a => claimAssets.includes(a.toUpperCase()))
+          );
+          if (match) relatedStoryId = match.id;
+        }
+
+        return {
+          id: cc.id,
+          type: "creator_prediction" as const,
+          claimText: cc.claimText,
+          category: cc.category,
+          confidenceLanguage: cc.confidenceLanguage,
+          statedTimeframe: cc.statedTimeframe ?? null,
+          status: cc.status,
+          assetSymbols: cc.assetSymbols ?? [],
+          createdAt: cc.createdAt?.toISOString() ?? new Date().toISOString(),
+          creator: creator
+            ? {
+                id: creator.id,
+                channelName: creator.channelName,
+                avatarUrl: creator.avatarUrl ?? null,
+                tier: creator.tier,
+                overallAccuracy: creator.overallAccuracy ?? 0,
+                totalClaims: creator.totalClaims ?? 0,
+              }
+            : null,
+          video: video
+            ? {
+                id: video.id,
+                title: video.title,
+                youtubeVideoId: video.youtubeVideoId,
+                thumbnailUrl: video.thumbnailUrl ?? null,
+              }
+            : null,
+          relatedStoryId,
+        };
+      })
+    );
+
+    // Filter out entries with missing creator or video
+    res.json({ data: data.filter(d => d.creator && d.video) });
+  } catch (err) {
+    console.error("GET /creators/feed error:", err);
+    res.status(500).json({ error: "Failed to fetch creator feed" });
   }
 });
 

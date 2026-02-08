@@ -193,6 +193,15 @@ export function fetchCreatorClaims(id: string, params?: {
   return fetchJson<{ data: any[] }>(`/creators/${id}/claims${query ? `?${query}` : ""}`).then(r => r.data);
 }
 
+// Creator Feed
+export function fetchCreatorFeed(params?: { limit?: number; offset?: number }) {
+  const qs = new URLSearchParams();
+  if (params?.limit) qs.set("limit", String(params.limit));
+  if (params?.offset) qs.set("offset", String(params.offset));
+  const query = qs.toString();
+  return fetchJson<{ data: any[] }>(`/creators/feed${query ? `?${query}` : ""}`).then(r => r.data);
+}
+
 // Disputes
 export function submitDispute(data: { claimId: string; reason: string; evidenceUrl?: string }) {
   return postJson<any>("/disputes", data);
