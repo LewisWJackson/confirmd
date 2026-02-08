@@ -34,7 +34,7 @@ function RankChange({ change }: { change: number }) {
       </span>
     );
   }
-  return <span className="text-xs text-slate-300">—</span>;
+  return <span className="text-xs text-content-muted">—</span>;
 }
 
 function PodiumCard({ creator, rank }: { creator: any; rank: number }) {
@@ -63,7 +63,7 @@ function PodiumCard({ creator, rank }: { creator: any; rank: number }) {
       label: "3rd",
       glow: "",
     },
-  }[rank] || { height: "h-24", border: "border-slate-200", bg: "bg-white", badge: "bg-slate-300 text-white", label: `${rank}`, glow: "" };
+  }[rank] || { height: "h-24", border: "border-border", bg: "bg-surface-card", badge: "bg-slate-300 text-white", label: `${rank}`, glow: "" };
 
   return (
     <div className={`flex flex-col items-center ${rank === 1 ? "order-2" : rank === 2 ? "order-1" : "order-3"}`}>
@@ -72,7 +72,7 @@ function PodiumCard({ creator, rank }: { creator: any; rank: number }) {
           {creator.avatarUrl ? (
             <img src={creator.avatarUrl} alt={creator.channelName} className="w-full h-full object-cover" />
           ) : (
-            <div className="w-full h-full bg-slate-100 flex items-center justify-center text-lg font-black text-slate-400">
+            <div className="w-full h-full bg-surface-card-hover flex items-center justify-center text-lg font-black text-content-muted">
               {(creator.channelName || "?").charAt(0)}
             </div>
           )}
@@ -81,13 +81,13 @@ function PodiumCard({ creator, rank }: { creator: any; rank: number }) {
           {config.label}
         </div>
       </div>
-      <h3 className="text-sm font-black text-slate-900 tracking-tight text-center truncate max-w-[120px]">
+      <h3 className="text-sm font-black text-content-primary tracking-tight text-center truncate max-w-[120px]">
         {creator.channelName}
       </h3>
       <div className={`text-lg font-black ${accuracyColor(creator.overallAccuracy || 0)} mt-1`}>
         {creator.overallAccuracy ?? 0}%
       </div>
-      <div className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">
+      <div className="text-[9px] font-bold text-content-muted uppercase tracking-wider">
         {creator.totalClaims ?? 0} claims
       </div>
       <div className={`rounded-xl ${config.bg} border ${config.border} ${config.height} w-24 mt-3`} />
@@ -101,19 +101,19 @@ function LoadingSkeleton() {
       <div className="flex items-end justify-center gap-8">
         {[1, 2, 3].map((i) => (
           <div key={i} className="flex flex-col items-center animate-pulse">
-            <div className="w-16 h-16 bg-slate-200 rounded-2xl mb-3" />
-            <div className="h-4 bg-slate-200 rounded w-20 mb-2" />
-            <div className="h-6 bg-slate-100 rounded w-12" />
+            <div className="w-16 h-16 bg-surface-card-hover rounded-2xl mb-3" />
+            <div className="h-4 bg-surface-card-hover rounded w-20 mb-2" />
+            <div className="h-6 bg-surface-card-hover rounded w-12" />
           </div>
         ))}
       </div>
       <div className="space-y-3">
         {[1, 2, 3, 4, 5].map((i) => (
-          <div key={i} className="rounded-2xl border border-slate-200 bg-white p-5 animate-pulse flex items-center gap-4">
-            <div className="w-10 h-10 bg-slate-200 rounded-xl" />
-            <div className="w-10 h-10 bg-slate-200 rounded-full" />
-            <div className="flex-1 h-5 bg-slate-200 rounded-lg w-1/3" />
-            <div className="h-5 bg-slate-100 rounded-lg w-16" />
+          <div key={i} className="rounded-2xl border border-border bg-surface-card p-5 animate-pulse flex items-center gap-4">
+            <div className="w-10 h-10 bg-surface-card-hover rounded-xl" />
+            <div className="w-10 h-10 bg-surface-card-hover rounded-full" />
+            <div className="flex-1 h-5 bg-surface-card-hover rounded-lg w-1/3" />
+            <div className="h-5 bg-surface-card-hover rounded-lg w-16" />
           </div>
         ))}
       </div>
@@ -135,11 +135,11 @@ export default function LeaderboardPage() {
     return (
       <div className="animate-in fade-in duration-1000 relative z-10">
         <section className="max-w-7xl mx-auto px-6 md:px-12 pt-16 pb-8 text-center">
-          <span className="text-[10px] font-black tracking-[0.5em] text-cyan-600 uppercase">Rankings</span>
-          <h1 className="text-4xl md:text-5xl font-black tracking-tighter text-slate-900 mt-2 leading-[0.95]">
+          <span className="text-[10px] font-black tracking-[0.5em] text-accent uppercase">Rankings</span>
+          <h1 className="text-4xl md:text-5xl font-black tracking-tighter text-content-primary mt-2 leading-[0.95]">
             Creator Leaderboard
           </h1>
-          <p className="text-lg text-slate-500 mt-4 font-medium max-w-xl mx-auto">
+          <p className="text-lg text-content-secondary mt-4 font-medium max-w-xl mx-auto">
             See which crypto creators are most accurate, ranked by verified claim performance.
           </p>
         </section>
@@ -161,11 +161,11 @@ export default function LeaderboardPage() {
     <div className="animate-in fade-in duration-1000 relative z-10">
       {/* Header */}
       <section className="max-w-7xl mx-auto px-6 md:px-12 pt-16 pb-8 text-center">
-        <span className="text-[10px] font-black tracking-[0.5em] text-cyan-600 uppercase">Rankings</span>
-        <h1 className="text-4xl md:text-5xl font-black tracking-tighter text-slate-900 mt-2 leading-[0.95]">
+        <span className="text-[10px] font-black tracking-[0.5em] text-accent uppercase">Rankings</span>
+        <h1 className="text-4xl md:text-5xl font-black tracking-tighter text-content-primary mt-2 leading-[0.95]">
           Creator Leaderboard
         </h1>
-        <p className="text-lg text-slate-500 mt-4 font-medium max-w-xl mx-auto">
+        <p className="text-lg text-content-secondary mt-4 font-medium max-w-xl mx-auto">
           Crypto creators ranked by claim accuracy. Who gets it right?
         </p>
       </section>
@@ -174,9 +174,9 @@ export default function LeaderboardPage() {
         {isLoading ? (
           <LoadingSkeleton />
         ) : creators.length === 0 ? (
-          <div className="rounded-2xl border border-slate-200 bg-white p-16 text-center">
-            <h3 className="text-xl font-black text-slate-900 tracking-tight">No ranked creators yet</h3>
-            <p className="text-sm text-slate-500 mt-2 font-medium">
+          <div className="rounded-2xl border border-border bg-surface-card p-16 text-center">
+            <h3 className="text-xl font-black text-content-primary tracking-tight">No ranked creators yet</h3>
+            <p className="text-sm text-content-secondary mt-2 font-medium">
               Rankings will appear once creators have enough verified claims.
             </p>
           </div>
@@ -195,23 +195,23 @@ export default function LeaderboardPage() {
 
             {/* Quick Stats */}
             <div className="grid grid-cols-3 gap-4 mb-8">
-              <div className="rounded-2xl border border-slate-200 bg-white p-5 text-center">
-                <div className="text-2xl font-black text-slate-900">{creators.length}</div>
-                <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 mt-1">Ranked</div>
+              <div className="rounded-2xl border border-border bg-surface-card p-5 text-center">
+                <div className="text-2xl font-black text-content-primary">{creators.length}</div>
+                <div className="text-[10px] font-black uppercase tracking-widest text-content-muted mt-1">Ranked</div>
               </div>
-              <div className="rounded-2xl border border-slate-200 bg-white p-5 text-center">
-                <div className="text-2xl font-black text-slate-900">
+              <div className="rounded-2xl border border-border bg-surface-card p-5 text-center">
+                <div className="text-2xl font-black text-content-primary">
                   {creators.reduce((sum: number, c: any) => sum + (c.totalClaims || 0), 0)}
                 </div>
-                <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 mt-1">Total Claims</div>
+                <div className="text-[10px] font-black uppercase tracking-widest text-content-muted mt-1">Total Claims</div>
               </div>
-              <div className="rounded-2xl border border-slate-200 bg-white p-5 text-center">
-                <div className="text-2xl font-black text-slate-900">
+              <div className="rounded-2xl border border-border bg-surface-card p-5 text-center">
+                <div className="text-2xl font-black text-content-primary">
                   {creators.length > 0
                     ? Math.round(creators.reduce((sum: number, c: any) => sum + (c.overallAccuracy || 0), 0) / creators.length)
                     : 0}%
                 </div>
-                <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 mt-1">Avg Accuracy</div>
+                <div className="text-[10px] font-black uppercase tracking-widest text-content-muted mt-1">Avg Accuracy</div>
               </div>
             </div>
 
@@ -223,19 +223,19 @@ export default function LeaderboardPage() {
                   <div
                     key={creator.id}
                     onClick={() => setLocation(`/creators/${creator.id}`)}
-                    className="rounded-2xl border border-slate-200 bg-white p-4 md:p-5 hover:shadow-[0_4px_20px_rgba(0,0,0,0.04)] transition-all cursor-pointer group flex items-center gap-4"
+                    className="rounded-2xl border border-border bg-surface-card p-4 md:p-5 hover:shadow-[0_4px_20px_rgba(0,0,0,0.04)] transition-all cursor-pointer group flex items-center gap-4"
                   >
                     {/* Rank */}
-                    <div className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-center flex-shrink-0">
-                      <span className="text-sm font-black text-slate-500">{rank}</span>
+                    <div className="w-10 h-10 rounded-xl bg-surface-primary border border-border flex items-center justify-center flex-shrink-0">
+                      <span className="text-sm font-black text-content-secondary">{rank}</span>
                     </div>
 
                     {/* Avatar */}
-                    <div className="w-10 h-10 rounded-full overflow-hidden bg-slate-100 flex-shrink-0">
+                    <div className="w-10 h-10 rounded-full overflow-hidden bg-surface-card-hover flex-shrink-0">
                       {creator.avatarUrl ? (
                         <img src={creator.avatarUrl} alt={creator.channelName} className="w-full h-full object-cover" />
                       ) : (
-                        <div className="w-full h-full flex items-center justify-center text-sm font-black text-slate-400">
+                        <div className="w-full h-full flex items-center justify-center text-sm font-black text-content-muted">
                           {(creator.channelName || "?").charAt(0)}
                         </div>
                       )}
@@ -244,12 +244,12 @@ export default function LeaderboardPage() {
                     {/* Name + tier */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className="text-sm font-black text-slate-900 truncate group-hover:text-cyan-600 transition-colors">
+                        <span className="text-sm font-black text-content-primary truncate group-hover:text-accent transition-colors">
                           {creator.channelName}
                         </span>
                         <TierBadge tier={creator.tier || "unranked"} size="sm" />
                       </div>
-                      <div className="text-xs text-slate-400 font-medium mt-0.5">
+                      <div className="text-xs text-content-muted font-medium mt-0.5">
                         {creator.subscriberCount ? `${(creator.subscriberCount / 1000).toFixed(0)}K subs` : ""}
                       </div>
                     </div>
@@ -260,11 +260,11 @@ export default function LeaderboardPage() {
                         <div className={`text-lg font-black ${accuracyColor(creator.overallAccuracy || 0)}`}>
                           {creator.overallAccuracy ?? 0}%
                         </div>
-                        <div className="text-[9px] font-bold text-slate-300 uppercase tracking-wider">Accuracy</div>
+                        <div className="text-[9px] font-bold text-content-muted uppercase tracking-wider">Accuracy</div>
                       </div>
                       <div className="text-center w-16">
-                        <div className="text-sm font-black text-slate-600">{creator.totalClaims ?? 0}</div>
-                        <div className="text-[9px] font-bold text-slate-300 uppercase tracking-wider">Claims</div>
+                        <div className="text-sm font-black text-content-secondary">{creator.totalClaims ?? 0}</div>
+                        <div className="text-[9px] font-bold text-content-muted uppercase tracking-wider">Claims</div>
                       </div>
                       <div className="w-12">
                         <RankChange change={creator.rankChange ?? 0} />
@@ -272,7 +272,7 @@ export default function LeaderboardPage() {
                     </div>
 
                     {/* Arrow */}
-                    <svg className="w-5 h-5 text-slate-200 group-hover:text-cyan-500 transition-colors flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-5 h-5 text-content-muted group-hover:text-accent transition-colors flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                     </svg>
                   </div>
@@ -282,7 +282,7 @@ export default function LeaderboardPage() {
 
             {/* Footer */}
             <div className="text-center py-8">
-              <p className="text-xs text-slate-400 font-medium">
+              <p className="text-xs text-content-muted font-medium">
                 Rankings based on verified claim accuracy. Minimum 5 scored claims to qualify.
               </p>
             </div>

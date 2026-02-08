@@ -1,15 +1,35 @@
+import React, { useState, useRef, useEffect } from "react";
+import { useLocation } from "wouter";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { fetchMe, logout } from "../lib/api";
+import { useAuth } from "../lib/auth-context";
+import { ThemeToggle } from "./ThemeToggle";
 
-import React, { useState, useRef, useEffect } from 'react';
-import { useLocation } from 'wouter';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { fetchMe, logout } from '../lib/api';
-import { useAuth } from '../lib/auth-context';
+const topicPills = [
+  { label: "Bitcoin", slug: "bitcoin" },
+  { label: "Ethereum", slug: "ethereum" },
+  { label: "DeFi", slug: "defi" },
+  { label: "Regulation", slug: "regulation" },
+  { label: "Security", slug: "security" },
+  { label: "Markets", slug: "markets" },
+  { label: "NFTs", slug: "nfts" },
+  { label: "Stablecoins", slug: "stablecoins" },
+  { label: "Layer 2", slug: "layer-2" },
+  { label: "DAOs", slug: "daos" },
+];
+
+const navItems = [
+  { path: "/", label: "Home" },
+  { path: "/blindspot", label: "Blindspot" },
+];
 
 export const Header: React.FC = () => {
   const [location, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const { tier } = useAuth();
 
   useEffect(() => {
     if (!showUserMenu) return;
@@ -23,7 +43,7 @@ export const Header: React.FC = () => {
   }, [showUserMenu]);
 
   const { data: user } = useQuery({
-    queryKey: ['auth', 'me'],
+    queryKey: ["auth", "me"],
     queryFn: fetchMe,
     staleTime: 60_000,
     retry: false,
@@ -31,129 +51,214 @@ export const Header: React.FC = () => {
 
   const handleLogout = async () => {
     await logout();
-    queryClient.invalidateQueries({ queryKey: ['auth', 'me'] });
+    queryClient.invalidateQueries({ queryKey: ["auth", "me"] });
     setShowUserMenu(false);
   };
 
-  const { tier } = useAuth();
-
-  const navItems = [
-    { path: '/', label: 'Stories', gated: false },
-    { path: '/blindspot', label: 'Blindspot', gated: false },
-    { path: '/creators', label: 'Creators', gated: true },
-    { path: '/sources', label: 'Sources', gated: false },
-    { path: '/signals', label: 'Signals', gated: true },
-  ];
-
   const isActive = (path: string) => {
-    if (path === '/') return location === '/';
+    if (path === "/") return location === "/";
     return location.startsWith(path);
   };
 
   return (
-    <header className="sticky top-0 z-50 px-6 md:px-12 py-5 glass border-b border-slate-100">
-      <div className="max-w-7xl mx-auto flex items-center justify-between">
-        <div className="flex items-center space-x-12">
-          <div
-            onClick={() => setLocation('/')}
-            className="flex items-center cursor-pointer group"
+    <header className="sticky top-0 z-50">
+      {/* Top banner */}
+      <div className="bg-[#c4a97d] text-white">
+        <div className="max-w-7xl mx-auto px-4 md:px-8 py-1.5 flex items-center justify-center gap-3 text-xs font-medium">
+          <span>See every side of every crypto story</span>
+          <button
+            onClick={() => setLocation("/plus")}
+            className="bg-white/20 hover:bg-white/30 text-white text-[10px] font-bold px-3 py-0.5 rounded-full transition-colors"
           >
-            <div className="order-1">
-              <span className="text-2xl font-black logo-text text-slate-900 leading-none tracking-tighter uppercase transition-colors">Confirmd</span>
-            </div>
-            <div className="w-7 h-7 bg-cyan-500 rounded-lg flex items-center justify-center shadow-[4px_4px_12px_rgba(6,182,212,0.3)] rotate-6 group-hover:scale-110 group-hover:-rotate-12 transition-all duration-300 order-2 ml-3">
-              <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={5} d="M5 13l4 4L19 7" />
-              </svg>
-            </div>
-          </div>
+            Get Started
+          </button>
+        </div>
+      </div>
 
-          <nav className="hidden lg:flex items-center space-x-10 text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">
-            {navItems.map(({ path, label, gated }) => (
+      {/* Main header row */}
+      <div className="bg-[#1a1a1a]">
+        <div className="max-w-7xl mx-auto px-4 md:px-8 py-3 flex items-center justify-between">
+          {/* Left: Logo */}
+          <button
+            onClick={() => setLocation("/")}
+            className="text-xl font-black text-white uppercase tracking-tight leading-none hover:opacity-80 transition-opacity"
+          >
+            CONFIRMD
+          </button>
+
+          {/* Center nav (desktop) */}
+          <nav className="hidden md:flex items-center gap-8">
+            {navItems.map(({ path, label }) => (
               <button
                 key={path}
                 onClick={() => setLocation(path)}
-                className={`${isActive(path) ? 'text-cyan-600' : 'hover:text-slate-900'} transition-all flex flex-col items-center`}
+                className={`relative text-sm font-medium transition-colors pb-1 ${
+                  isActive(path) ? "text-white" : "text-gray-400 hover:text-white"
+                }`}
               >
-                <span className="flex items-center gap-1.5">
-                  {label}
-                  {gated && tier === "free" && (
-                    <svg className="w-3 h-3 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                    </svg>
-                  )}
-                </span>
-                {isActive(path) && <div className="w-1 h-1 bg-cyan-600 rounded-full mt-1.5 shadow-[0_0_5px_cyan]"></div>}
+                {label}
+                {isActive(path) && (
+                  <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#c4a97d] rounded-full" />
+                )}
               </button>
             ))}
           </nav>
+
+          {/* Right actions */}
+          <div className="flex items-center gap-3">
+            {/* Search icon */}
+            <button
+              onClick={() => setLocation("/sources")}
+              className="text-gray-400 hover:text-white transition-colors p-1.5"
+              aria-label="Search"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                />
+              </svg>
+            </button>
+
+            {/* Theme toggle */}
+            <div className="hidden sm:block">
+              <ThemeToggle />
+            </div>
+
+            {/* Subscribe button */}
+            <button
+              onClick={() => setLocation("/plus")}
+              className="hidden sm:block bg-[#c4a97d] text-[#1a1a1a] text-xs font-bold px-4 py-1.5 rounded-full hover:bg-[#d4b98d] transition-colors"
+            >
+              Subscribe
+            </button>
+
+            {/* Auth area */}
+            {user ? (
+              <div className="relative" ref={menuRef}>
+                <button
+                  onClick={() => setShowUserMenu(!showUserMenu)}
+                  className="flex items-center gap-2 text-white text-xs font-medium px-3 py-1.5 rounded-full border border-gray-600 hover:border-gray-400 transition-colors"
+                >
+                  <div className="w-5 h-5 bg-[#c4a97d] rounded-full flex items-center justify-center text-[10px] font-bold text-[#1a1a1a]">
+                    {(user.displayName || user.email || "U").charAt(0).toUpperCase()}
+                  </div>
+                  <span className="hidden md:inline">
+                    {user.displayName || "Account"}
+                  </span>
+                </button>
+
+                {showUserMenu && (
+                  <div className="absolute right-0 mt-2 w-52 bg-[#242424] rounded-lg shadow-2xl border border-gray-700 overflow-hidden z-50 animate-in fade-in">
+                    <div className="px-4 py-3 border-b border-gray-700">
+                      <p className="text-xs font-semibold text-white truncate">
+                        {user.displayName || "User"}
+                      </p>
+                      <p className="text-[10px] text-gray-400 truncate mt-0.5">
+                        {user.email}
+                      </p>
+                      {user.subscriptionTier &&
+                        user.subscriptionTier !== "free" && (
+                          <div className="mt-1.5">
+                            <span className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 bg-[#c4a97d]/20 text-[#c4a97d] rounded-md">
+                              {user.subscriptionTier}
+                            </span>
+                          </div>
+                        )}
+                    </div>
+                    <div className="py-1">
+                      <button
+                        onClick={() => {
+                          setLocation("/plus");
+                          setShowUserMenu(false);
+                        }}
+                        className="w-full text-left px-4 py-2.5 text-xs text-gray-300 hover:bg-gray-700 hover:text-[#c4a97d] transition-colors"
+                      >
+                        Manage Subscription
+                      </button>
+                      <button
+                        onClick={handleLogout}
+                        className="w-full text-left px-4 py-2.5 text-xs text-gray-300 hover:bg-red-900/30 hover:text-red-400 transition-colors"
+                      >
+                        Sign Out
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <button
+                onClick={() => setLocation("/login")}
+                className="text-white text-xs font-medium px-3 py-1.5 rounded-full border border-gray-600 hover:border-gray-400 transition-colors"
+              >
+                Sign In
+              </button>
+            )}
+
+            {/* Mobile hamburger */}
+            <button
+              onClick={() => setShowMobileMenu(!showMobileMenu)}
+              className="md:hidden text-gray-400 hover:text-white transition-colors p-1.5"
+              aria-label="Menu"
+            >
+              {showMobileMenu ? (
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              ) : (
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+              )}
+            </button>
+          </div>
         </div>
 
-        <div className="flex items-center space-x-6">
-          <div className="relative hidden sm:block">
-            <input
-              type="text"
-              placeholder="Search intelligence..."
-              className="bg-slate-50 border border-slate-200 rounded-xl px-5 py-2.5 text-xs font-medium focus:ring-1 focus:ring-cyan-500/50 outline-none w-44 transition-all text-slate-900 placeholder:text-slate-400"
-            />
-          </div>
-          <button
-            onClick={() => setLocation('/plus')}
-            className="hidden sm:block text-[10px] font-black px-5 py-2.5 rounded-xl border border-cyan-200 text-cyan-600 hover:bg-cyan-50 transition-all uppercase tracking-widest"
-          >
-            Plus
-          </button>
-
-          {user ? (
-            <div className="relative" ref={menuRef}>
+        {/* Mobile menu */}
+        {showMobileMenu && (
+          <div className="md:hidden border-t border-gray-800 px-4 py-3 space-y-2 animate-in fade-in">
+            {navItems.map(({ path, label }) => (
               <button
-                onClick={() => setShowUserMenu(!showUserMenu)}
-                className="flex items-center space-x-3 bg-slate-900 text-white text-[10px] font-black px-5 py-3 rounded-xl hover:bg-cyan-600 transition-all shadow-xl uppercase tracking-widest"
+                key={path}
+                onClick={() => {
+                  setLocation(path);
+                  setShowMobileMenu(false);
+                }}
+                className={`block w-full text-left text-sm font-medium py-2 px-3 rounded-lg transition-colors ${
+                  isActive(path)
+                    ? "text-[#c4a97d] bg-white/5"
+                    : "text-gray-400 hover:text-white hover:bg-white/5"
+                }`}
               >
-                <div className="w-6 h-6 bg-cyan-500 rounded-lg flex items-center justify-center text-[10px] font-black text-white">
-                  {(user.displayName || user.email || "U").charAt(0).toUpperCase()}
-                </div>
-                <span className="hidden md:inline">{user.displayName || "Account"}</span>
+                {label}
               </button>
-
-              {showUserMenu && (
-                <div className="absolute right-0 mt-3 w-56 bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden z-50 animate-in fade-in zoom-in-95 duration-200">
-                  <div className="px-5 py-4 border-b border-slate-100">
-                    <p className="text-xs font-bold text-slate-900 truncate">{user.displayName || "User"}</p>
-                    <p className="text-[10px] text-slate-400 truncate mt-0.5">{user.email}</p>
-                    {user.subscriptionTier && user.subscriptionTier !== "free" && (
-                      <div className="mt-2">
-                        <span className="text-[9px] font-black uppercase tracking-widest px-2 py-1 bg-cyan-50 text-cyan-600 rounded-md border border-cyan-100">
-                          {user.subscriptionTier}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                  <div className="py-1">
-                    <button
-                      onClick={() => { setLocation("/plus"); setShowUserMenu(false); }}
-                      className="w-full text-left px-5 py-3 text-xs font-bold text-slate-600 hover:bg-slate-50 hover:text-cyan-600 transition-colors"
-                    >
-                      Manage Subscription
-                    </button>
-                    <button
-                      onClick={handleLogout}
-                      className="w-full text-left px-5 py-3 text-xs font-bold text-slate-600 hover:bg-red-50 hover:text-red-600 transition-colors"
-                    >
-                      Sign Out
-                    </button>
-                  </div>
-                </div>
-              )}
+            ))}
+            <div className="pt-2 border-t border-gray-800">
+              <div className="flex items-center gap-3 py-2 px-3">
+                <span className="text-xs text-gray-500">Theme:</span>
+                <ThemeToggle />
+              </div>
             </div>
-          ) : (
-            <button
-              onClick={() => setLocation('/login')}
-              className="bg-slate-900 text-white text-[10px] font-black px-6 py-3 rounded-xl hover:bg-cyan-600 transition-all shadow-xl uppercase tracking-widest"
-            >
-              Sign In
-            </button>
-          )}
+          </div>
+        )}
+
+        {/* Topic pills (horizontal scroll) */}
+        <div className="border-t border-gray-800">
+          <div className="max-w-7xl mx-auto px-4 md:px-8 py-2">
+            <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide">
+              {topicPills.map(({ label, slug }) => (
+                <button
+                  key={slug}
+                  onClick={() => setLocation(`/topics/${slug}`)}
+                  className="flex-shrink-0 text-[11px] font-medium text-gray-400 border border-gray-700 rounded-full px-3 py-1 hover:border-[#c4a97d] hover:text-[#c4a97d] transition-colors"
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
     </header>

@@ -1,8 +1,9 @@
 import React, { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useParams, useLocation } from "wouter";
-import { fetchStoryDetail } from "../lib/api";
+import { fetchStoryDetail, fetchStories } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
+import { FactualityBar } from "../components/FactualityBar";
 import TierBadge from "../components/TierBadge";
 
 function timeAgo(dateStr: string): string {
@@ -19,50 +20,34 @@ function timeAgo(dateStr: string): string {
   return `${Math.floor(diffDay / 7)}w ago`;
 }
 
-function getTierFromTrackRecord(trackRecord: number): "high" | "medium" | "low" {
+function getFactualityTier(trackRecord: number): "high" | "medium" | "low" {
   if (trackRecord >= 70) return "high";
   if (trackRecord >= 50) return "medium";
   return "low";
 }
 
-function TierBadge({ tier }: { tier: "high" | "medium" | "low" }) {
-  const styles = {
-    high: "bg-emerald-50 text-emerald-700 border-emerald-200",
-    medium: "bg-amber-50 text-amber-700 border-amber-200",
-    low: "bg-red-50 text-red-700 border-red-200",
+function FactualityBadge({ tier }: { tier: "high" | "medium" | "low" }) {
+  const config = {
+    high: { label: "High", className: "bg-factuality-high/10 text-factuality-high border-factuality-high/30" },
+    medium: { label: "Mixed", className: "bg-factuality-mixed/10 text-factuality-mixed border-factuality-mixed/30" },
+    low: { label: "Low", className: "bg-factuality-low/10 text-factuality-low border-factuality-low/30" },
   };
+  const c = config[tier];
   return (
-    <span className={`px-3 py-1 text-[10px] font-black uppercase tracking-widest rounded-lg border ${styles[tier]}`}>
-      {tier}
+    <span className={`px-2.5 py-1 text-[10px] font-black uppercase tracking-widest rounded-lg border ${c.className}`}>
+      {c.label}
     </span>
-  );
-}
-
-function CredibilityBar({ distribution, size = "md" }: { distribution: { high: number; medium: number; low: number }; size?: "sm" | "md" | "lg" }) {
-  const total = distribution.high + distribution.medium + distribution.low;
-  if (total === 0) return null;
-  const highPct = (distribution.high / total) * 100;
-  const medPct = (distribution.medium / total) * 100;
-  const lowPct = (distribution.low / total) * 100;
-  const h = size === "lg" ? "h-4" : size === "md" ? "h-3" : "h-2";
-
-  return (
-    <div className={`w-full ${h} rounded-full overflow-hidden flex bg-slate-100`}>
-      {highPct > 0 && <div className="bg-emerald-500 h-full transition-all duration-700" style={{ width: `${highPct}%` }} />}
-      {medPct > 0 && <div className="bg-amber-400 h-full transition-all duration-700" style={{ width: `${medPct}%` }} />}
-      {lowPct > 0 && <div className="bg-red-500 h-full transition-all duration-700" style={{ width: `${lowPct}%` }} />}
-    </div>
   );
 }
 
 function VerdictBadge({ verdict }: { verdict: string }) {
   const styles: Record<string, string> = {
-    verified: "bg-emerald-50 text-emerald-700 border-emerald-200",
-    speculative: "bg-amber-50 text-amber-700 border-amber-200",
-    misleading: "bg-red-50 text-red-700 border-red-200",
+    verified: "bg-factuality-high/10 text-factuality-high border-factuality-high/30",
+    speculative: "bg-factuality-mixed/10 text-factuality-mixed border-factuality-mixed/30",
+    misleading: "bg-factuality-low/10 text-factuality-low border-factuality-low/30",
   };
   return (
-    <span className={`px-3 py-1 text-[10px] font-black uppercase tracking-widest rounded-lg border ${styles[verdict] || "bg-slate-50 text-slate-600 border-slate-200"}`}>
+    <span className={`px-3 py-1 text-[10px] font-black uppercase tracking-widest rounded-lg border ${styles[verdict] || "bg-surface-card text-content-muted border-border"}`}>
       {verdict}
     </span>
   );
@@ -72,6 +57,8 @@ export default function StoryDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [, setLocation] = useLocation();
   const [showClaims, setShowClaims] = useState(false);
+  const [activeTab, setActiveTab] = useState<"articles" | "predictions" | "timelines">("articles");
+  const { tier } = useAuth();
 
   const { data: story, isLoading } = useQuery({
     queryKey: ["story", id],
@@ -79,27 +66,34 @@ export default function StoryDetailPage() {
     enabled: !!id,
   });
 
+  const { data: allStories = [] } = useQuery({
+    queryKey: ["stories"],
+    queryFn: () => fetchStories(),
+  });
+
   if (isLoading) {
     return (
-      <div className="max-w-5xl mx-auto py-12 px-6 md:px-12 relative z-10 animate-in fade-in">
-        <div className="animate-pulse space-y-8">
-          <div className="h-6 bg-slate-200 rounded-xl w-32" />
-          <div className="h-12 bg-slate-200 rounded-2xl w-3/4" />
-          <div className="h-6 bg-slate-100 rounded-xl w-full" />
-          <div className="h-4 bg-slate-200 rounded-full w-full" />
-          <div className="space-y-4 mt-12">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="rounded-2xl border border-slate-200 p-6 animate-pulse">
-                <div className="flex items-center gap-4 mb-4">
-                  <div className="w-12 h-12 bg-slate-200 rounded-xl" />
-                  <div className="flex-1">
-                    <div className="h-5 bg-slate-200 rounded w-40 mb-2" />
-                    <div className="h-4 bg-slate-100 rounded w-24" />
+      <div className="min-h-screen bg-surface-primary">
+        <div className="max-w-5xl mx-auto py-12 px-6 md:px-12 animate-in fade-in">
+          <div className="animate-pulse space-y-8">
+            <div className="h-6 bg-surface-card rounded-xl w-32" />
+            <div className="h-12 bg-surface-card rounded-2xl w-3/4" />
+            <div className="h-6 bg-surface-card-hover rounded-xl w-full" />
+            <div className="h-4 bg-surface-card rounded-full w-full" />
+            <div className="space-y-4 mt-12">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="rounded-2xl border border-border bg-surface-card p-6 animate-pulse">
+                  <div className="flex items-center gap-4 mb-4">
+                    <div className="w-12 h-12 bg-surface-card-hover rounded-xl" />
+                    <div className="flex-1">
+                      <div className="h-5 bg-surface-card-hover rounded w-40 mb-2" />
+                      <div className="h-4 bg-surface-card-hover rounded w-24" />
+                    </div>
                   </div>
+                  <div className="h-5 bg-surface-card-hover rounded w-full" />
                 </div>
-                <div className="h-5 bg-slate-100 rounded w-full" />
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         </div>
       </div>
@@ -108,312 +102,369 @@ export default function StoryDetailPage() {
 
   if (!story) {
     return (
-      <div className="max-w-5xl mx-auto py-12 px-6 md:px-12 relative z-10 text-center">
-        <h2 className="text-3xl font-black text-slate-900 tracking-tight">Story not found</h2>
-        <button onClick={() => setLocation("/")} className="mt-6 px-8 py-3 bg-slate-900 text-white rounded-xl font-bold hover:bg-cyan-600 transition-colors">
-          Back to Stories
-        </button>
+      <div className="min-h-screen bg-surface-primary">
+        <div className="max-w-5xl mx-auto py-12 px-6 md:px-12 text-center">
+          <h2 className="text-3xl font-black text-content-primary tracking-tight">Story not found</h2>
+          <button
+            onClick={() => setLocation("/")}
+            className="mt-6 px-8 py-3 bg-accent text-accent-text rounded-xl font-bold hover:bg-accent-hover transition-colors"
+          >
+            Back to Stories
+          </button>
+        </div>
       </div>
     );
   }
 
-  const { tier } = useAuth();
   const dist = story.credibilityDistribution || { high: 0, medium: 0, low: 0 };
   const coverage = story.coverage || [];
   const claims = story.claims || [];
   const verdictDist = story.verdictDistribution || {};
 
-  // Sort coverage by tier: high first, then medium, then low
   const tierOrder = { high: 0, medium: 1, low: 2 };
   const sortedCoverage = [...coverage].sort((a: any, b: any) => {
-    const aTier = a.source?.tier || getTierFromTrackRecord(a.source?.trackRecord || 0);
-    const bTier = b.source?.tier || getTierFromTrackRecord(b.source?.trackRecord || 0);
+    const aTier = a.source?.tier || getFactualityTier(a.source?.trackRecord || 0);
+    const bTier = b.source?.tier || getFactualityTier(b.source?.trackRecord || 0);
     return (tierOrder[aTier as keyof typeof tierOrder] ?? 2) - (tierOrder[bTier as keyof typeof tierOrder] ?? 2);
   });
 
+  // Similar stories (same category, excluding this one)
+  const similarStories = allStories
+    .filter((s: any) => s.id !== id && s.category === story.category)
+    .slice(0, 5);
+
   return (
-    <div className="max-w-5xl mx-auto py-12 px-6 md:px-12 relative z-10 animate-in fade-in duration-700">
-      {/* Back button */}
-      <button
-        onClick={() => setLocation("/")}
-        className="flex items-center text-[10px] font-black tracking-[0.3em] text-slate-500 hover:text-cyan-600 mb-10 group transition-colors uppercase"
-      >
-        <svg className="w-4 h-4 mr-2 group-hover:-translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M15 19l-7-7 7-7" />
-        </svg>
-        Back to Stories
-      </button>
-
-      {/* Story Header */}
-      <div className="space-y-6 mb-10">
-        <div className="flex flex-wrap items-center gap-3">
-          {story.category && (
-            <span className="px-4 py-2 bg-cyan-600 text-white text-[10px] font-black tracking-widest uppercase rounded-xl">
-              {story.category}
-            </span>
-          )}
-          {(story.assetSymbols || []).map((s: string) => (
-            <span key={s} className="px-3 py-1.5 bg-slate-100 text-slate-600 rounded-xl text-[10px] font-black uppercase tracking-widest">
-              {s}
-            </span>
-          ))}
-        </div>
-
-        <h1 className="text-4xl md:text-5xl font-black leading-tight text-slate-900 tracking-tighter">
-          {story.title}
-        </h1>
-
-        {story.summary && (
-          <p className="text-xl text-slate-500 leading-relaxed font-medium max-w-3xl">
-            {story.summary}
-          </p>
-        )}
-      </div>
-
-      {/* Story image */}
-      {story.imageUrl && (
-        <div className="relative rounded-2xl overflow-hidden aspect-[21/9] mb-10 shadow-lg">
-          <img src={story.imageUrl} alt={story.title} className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-          <div className="absolute inset-0 bg-gradient-to-t from-slate-900/40 to-transparent" />
-        </div>
-      )}
-
-      {/* Upgrade banner for free users */}
+    <div className="min-h-screen bg-surface-primary animate-in fade-in duration-700">
+      {/* Promo banner */}
       {tier === "free" && (
-        <div className="rounded-2xl border border-cyan-100 bg-cyan-50/30 p-5 mb-10 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-cyan-100 flex items-center justify-center flex-shrink-0">
-              <svg className="w-4 h-4 text-cyan-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-              </svg>
-            </div>
-            <span className="text-sm text-slate-600 font-medium">
-              Get real-time alerts and full source history with <strong className="text-cyan-600">Confirmd Tribune</strong>
-            </span>
-          </div>
-          <button
-            onClick={() => setLocation("/plus")}
-            className="text-[10px] font-black uppercase tracking-widest text-cyan-600 hover:text-cyan-700 px-5 py-2.5 rounded-xl border border-cyan-200 hover:bg-cyan-50 transition-all whitespace-nowrap"
-          >
-            Upgrade
-          </button>
-        </div>
-      )}
-
-      {/* Credibility Distribution Bar (large) */}
-      <div className="rounded-2xl border border-slate-200 bg-white p-8 mb-10">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Source Credibility Distribution</h3>
-          <span className="text-[10px] font-bold text-slate-400">
-            {(dist.high || 0) + (dist.medium || 0) + (dist.low || 0)} total sources
+        <div className="bg-accent text-accent-text text-center py-2.5 px-4">
+          <span className="text-[12px] font-bold">
+            Get Confirmd Vantage -- Factuality ratings, full source history, and real-time alerts.{" "}
+            <button onClick={() => setLocation("/plus")} className="underline font-black hover:opacity-80 transition-opacity">
+              Subscribe
+            </button>
           </span>
         </div>
-        <CredibilityBar distribution={dist} size="lg" />
-        <div className="flex items-center gap-8 mt-4">
-          <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full bg-emerald-500" />
-            <span className="text-sm font-bold text-slate-700">High: {dist.high || 0}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full bg-amber-400" />
-            <span className="text-sm font-bold text-slate-700">Medium: {dist.medium || 0}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full bg-red-500" />
-            <span className="text-sm font-bold text-slate-700">Low: {dist.low || 0}</span>
-          </div>
-        </div>
-      </div>
+      )}
 
-      {/* Coverage by Source */}
-      <div className="mb-10">
-        <h3 className="text-xs font-black uppercase tracking-[0.3em] text-slate-400 mb-6">Coverage by Source</h3>
-        <div className="space-y-4">
-          {sortedCoverage.map((entry: any, idx: number) => {
-            const source = entry.source || {};
-            const tier = source.tier || getTierFromTrackRecord(source.trackRecord || 0);
-            const items = entry.items || [];
+      <div className="max-w-6xl mx-auto px-4 md:px-8 py-8">
+        {/* Back button */}
+        <button
+          onClick={() => setLocation("/")}
+          className="flex items-center text-[10px] font-black tracking-[0.3em] text-content-muted hover:text-accent mb-8 group transition-colors uppercase"
+        >
+          <svg className="w-4 h-4 mr-2 group-hover:-translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M15 19l-7-7 7-7" />
+          </svg>
+          Back to Stories
+        </button>
 
-            return (
-              <div
-                key={source.id || idx}
-                className="rounded-2xl border border-slate-200 bg-white p-6 hover:shadow-md transition-all"
-              >
-                <div className="flex items-start justify-between mb-4">
-                  <div className="flex items-center gap-4">
-                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center font-black text-sm shadow-md flex-shrink-0 ${
-                      source.logoUrl ? "bg-white p-1.5 border border-slate-100" :
-                      tier === "high" ? "bg-emerald-500 text-white" :
-                      tier === "medium" ? "bg-amber-400 text-white" : "bg-red-500 text-white"
-                    }`}>
-                      {source.logoUrl ? (
-                        <img src={source.logoUrl} alt={source.displayName} className="w-full h-full object-contain rounded-lg" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-                      ) : (
-                        <span>{source.displayName?.charAt(0) || "?"}</span>
-                      )}
-                    </div>
-                    <div>
-                      <div className="font-black text-lg text-slate-900 tracking-tight">{source.displayName || "Unknown Source"}</div>
-                      <div className="flex items-center gap-3 mt-1">
-                        <TierBadge tier={tier} />
-                        <span className="text-xs font-bold text-slate-400">
-                          Track Record: {Math.round(source.trackRecord || 0)}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-8">
+          {/* Main content */}
+          <div>
+            {/* Story Header */}
+            <div className="space-y-4 mb-8">
+              <div className="flex flex-wrap items-center gap-3">
+                {story.category && (
+                  <span className="px-3 py-1.5 bg-accent text-accent-text text-[10px] font-black tracking-widest uppercase rounded-lg">
+                    {story.category}
+                  </span>
+                )}
+                {(story.assetSymbols || []).map((s: string) => (
+                  <span key={s} className="px-3 py-1.5 bg-surface-card text-content-secondary rounded-lg text-[10px] font-black uppercase tracking-widest border border-border">
+                    {s}
+                  </span>
+                ))}
+                <span className="text-[10px] text-content-muted font-medium">
+                  {story.latestItemTimestamp ? timeAgo(story.latestItemTimestamp) : ""}
+                </span>
+              </div>
+
+              <h1 className="text-3xl md:text-4xl font-black leading-tight text-content-primary tracking-tight">
+                {story.title}
+              </h1>
+
+              {story.summary && (
+                <p className="text-lg text-content-secondary leading-relaxed font-medium max-w-3xl">
+                  {story.summary}
+                </p>
+              )}
+            </div>
+
+            {/* Story image */}
+            {story.imageUrl && (
+              <div className="relative rounded-xl overflow-hidden aspect-[21/9] mb-8">
+                <img
+                  src={story.imageUrl}
+                  alt={story.title}
+                  className="w-full h-full object-cover"
+                  onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent" />
+              </div>
+            )}
+
+            {/* Factuality Distribution */}
+            <div className="rounded-xl border border-border bg-surface-card p-6 mb-8">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-content-muted">
+                  Source Factuality Distribution
+                </h3>
+                <span className="text-[10px] font-bold text-content-muted">
+                  {(dist.high || 0) + (dist.medium || 0) + (dist.low || 0)} total sources
+                </span>
+              </div>
+              <FactualityBar distribution={dist} size="lg" showLabels={true} />
+              <div className="flex items-center gap-6 mt-4">
+                <div className="flex items-center gap-2">
+                  <span className="w-3 h-3 rounded-full bg-factuality-high" />
+                  <span className="text-sm font-bold text-content-primary">High: {dist.high || 0}</span>
                 </div>
-
-                {/* Articles from this source */}
-                <div className="space-y-3 pl-16">
-                  {items.map((item: any, itemIdx: number) => (
-                    <div key={item.id || itemIdx} className="flex items-start justify-between gap-4 py-3 border-t border-slate-100 first:border-t-0 first:pt-0">
-                      <div className="flex-1 min-w-0">
-                        <h4 className="text-sm font-bold text-slate-800 leading-snug line-clamp-2">
-                          {item.title || "Untitled article"}
-                        </h4>
-                        {item.publishedAt && (
-                          <span className="text-[10px] font-medium text-slate-400 mt-1 block">
-                            {timeAgo(item.publishedAt)}
-                          </span>
-                        )}
-                      </div>
-                      {item.url && (
-                        <a
-                          href={item.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          onClick={(e) => e.stopPropagation()}
-                          className="flex-shrink-0 text-[10px] font-black uppercase tracking-widest text-cyan-600 hover:text-cyan-700 px-4 py-2 rounded-xl border border-cyan-200 hover:bg-cyan-50 transition-all"
-                        >
-                          Read original
-                        </a>
-                      )}
-                    </div>
-                  ))}
-                  {items.length === 0 && (
-                    <p className="text-sm text-slate-400 italic">No articles available</p>
-                  )}
+                <div className="flex items-center gap-2">
+                  <span className="w-3 h-3 rounded-full bg-factuality-mixed" />
+                  <span className="text-sm font-bold text-content-primary">Mixed: {dist.medium || 0}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="w-3 h-3 rounded-full bg-factuality-low" />
+                  <span className="text-sm font-bold text-content-primary">Low: {dist.low || 0}</span>
                 </div>
               </div>
-            );
-          })}
-          {sortedCoverage.length === 0 && (
-            <div className="rounded-2xl border border-slate-200 bg-white p-12 text-center">
-              <p className="text-sm text-slate-400 font-medium">No source coverage data available yet.</p>
             </div>
-          )}
+
+            {/* Tab bar */}
+            <div className="flex items-center gap-1 border-b border-border mb-6">
+              {[
+                { key: "articles" as const, label: `${sortedCoverage.length} Articles` },
+                ...(story.creatorPredictions?.length ? [{ key: "predictions" as const, label: "Predictions" }] : []),
+                ...(claims.length ? [{ key: "timelines" as const, label: "Timelines" }] : []),
+              ].map((tab) => (
+                <button
+                  key={tab.key}
+                  onClick={() => setActiveTab(tab.key)}
+                  className={`px-4 py-3 text-[11px] font-bold uppercase tracking-wider transition-colors border-b-2 -mb-[1px] ${
+                    activeTab === tab.key
+                      ? "border-accent text-accent"
+                      : "border-transparent text-content-muted hover:text-content-primary"
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Articles tab */}
+            {activeTab === "articles" && (
+              <div className="space-y-0">
+                {sortedCoverage.map((entry: any, idx: number) => {
+                  const source = entry.source || {};
+                  const sourceTier = source.tier || getFactualityTier(source.trackRecord || 0);
+                  const items = entry.items || [];
+
+                  return (
+                    <div key={source.id || idx} className="border-b border-border last:border-b-0">
+                      {items.map((item: any, itemIdx: number) => (
+                        <div
+                          key={item.id || itemIdx}
+                          className="flex items-start gap-4 py-4 hover:bg-surface-card-hover transition-colors px-3 rounded-lg -mx-3"
+                        >
+                          {/* Source logo */}
+                          <div className={`w-10 h-10 rounded-lg flex items-center justify-center font-black text-sm flex-shrink-0 ${
+                            source.logoUrl ? "bg-surface-card p-1 border border-border" :
+                            sourceTier === "high" ? "bg-factuality-high text-white" :
+                            sourceTier === "medium" ? "bg-factuality-mixed text-white" : "bg-factuality-low text-white"
+                          }`}>
+                            {source.logoUrl ? (
+                              <img src={source.logoUrl} alt={source.displayName} className="w-full h-full object-contain rounded" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                            ) : (
+                              <span>{source.displayName?.charAt(0) || "?"}</span>
+                            )}
+                          </div>
+
+                          {/* Content */}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="text-[12px] font-black text-content-primary">{source.displayName || "Unknown Source"}</span>
+                              <FactualityBadge tier={sourceTier} />
+                            </div>
+                            <h4 className="text-sm font-bold text-content-primary leading-snug line-clamp-2 mb-1">
+                              {item.title || "Untitled article"}
+                            </h4>
+                            <div className="flex items-center gap-3">
+                              {item.publishedAt && (
+                                <span className="text-[10px] font-medium text-content-muted">
+                                  {timeAgo(item.publishedAt)}
+                                </span>
+                              )}
+                              {item.url && (
+                                <a
+                                  href={item.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="text-[10px] font-black uppercase tracking-widest text-accent hover:text-accent-hover transition-colors"
+                                >
+                                  Read original
+                                </a>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })}
+                {sortedCoverage.length === 0 && (
+                  <div className="rounded-xl border border-border bg-surface-card p-12 text-center">
+                    <p className="text-sm text-content-muted font-medium">No source coverage data available yet.</p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Predictions tab */}
+            {activeTab === "predictions" && story.creatorPredictions && (
+              <div className="space-y-4">
+                {story.creatorPredictions.map((pred: any, idx: number) => (
+                  <div
+                    key={pred.claim?.id || idx}
+                    className="rounded-xl border border-border bg-surface-card p-5 hover:bg-surface-card-hover transition-all cursor-pointer"
+                    onClick={() => {
+                      if (tier === "free") {
+                        setLocation("/plus");
+                      } else {
+                        setLocation(`/creators/${pred.creator?.id}`);
+                      }
+                    }}
+                  >
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-accent/20 flex items-center justify-center overflow-hidden flex-shrink-0 border-2 border-accent/30">
+                          {pred.creator?.avatarUrl ? (
+                            <img src={pred.creator.avatarUrl} alt={pred.creator?.channelName} className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                          ) : (
+                            <span className="text-sm font-black text-accent">{(pred.creator?.channelName || "?").charAt(0)}</span>
+                          )}
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-black text-content-primary">{pred.creator?.channelName || "Unknown Creator"}</span>
+                            {pred.creator?.tier && <TierBadge tier={pred.creator.tier} size="sm" />}
+                          </div>
+                          {pred.creator?.overallAccuracy != null && (
+                            <span className="text-[10px] font-bold text-content-muted">
+                              {Math.round(pred.creator.overallAccuracy)}% accuracy from {pred.creator?.totalClaims || 0} claims
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      {pred.claim?.confidenceLanguage && (
+                        <span className={`px-2 py-0.5 text-[9px] font-black uppercase tracking-wider rounded-lg border ${
+                          pred.claim.confidenceLanguage.toLowerCase() === "strong" ? "bg-factuality-low/10 text-factuality-low border-factuality-low/30" :
+                          pred.claim.confidenceLanguage.toLowerCase() === "medium" ? "bg-factuality-mixed/10 text-factuality-mixed border-factuality-mixed/30" :
+                          "bg-surface-card-hover text-content-muted border-border"
+                        }`}>
+                          {pred.claim.confidenceLanguage}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-base font-bold text-content-primary leading-relaxed">
+                      {pred.claim?.claimText || ""}
+                    </p>
+                    {pred.claim?.statedTimeframe && (
+                      <div className="text-[10px] font-bold text-content-muted mt-2">
+                        Timeframe: {pred.claim.statedTimeframe}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Timelines tab (claims) */}
+            {activeTab === "timelines" && claims.length > 0 && (
+              <div className="space-y-4">
+                {claims.map((claim: any) => (
+                  <div key={claim.id} className="rounded-xl border border-border bg-surface-card p-5">
+                    <div className="flex items-start justify-between gap-4">
+                      <p className="text-base font-bold text-content-primary leading-relaxed flex-1">
+                        {claim.claimText}
+                      </p>
+                      {claim.verdict && (
+                        <VerdictBadge verdict={typeof claim.verdict === "string" ? claim.verdict : claim.verdict.verdictLabel || "unreviewed"} />
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Right sidebar: Similar News Topics */}
+          <aside className="hidden lg:block">
+            <div className="sticky top-24">
+              <div className="bg-surface-card rounded-xl p-5 border border-border">
+                <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-content-muted mb-4">
+                  Similar News Topics
+                </h3>
+                {similarStories.length > 0 ? (
+                  <div className="space-y-0">
+                    {similarStories.map((s: any) => {
+                      const sDist = s.credibilityDistribution || { high: 0, medium: 0, low: 0 };
+                      return (
+                        <div
+                          key={s.id}
+                          onClick={() => setLocation(`/stories/${s.id}`)}
+                          className="cursor-pointer py-3 border-b border-border last:border-b-0 hover:bg-surface-card-hover transition-colors rounded px-1 -mx-1"
+                        >
+                          {s.imageUrl && (
+                            <div className="w-full h-24 rounded-lg overflow-hidden mb-2 bg-surface-card-hover">
+                              <img
+                                src={s.imageUrl}
+                                alt=""
+                                className="w-full h-full object-cover"
+                                onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                              />
+                            </div>
+                          )}
+                          <p className="text-[12px] font-bold text-content-primary leading-tight line-clamp-2 mb-1.5">
+                            {s.title}
+                          </p>
+                          <FactualityBar distribution={sDist} size="sm" />
+                          <span className="text-[9px] text-content-muted mt-1 block">
+                            {s.sourceCount || 0} sources
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-content-muted">No similar stories found.</p>
+                )}
+              </div>
+
+              {/* Trending topics */}
+              {story.assetSymbols?.length > 0 && (
+                <div className="bg-surface-card rounded-xl p-5 border border-border mt-4">
+                  <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-content-muted mb-3">
+                    Related Topics
+                  </h3>
+                  <div className="flex flex-wrap gap-2">
+                    {story.assetSymbols.map((sym: string) => (
+                      <button
+                        key={sym}
+                        onClick={() => setLocation(`/topic/${sym.toLowerCase()}`)}
+                        className="px-3 py-1.5 bg-surface-card-hover text-content-primary rounded-lg text-[11px] font-bold hover:bg-accent hover:text-accent-text transition-colors border border-border"
+                      >
+                        {sym}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </aside>
         </div>
       </div>
-
-      {/* Creator Predictions */}
-      {story.creatorPredictions && story.creatorPredictions.length > 0 && (
-        <div className="mb-10">
-          <h3 className="text-xs font-black uppercase tracking-[0.3em] text-slate-400 mb-6">
-            Creator Predictions ({story.creatorPredictions.length})
-          </h3>
-          <div className="space-y-4">
-              {story.creatorPredictions.map((pred: any, idx: number) => (
-                <div
-                  key={pred.claim?.id || idx}
-                  className="rounded-2xl border border-violet-200 bg-white p-6 hover:shadow-md transition-all cursor-pointer"
-                  onClick={() => {
-                    if (tier === "free") {
-                      setLocation("/plus");
-                    } else {
-                      setLocation(`/creators/${pred.creator?.id}`);
-                    }
-                  }}
-                >
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-violet-100 flex items-center justify-center overflow-hidden flex-shrink-0 border-2 border-violet-200">
-                        {pred.creator?.avatarUrl ? (
-                          <img src={pred.creator.avatarUrl} alt={pred.creator?.channelName} className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-                        ) : (
-                          <span className="text-sm font-black text-violet-500">{(pred.creator?.channelName || "?").charAt(0)}</span>
-                        )}
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-black text-slate-900">{pred.creator?.channelName || "Unknown Creator"}</span>
-                          {pred.creator?.tier && <TierBadge tier={pred.creator.tier} size="sm" />}
-                        </div>
-                        {pred.creator?.overallAccuracy != null && (
-                          <span className="text-[10px] font-bold text-violet-500">
-                            {Math.round(pred.creator.overallAccuracy)}% accuracy from {pred.creator?.totalClaims || 0} claims
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    {pred.claim?.confidenceLanguage && (
-                      <span className={`px-2 py-0.5 text-[9px] font-black uppercase tracking-wider rounded-lg border ${
-                        pred.claim.confidenceLanguage.toLowerCase() === "strong" ? "bg-red-50 text-red-600 border-red-200" :
-                        pred.claim.confidenceLanguage.toLowerCase() === "medium" ? "bg-amber-50 text-amber-600 border-amber-200" :
-                        "bg-slate-50 text-slate-500 border-slate-200"
-                      }`}>
-                        {pred.claim.confidenceLanguage}
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-base font-bold text-slate-800 leading-relaxed">
-                    {pred.claim?.claimText || ""}
-                  </p>
-                  {pred.claim?.statedTimeframe && (
-                    <div className="text-[10px] font-bold text-slate-400 mt-2">
-                      Timeframe: {pred.claim.statedTimeframe}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-        </div>
-      )}
-
-      {/* Verification Details (collapsible) */}
-      {claims.length > 0 && (
-        <div className="mb-10">
-          <button
-            onClick={() => setShowClaims(!showClaims)}
-            className="flex items-center gap-3 text-xs font-black uppercase tracking-[0.3em] text-slate-400 hover:text-slate-600 transition-colors mb-6 group"
-          >
-            <svg
-              className={`w-4 h-4 transition-transform duration-300 ${showClaims ? "rotate-90" : ""}`}
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M9 5l7 7-7 7" />
-            </svg>
-            Verification Details ({claims.length} claims)
-            {Object.keys(verdictDist).length > 0 && (
-              <span className="text-[10px] font-bold text-slate-300 normal-case tracking-normal ml-2">
-                {Object.entries(verdictDist).map(([k, v]) => `${v} ${k}`).join(", ")}
-              </span>
-            )}
-          </button>
-
-          {showClaims && (
-            <div className="space-y-4 animate-in fade-in duration-300">
-              {claims.map((claim: any) => (
-                <div
-                  key={claim.id}
-                  className="rounded-2xl border border-slate-200 bg-white p-6"
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <p className="text-base font-bold text-slate-800 leading-relaxed flex-1">
-                      {claim.claimText}
-                    </p>
-                    {claim.verdict && (
-                      <VerdictBadge verdict={typeof claim.verdict === "string" ? claim.verdict : claim.verdict.verdictLabel || "unreviewed"} />
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
     </div>
   );
 }

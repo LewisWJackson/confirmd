@@ -41,7 +41,7 @@ function SourceLogo({ src, alt, domain, fallbackLetter, className }: {
 
 const getVerdictStyle = (label: string) => {
   const styles: Record<string, { bg: string; text: string; light: string }> = {
-    verified: { bg: "bg-cyan-500", text: "text-cyan-600", light: "bg-cyan-50" },
+    verified: { bg: "bg-accent", text: "text-accent", light: "bg-accent/10" },
     plausible_unverified: { bg: "bg-slate-500", text: "text-slate-600", light: "bg-slate-50" },
     speculative: { bg: "bg-orange-500", text: "text-orange-600", light: "bg-orange-50" },
     misleading: { bg: "bg-red-500", text: "text-red-600", light: "bg-red-50" },
@@ -63,9 +63,9 @@ export default function SourceDetailPage() {
     return (
       <div className="max-w-7xl mx-auto py-12 px-6 md:px-12 relative z-10">
         <div className="animate-pulse space-y-8">
-          <div className="h-8 bg-slate-200 rounded-xl w-48" />
-          <div className="h-48 bg-slate-100 rounded-[2rem]" />
-          <div className="h-96 bg-slate-100 rounded-[2rem]" />
+          <div className="h-8 bg-surface-card-hover rounded-xl w-48" />
+          <div className="h-48 bg-surface-card-hover rounded-[2rem]" />
+          <div className="h-96 bg-surface-card-hover rounded-[2rem]" />
         </div>
       </div>
     );
@@ -74,10 +74,10 @@ export default function SourceDetailPage() {
   if (error || !source) {
     return (
       <div className="max-w-7xl mx-auto py-12 px-6 md:px-12 relative z-10 text-center">
-        <h2 className="text-3xl font-black text-slate-900">Source not found</h2>
+        <h2 className="text-3xl font-black text-content-primary">Source not found</h2>
         <button
           onClick={() => setLocation("/sources")}
-          className="mt-6 px-8 py-3 bg-slate-900 text-white rounded-xl font-bold"
+          className="mt-6 px-8 py-3 bg-surface-card text-content-primary rounded-xl font-bold"
         >
           Back to Sources
         </button>
@@ -93,18 +93,18 @@ export default function SourceDetailPage() {
   };
   const trackColor =
     score.trackRecord >= 70
-      ? "text-cyan-600"
+      ? "text-accent"
       : score.trackRecord >= 50
-      ? "text-slate-600"
+      ? "text-content-secondary"
       : "text-orange-600";
   const trackBg =
     score.trackRecord >= 70
-      ? "bg-cyan-500"
+      ? "bg-accent"
       : score.trackRecord >= 50
       ? "bg-slate-500"
       : "bg-orange-500";
   const trackGlow =
-    score.trackRecord >= 70 ? "shadow-[0_0_10px_rgba(6,182,212,0.5)]" : "";
+    score.trackRecord >= 70 ? "shadow-accent/20" : "";
   const recentClaims = source.recentClaims || [];
 
   return (
@@ -112,7 +112,7 @@ export default function SourceDetailPage() {
       {/* Back button */}
       <button
         onClick={() => setLocation("/sources")}
-        className="flex items-center text-[10px] font-black tracking-[0.3em] text-slate-500 hover:text-cyan-500 mb-12 group transition-colors uppercase"
+        className="flex items-center text-[10px] font-black tracking-[0.3em] text-content-secondary hover:text-accent mb-12 group transition-colors uppercase"
       >
         <svg
           className="w-4 h-4 mr-2 group-hover:-translate-x-1 transition-transform"
@@ -134,14 +134,14 @@ export default function SourceDetailPage() {
         {/* Main content */}
         <div className="lg:col-span-8 space-y-10">
           {/* Source header */}
-          <div className="glass rounded-[2rem] p-10 border border-slate-100 bg-white/50">
+          <div className="rounded-[2rem] p-10 border border-border bg-surface-card">
             <div className="flex items-center space-x-6 mb-8">
               <div
                 className={`w-24 h-24 rounded-3xl flex items-center justify-center font-black text-3xl shadow-2xl ${
                   source.logoUrl
-                    ? "bg-white p-2"
+                    ? "bg-surface-secondary p-2"
                     : score.trackRecord >= 70
-                    ? "bg-cyan-500 text-white"
+                    ? "bg-accent text-white"
                     : score.trackRecord >= 50
                     ? "bg-slate-400 text-white"
                     : "bg-orange-500 text-white"
@@ -156,21 +156,21 @@ export default function SourceDetailPage() {
                 />
               </div>
               <div>
-                <h1 className="text-4xl font-black text-slate-900 tracking-tighter">
+                <h1 className="text-4xl font-black text-content-primary tracking-tighter">
                   {source.displayName}
                 </h1>
-                <div className="text-sm text-slate-500 mt-1">
+                <div className="text-sm text-content-secondary mt-1">
                   {source.handleOrDomain}
                 </div>
                 <span
                   className={`inline-block mt-3 text-[10px] font-black uppercase tracking-[0.3em] px-4 py-1.5 rounded-full ${
                     source.type === "regulator"
-                      ? "bg-cyan-100 text-cyan-700"
+                      ? "bg-accent/10 text-accent"
                       : source.type === "publisher"
-                      ? "bg-slate-100 text-slate-600"
+                      ? "bg-surface-card-hover text-content-secondary"
                       : source.type === "x_handle"
                       ? "bg-orange-100 text-orange-700"
-                      : "bg-slate-100 text-slate-500"
+                      : "bg-surface-card-hover text-content-secondary"
                   }`}
                 >
                   {(source.type || "unknown").replace(/_/g, " ")}
@@ -180,12 +180,12 @@ export default function SourceDetailPage() {
           </div>
 
           {/* Recent Claims */}
-          <div className="glass rounded-[2rem] p-10 border border-slate-100 bg-white/50">
+          <div className="rounded-[2rem] p-10 border border-border bg-surface-card">
             <div className="flex items-center justify-between mb-8">
-              <h3 className="text-xs font-black uppercase tracking-[0.3em] text-slate-400">
+              <h3 className="text-xs font-black uppercase tracking-[0.3em] text-content-muted">
                 Recent Claims
               </h3>
-              <span className="text-xs font-black text-cyan-600">
+              <span className="text-xs font-black text-accent">
                 {recentClaims.length} Claims
               </span>
             </div>
@@ -198,7 +198,7 @@ export default function SourceDetailPage() {
                   <div
                     key={claim.id}
                     onClick={() => setLocation(`/claims/${claim.id}`)}
-                    className="p-6 bg-slate-50 rounded-2xl border border-transparent hover:border-slate-200 transition-all cursor-pointer group"
+                    className="p-6 bg-surface-primary rounded-2xl border border-transparent hover:border-border transition-all cursor-pointer group"
                   >
                     <div className="flex items-start gap-4">
                       <div
@@ -216,18 +216,18 @@ export default function SourceDetailPage() {
                             .map((s: string) => (
                               <span
                                 key={s}
-                                className="text-[10px] font-black text-cyan-600 uppercase tracking-widest"
+                                className="text-[10px] font-black text-accent uppercase tracking-widest"
                               >
                                 ${s}
                               </span>
                             ))}
                         </div>
-                        <p className="text-sm text-slate-700 font-medium leading-relaxed group-hover:text-slate-900 transition-colors">
+                        <p className="text-sm text-content-primary font-medium leading-relaxed group-hover:text-content-primary transition-colors">
                           {claim.claimText}
                         </p>
                       </div>
                       <svg
-                        className="w-5 h-5 text-slate-300 group-hover:text-cyan-500 transition-colors flex-shrink-0 mt-1"
+                        className="w-5 h-5 text-content-muted group-hover:text-accent transition-colors flex-shrink-0 mt-1"
                         fill="none"
                         stroke="currentColor"
                         viewBox="0 0 24 24"
@@ -244,7 +244,7 @@ export default function SourceDetailPage() {
                 );
               })}
               {recentClaims.length === 0 && (
-                <p className="text-slate-400 text-center py-8">
+                <p className="text-content-muted text-center py-8">
                   No recent claims from this source
                 </p>
               )}
@@ -255,12 +255,12 @@ export default function SourceDetailPage() {
         {/* Sidebar */}
         <div className="lg:col-span-4 space-y-10">
           {/* Score Card */}
-          <div className="glass rounded-[2.5rem] p-10 border-slate-100 sticky top-28 shadow-2xl bg-white/50">
-            <h3 className="font-black text-xs tracking-[0.3em] text-slate-400 uppercase mb-8">
+          <div className="rounded-[2.5rem] p-10 border-border sticky top-28 shadow-2xl bg-surface-card">
+            <h3 className="font-black text-xs tracking-[0.3em] text-content-muted uppercase mb-8">
               Source Score
             </h3>
             {score.computedAt && (
-              <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6">
+              <div className="text-[10px] font-black text-content-muted uppercase tracking-widest mb-6">
                 Version {score.scoreVersion || "v1"} &middot;{" "}
                 {new Date(score.computedAt).toLocaleDateString()}
               </div>
@@ -269,12 +269,12 @@ export default function SourceDetailPage() {
               {/* Track Record */}
               <div>
                 <div className="flex justify-between items-center mb-3">
-                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-content-muted">
                     Track Record
                   </span>
                   <span className={`text-3xl font-black ${trackColor}`}>
                     {Math.round(score.trackRecord)}
-                    <span className="text-sm text-slate-400 font-normal ml-1">
+                    <span className="text-sm text-content-muted font-normal ml-1">
                       &plusmn;
                       {Math.round(
                         ((score.confidenceInterval?.upper || 100) -
@@ -284,7 +284,7 @@ export default function SourceDetailPage() {
                     </span>
                   </span>
                 </div>
-                <div className="h-3 bg-slate-100 rounded-full overflow-hidden">
+                <div className="h-3 bg-surface-card-hover rounded-full overflow-hidden">
                   <div
                     className={`h-full ${trackBg} rounded-full ${trackGlow} transition-all duration-1000`}
                     style={{ width: `${score.trackRecord}%` }}
@@ -292,10 +292,10 @@ export default function SourceDetailPage() {
                 </div>
                 {score.confidenceInterval && (
                   <div className="flex justify-between mt-2">
-                    <span className="text-[10px] text-slate-400">
+                    <span className="text-[10px] text-content-muted">
                       Low: {Math.round(score.confidenceInterval.lower)}
                     </span>
-                    <span className="text-[10px] text-slate-400">
+                    <span className="text-[10px] text-content-muted">
                       High: {Math.round(score.confidenceInterval.upper)}
                     </span>
                   </div>
@@ -305,14 +305,14 @@ export default function SourceDetailPage() {
               {/* Method Discipline */}
               <div>
                 <div className="flex justify-between items-center mb-3">
-                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-content-muted">
                     Method Discipline
                   </span>
-                  <span className="text-3xl font-black text-slate-700">
+                  <span className="text-3xl font-black text-content-primary">
                     {Math.round(score.methodDiscipline)}
                   </span>
                 </div>
-                <div className="h-3 bg-slate-100 rounded-full overflow-hidden">
+                <div className="h-3 bg-surface-card-hover rounded-full overflow-hidden">
                   <div
                     className="h-full bg-slate-500 rounded-full transition-all duration-1000"
                     style={{ width: `${score.methodDiscipline}%` }}
@@ -323,16 +323,16 @@ export default function SourceDetailPage() {
               {/* Sample Size */}
               <div>
                 <div className="flex justify-between items-center mb-3">
-                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-content-muted">
                     Sample Size
                   </span>
-                  <span className="text-3xl font-black text-slate-700">
+                  <span className="text-3xl font-black text-content-primary">
                     {score.sampleSize}
                   </span>
                 </div>
-                <div className="h-3 bg-slate-100 rounded-full overflow-hidden">
+                <div className="h-3 bg-surface-card-hover rounded-full overflow-hidden">
                   <div
-                    className="h-full bg-cyan-400 rounded-full transition-all duration-1000"
+                    className="h-full bg-accent rounded-full transition-all duration-1000"
                     style={{
                       width: `${Math.min(
                         100,
@@ -341,22 +341,22 @@ export default function SourceDetailPage() {
                     }}
                   />
                 </div>
-                <div className="text-[10px] text-slate-400 mt-2">
+                <div className="text-[10px] text-content-muted mt-2">
                   Resolved claims analyzed
                 </div>
               </div>
             </div>
 
-            <div className="mt-8 pt-6 border-t border-slate-100">
-              <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">
+            <div className="mt-8 pt-6 border-t border-border">
+              <div className="text-[10px] font-black uppercase tracking-widest text-content-muted mb-3">
                 Overall Assessment
               </div>
               <div
                 className={`text-sm font-bold ${
                   score.trackRecord >= 70
-                    ? "text-cyan-600"
+                    ? "text-accent"
                     : score.trackRecord >= 50
-                    ? "text-slate-600"
+                    ? "text-content-secondary"
                     : "text-orange-600"
                 }`}
               >

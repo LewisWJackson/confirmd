@@ -7,8 +7,8 @@ import UpgradePrompt from "../components/UpgradePrompt";
 
 const getVerdictStyle = (label: string) => {
   const styles: Record<string, { bg: string; text: string; light: string; border: string; glow: string }> = {
-    verified: { bg: "bg-cyan-500", text: "text-cyan-600", light: "bg-cyan-50", border: "border-cyan-200", glow: "shadow-[0_0_20px_rgba(6,182,212,0.3)]" },
-    plausible_unverified: { bg: "bg-slate-500", text: "text-slate-600", light: "bg-slate-50", border: "border-slate-200", glow: "" },
+    verified: { bg: "bg-accent", text: "text-accent", light: "bg-accent/10", border: "border-accent", glow: "shadow-accent/20" },
+    plausible_unverified: { bg: "bg-slate-500", text: "text-slate-600", light: "bg-slate-50", border: "border-border", glow: "" },
     speculative: { bg: "bg-orange-500", text: "text-orange-600", light: "bg-orange-50", border: "border-orange-200", glow: "shadow-[0_0_20px_rgba(249,115,22,0.3)]" },
     misleading: { bg: "bg-red-500", text: "text-red-600", light: "bg-red-50", border: "border-red-200", glow: "shadow-[0_0_20px_rgba(239,68,68,0.3)]" },
   };
@@ -17,7 +17,7 @@ const getVerdictStyle = (label: string) => {
 
 const getGradeStyle = (grade: string) => {
   const styles: Record<string, { bg: string; text: string; light: string; label: string }> = {
-    A: { bg: "bg-cyan-500", text: "text-cyan-700", light: "bg-cyan-50", label: "Primary" },
+    A: { bg: "bg-accent", text: "text-accent", light: "bg-accent/10", label: "Primary" },
     B: { bg: "bg-slate-500", text: "text-slate-700", light: "bg-slate-50", label: "Strong Secondary" },
     C: { bg: "bg-orange-400", text: "text-orange-700", light: "bg-orange-50", label: "Weak Secondary" },
     D: { bg: "bg-red-400", text: "text-red-700", light: "bg-red-50", label: "Speculative" },
@@ -27,11 +27,11 @@ const getGradeStyle = (grade: string) => {
 
 const getStanceStyle = (stance: string) => {
   const styles: Record<string, { bg: string; text: string; icon: string }> = {
-    supports: { bg: "bg-cyan-100", text: "text-cyan-700", icon: "\u2713" },
+    supports: { bg: "bg-accent/10", text: "text-accent", icon: "\u2713" },
     contradicts: { bg: "bg-red-100", text: "text-red-700", icon: "\u2717" },
-    mentions: { bg: "bg-slate-100", text: "text-slate-600", icon: "\u25CB" },
+    mentions: { bg: "bg-surface-card-hover", text: "text-content-secondary", icon: "\u25CB" },
   };
-  return styles[stance] || { bg: "bg-slate-100", text: "text-slate-600", icon: "?" };
+  return styles[stance] || { bg: "bg-surface-card-hover", text: "text-content-secondary", icon: "?" };
 };
 
 const getClaimTypeLabel = (type: string) => {
@@ -64,7 +64,7 @@ const getVerificationTierBadge = (tier?: string) => {
 };
 
 const getTimelineVerdictColor = (label: string) => {
-  if (label === "verified") return "bg-cyan-500";
+  if (label === "verified") return "bg-accent";
   if (label === "plausible_unverified") return "bg-slate-500";
   if (label === "speculative") return "bg-orange-500";
   if (label === "misleading") return "bg-red-500";
@@ -110,9 +110,9 @@ export default function ClaimDetailPage() {
     return (
       <div className="max-w-7xl mx-auto py-12 px-6 md:px-12 relative z-10">
         <div className="animate-pulse space-y-8">
-          <div className="h-8 bg-slate-200 rounded-xl w-48" />
-          <div className="h-48 bg-slate-100 rounded-[2rem]" />
-          <div className="h-96 bg-slate-100 rounded-[2rem]" />
+          <div className="h-8 bg-surface-card-hover rounded-xl w-48" />
+          <div className="h-48 bg-surface-card-hover rounded-[2rem]" />
+          <div className="h-96 bg-surface-card-hover rounded-[2rem]" />
         </div>
       </div>
     );
@@ -121,8 +121,8 @@ export default function ClaimDetailPage() {
   if (error || !claim) {
     return (
       <div className="max-w-7xl mx-auto py-12 px-6 md:px-12 relative z-10 text-center">
-        <h2 className="text-3xl font-black text-slate-900">Claim not found</h2>
-        <button onClick={() => setLocation("/claims")} className="mt-6 px-8 py-3 bg-slate-900 text-white rounded-xl font-bold">Back to Claims</button>
+        <h2 className="text-3xl font-black text-content-primary">Claim not found</h2>
+        <button onClick={() => setLocation("/claims")} className="mt-6 px-8 py-3 bg-surface-card text-content-primary rounded-xl font-bold">Back to Claims</button>
       </div>
     );
   }
@@ -140,7 +140,7 @@ export default function ClaimDetailPage() {
     <div className="max-w-7xl mx-auto py-12 px-6 md:px-12 relative z-10 animate-in fade-in duration-700">
       <button
         onClick={() => setLocation("/claims")}
-        className="flex items-center text-[10px] font-black tracking-[0.3em] text-slate-500 hover:text-cyan-500 mb-12 group transition-colors uppercase"
+        className="flex items-center text-[10px] font-black tracking-[0.3em] text-content-secondary hover:text-accent mb-12 group transition-colors uppercase"
       >
         <svg className="w-4 h-4 mr-2 group-hover:-translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M15 19l-7-7 7-7" />
@@ -150,12 +150,12 @@ export default function ClaimDetailPage() {
 
       {/* Account CTA Banner - only for free tier */}
       {tier === "free" && (
-        <div className="glass rounded-2xl p-6 mb-10 border border-cyan-100 bg-cyan-50/30 flex items-center justify-between">
+        <div className="rounded-2xl p-6 mb-10 border border-accent bg-accent/10 flex items-center justify-between">
           <div>
-            <span className="text-[10px] font-black text-cyan-600 uppercase tracking-widest">Confirmd Plus</span>
-            <p className="text-sm text-slate-600 mt-1 font-medium">Get full evidence ladders, real-time alerts, and source history with a Plus membership.</p>
+            <span className="text-[10px] font-black text-accent uppercase tracking-widest">Confirmd Plus</span>
+            <p className="text-sm text-content-secondary mt-1 font-medium">Get full evidence ladders, real-time alerts, and source history with a Plus membership.</p>
           </div>
-          <button onClick={() => setLocation("/plus")} className="px-6 py-3 bg-cyan-600 text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-cyan-700 transition-all shadow-lg whitespace-nowrap">
+          <button onClick={() => setLocation("/plus")} className="px-6 py-3 bg-accent text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-accent-hover transition-all shadow-lg whitespace-nowrap">
             Learn More
           </button>
         </div>
@@ -165,20 +165,20 @@ export default function ClaimDetailPage() {
         <div className="lg:col-span-8 space-y-10">
           {/* TL;DR Summary */}
           {verdict && (
-            <div className="glass rounded-[2rem] p-8 border border-cyan-100 bg-cyan-50/20">
-              <h3 className="text-xs font-black uppercase tracking-[0.3em] text-cyan-600 mb-4">TL;DR</h3>
+            <div className="rounded-[2rem] p-8 border border-accent bg-accent/10">
+              <h3 className="text-xs font-black uppercase tracking-[0.3em] text-accent mb-4">TL;DR</h3>
               <ul className="space-y-3">
                 <li className="flex items-start gap-3">
                   <div className={`w-2 h-2 rounded-full mt-2 ${style?.bg}`} />
-                  <span className="text-sm text-slate-700 font-medium">Verdict: <strong className="uppercase">{verdict.verdictLabel.replace(/_/g, " ")}</strong> with {Math.round((verdict.probabilityTrue ?? 0) * 100)}% probability</span>
+                  <span className="text-sm text-content-primary font-medium">Verdict: <strong className="uppercase">{verdict.verdictLabel.replace(/_/g, " ")}</strong> with {Math.round((verdict.probabilityTrue ?? 0) * 100)}% probability</span>
                 </li>
                 <li className="flex items-start gap-3">
                   <div className="w-2 h-2 rounded-full mt-2 bg-slate-400" />
-                  <span className="text-sm text-slate-700 font-medium">{evidence.length} evidence source{evidence.length !== 1 ? "s" : ""} analyzed, evidence strength {Math.round((verdict.evidenceStrength ?? 0) * 100)}%</span>
+                  <span className="text-sm text-content-primary font-medium">{evidence.length} evidence source{evidence.length !== 1 ? "s" : ""} analyzed, evidence strength {Math.round((verdict.evidenceStrength ?? 0) * 100)}%</span>
                 </li>
                 <li className="flex items-start gap-3">
                   <div className="w-2 h-2 rounded-full mt-2 bg-slate-400" />
-                  <span className="text-sm text-slate-700 font-medium">{verdict.reasoningSummary}</span>
+                  <span className="text-sm text-content-primary font-medium">{verdict.reasoningSummary}</span>
                 </li>
               </ul>
             </div>
@@ -189,20 +189,20 @@ export default function ClaimDetailPage() {
             <div className={`${style?.light} ${style?.border} border rounded-[2rem] p-8 ${style?.glow}`}>
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center space-x-3">
-                  <div className={`w-4 h-4 rounded-full ${style?.bg} ${verdict.verdictLabel === "verified" ? "shadow-[0_0_12px_cyan]" : ""}`} />
+                  <div className={`w-4 h-4 rounded-full ${style?.bg}`} />
                   <span className={`text-2xl font-black uppercase tracking-tight ${style?.text}`}>{verdict.verdictLabel.replace(/_/g, " ")}</span>
                   {getVerificationTierBadge(claim.metadata?.verificationTier)}
                 </div>
-                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{getClaimTypeLabel(claim.claimType)}</span>
+                <span className="text-[10px] font-black text-content-muted uppercase tracking-widest">{getClaimTypeLabel(claim.claimType)}</span>
               </div>
-              <h1 className="text-4xl font-black leading-tight text-slate-900 tracking-tighter mb-8">{claim.claimText}</h1>
+              <h1 className="text-4xl font-black leading-tight text-content-primary tracking-tighter mb-8">{claim.claimText}</h1>
               <div className="flex flex-wrap gap-3">
                 {(claim.assetSymbols || []).map((s: string) => (
-                  <span key={s} className="px-4 py-2 bg-white/80 text-cyan-700 rounded-xl text-xs font-black uppercase tracking-widest border border-cyan-100">${s}</span>
+                  <span key={s} className="px-4 py-2 bg-surface-secondary text-accent rounded-xl text-xs font-black uppercase tracking-widest border border-accent">${s}</span>
                 ))}
                 {claim.resolution && (
                   <span className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest ${
-                    claim.resolution.outcome === "true" ? "bg-cyan-500 text-white"
+                    claim.resolution.outcome === "true" ? "bg-accent text-white"
                     : claim.resolution.outcome === "false" ? "bg-red-500 text-white"
                     : "bg-slate-400 text-white"
                   }`}>
@@ -215,22 +215,22 @@ export default function ClaimDetailPage() {
 
           {/* Verdict Analysis */}
           {verdict && (
-            <div className="glass rounded-[2rem] p-10 border border-slate-100 bg-white/50">
-              <h3 className="text-xs font-black uppercase tracking-[0.3em] text-slate-400 mb-8">Due Diligence Verdict</h3>
+            <div className="rounded-[2rem] p-10 border border-border bg-surface-card">
+              <h3 className="text-xs font-black uppercase tracking-[0.3em] text-content-muted mb-8">Due Diligence Verdict</h3>
               <div className="grid grid-cols-2 gap-8 mb-8">
-                <div className="p-6 bg-slate-50 rounded-2xl">
-                  <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Probability True</div>
+                <div className="p-6 bg-surface-primary rounded-2xl">
+                  <div className="text-[10px] font-black uppercase tracking-widest text-content-muted mb-2">Probability True</div>
                   <div className={`text-4xl font-black ${style?.text}`}>{Math.round((verdict.probabilityTrue ?? 0) * 100)}%</div>
                 </div>
-                <div className="p-6 bg-slate-50 rounded-2xl">
-                  <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Evidence Strength</div>
-                  <div className="text-4xl font-black text-slate-900">{Math.round((verdict.evidenceStrength ?? 0) * 100)}%</div>
+                <div className="p-6 bg-surface-primary rounded-2xl">
+                  <div className="text-[10px] font-black uppercase tracking-widest text-content-muted mb-2">Evidence Strength</div>
+                  <div className="text-4xl font-black text-content-primary">{Math.round((verdict.evidenceStrength ?? 0) * 100)}%</div>
                 </div>
               </div>
               <div className="space-y-6">
                 <div>
-                  <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Analysis Summary</div>
-                  <p className="text-lg text-slate-700 leading-relaxed">{verdict.reasoningSummary}</p>
+                  <div className="text-[10px] font-black uppercase tracking-widest text-content-muted mb-3">Analysis Summary</div>
+                  <p className="text-lg text-content-primary leading-relaxed">{verdict.reasoningSummary}</p>
                 </div>
                 <div className="p-6 bg-orange-50 rounded-2xl border border-orange-100">
                   <div className="text-[10px] font-black uppercase tracking-widest text-orange-600 mb-3">What Would Change This Verdict?</div>
@@ -242,8 +242,8 @@ export default function ClaimDetailPage() {
 
           {/* Verdict History Timeline */}
           {verdictHistory.length >= 2 && (
-            <div className="glass rounded-[2rem] p-10 border border-slate-100 bg-white/50">
-              <h3 className="text-xs font-black uppercase tracking-[0.3em] text-slate-400 mb-8">Verdict History</h3>
+            <div className="rounded-[2rem] p-10 border border-border bg-surface-card">
+              <h3 className="text-xs font-black uppercase tracking-[0.3em] text-content-muted mb-8">Verdict History</h3>
               <div className="relative">
                 {verdictHistory.map((entry: any, i: number) => {
                   const isLast = i === verdictHistory.length - 1;
@@ -254,23 +254,23 @@ export default function ClaimDetailPage() {
                       <div className="flex flex-col items-center">
                         <div className={`w-3.5 h-3.5 rounded-full ${dotColor} flex-shrink-0 mt-1 shadow-lg`} />
                         {!isLast && (
-                          <div className="w-0.5 bg-slate-200 flex-1 min-h-[2rem]" />
+                          <div className="w-0.5 bg-border flex-1 min-h-[2rem]" />
                         )}
                       </div>
                       {/* Content */}
                       <div className={`pb-8 ${isLast ? "pb-0" : ""}`}>
                         <div className="flex items-center gap-3 flex-wrap">
-                          <span className="text-sm font-bold text-slate-700">
+                          <span className="text-sm font-bold text-content-primary">
                             {entry.createdAt ? formatDate(entry.createdAt) : "Unknown date"}
                           </span>
-                          <span className="text-sm text-slate-400">&mdash;</span>
-                          <span className="text-sm font-black uppercase text-slate-900">
+                          <span className="text-sm text-content-muted">&mdash;</span>
+                          <span className="text-sm font-black uppercase text-content-primary">
                             {(entry.verdictLabel || "unknown").replace(/_/g, " ")}
                           </span>
                           {getVerificationTierBadge(entry.verificationTier)}
                         </div>
                         {entry.reasoningSummary && (
-                          <p className="text-sm text-slate-500 mt-2 leading-relaxed line-clamp-2">
+                          <p className="text-sm text-content-secondary mt-2 leading-relaxed line-clamp-2">
                             "{entry.reasoningSummary}"
                           </p>
                         )}
@@ -283,24 +283,24 @@ export default function ClaimDetailPage() {
           )}
 
           {/* Evidence Ladder */}
-          <div className="glass rounded-[2rem] p-10 border border-slate-100 bg-white/50">
+          <div className="rounded-[2rem] p-10 border border-border bg-surface-card">
             <div className="flex items-center justify-between mb-8">
-              <h3 className="text-xs font-black uppercase tracking-[0.3em] text-slate-400">Evidence Ladder</h3>
-              <span className="text-xs font-black text-cyan-600">{evidence.length} Sources</span>
+              <h3 className="text-xs font-black uppercase tracking-[0.3em] text-content-muted">Evidence Ladder</h3>
+              <span className="text-xs font-black text-accent">{evidence.length} Sources</span>
             </div>
             <div className="space-y-4">
               {visibleEvidence.map((ev: any) => {
                 const gradeStyle = getGradeStyle(ev.evidenceGrade || ev.grade);
                 const stanceStyle = getStanceStyle(ev.stance);
                 return (
-                  <div key={ev.id} className="p-6 bg-slate-50 rounded-2xl border border-transparent hover:border-slate-200 transition-all">
+                  <div key={ev.id} className="p-6 bg-surface-primary rounded-2xl border border-transparent hover:border-border transition-all">
                     <div className="flex items-start gap-4">
                       <div className={`w-12 h-12 rounded-xl ${gradeStyle.bg} flex items-center justify-center text-white font-black text-lg shadow-lg flex-shrink-0`}>
                         {ev.evidenceGrade || ev.grade}
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-3 mb-2">
-                          <span className="font-bold text-slate-800">{ev.publisher}</span>
+                          <span className="font-bold text-content-primary">{ev.publisher}</span>
                           <span className={`px-2 py-1 ${stanceStyle.bg} ${stanceStyle.text} rounded-lg text-[10px] font-black uppercase tracking-widest`}>
                             {stanceStyle.icon} {ev.stance}
                           </span>
@@ -308,7 +308,7 @@ export default function ClaimDetailPage() {
                             {gradeStyle.label}
                           </span>
                         </div>
-                        <p className="text-sm text-slate-600 leading-relaxed">{ev.excerpt}</p>
+                        <p className="text-sm text-content-secondary leading-relaxed">{ev.excerpt}</p>
                       </div>
                     </div>
                   </div>
@@ -322,28 +322,28 @@ export default function ClaimDetailPage() {
                 />
               )}
               {evidence.length === 0 && (
-                <p className="text-slate-400 text-center py-8">No evidence items available</p>
+                <p className="text-content-muted text-center py-8">No evidence items available</p>
               )}
             </div>
 
             {/* Community Evidence Submission */}
-            <div className="mt-8 pt-8 border-t border-slate-100">
+            <div className="mt-8 pt-8 border-t border-border">
               {!showForm ? (
                 <button
                   onClick={() => { setShowForm(true); submitMutation.reset(); }}
-                  className="w-full py-4 border-2 border-dashed border-slate-200 rounded-2xl text-sm font-bold text-slate-400 hover:text-cyan-600 hover:border-cyan-300 transition-all"
+                  className="w-full py-4 border-2 border-dashed border-border rounded-2xl text-sm font-bold text-content-muted hover:text-accent hover:border-accent transition-all"
                 >
                   + Submit Evidence
                 </button>
               ) : (
                 <div className="space-y-4">
-                  <h4 className="text-xs font-black uppercase tracking-[0.3em] text-slate-400">Submit Evidence</h4>
+                  <h4 className="text-xs font-black uppercase tracking-[0.3em] text-content-muted">Submit Evidence</h4>
                   <input
                     type="url"
                     placeholder="https://example.com/article"
                     value={submitUrl}
                     onChange={(e) => setSubmitUrl(e.target.value)}
-                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+                    className="w-full px-4 py-3 bg-surface-primary border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-transparent"
                     disabled={submitMutation.isPending}
                   />
                   <textarea
@@ -351,7 +351,7 @@ export default function ClaimDetailPage() {
                     value={submitNotes}
                     onChange={(e) => setSubmitNotes(e.target.value)}
                     rows={2}
-                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent resize-none"
+                    className="w-full px-4 py-3 bg-surface-primary border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-transparent resize-none"
                     disabled={submitMutation.isPending}
                   />
                   {submitMutation.isError && (
@@ -360,7 +360,7 @@ export default function ClaimDetailPage() {
                     </div>
                   )}
                   {submitMutation.isSuccess && (
-                    <div className="p-4 bg-cyan-50 border border-cyan-200 rounded-xl text-sm text-cyan-700">
+                    <div className="p-4 bg-accent/10 border border-accent rounded-xl text-sm text-accent">
                       Evidence accepted! The verdict has been recalculated.
                     </div>
                   )}
@@ -368,19 +368,19 @@ export default function ClaimDetailPage() {
                     <button
                       onClick={() => submitMutation.mutate()}
                       disabled={!submitUrl || submitMutation.isPending}
-                      className="px-6 py-3 bg-cyan-600 text-white text-xs font-black uppercase tracking-widest rounded-xl hover:bg-cyan-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="px-6 py-3 bg-accent text-white text-xs font-black uppercase tracking-widest rounded-xl hover:bg-accent-hover transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {submitMutation.isPending ? "Analyzing..." : "Submit"}
                     </button>
                     <button
                       onClick={() => { setShowForm(false); setSubmitUrl(""); setSubmitNotes(""); submitMutation.reset(); }}
-                      className="px-6 py-3 text-slate-500 text-xs font-black uppercase tracking-widest hover:text-slate-700"
+                      className="px-6 py-3 text-content-secondary text-xs font-black uppercase tracking-widest hover:text-content-primary"
                       disabled={submitMutation.isPending}
                     >
                       Cancel
                     </button>
                   </div>
-                  <p className="text-[10px] text-slate-400 font-medium">
+                  <p className="text-[10px] text-content-muted font-medium">
                     AI will analyze the URL content for relevance, extract key excerpts, and determine if it supports or contradicts this claim.
                   </p>
                 </div>
@@ -393,12 +393,12 @@ export default function ClaimDetailPage() {
         <div className="lg:col-span-4 space-y-10">
           {/* Coverage Details */}
           {verdict && (
-            <div className="glass rounded-[2.5rem] p-10 border-slate-100 sticky top-28 shadow-2xl bg-white/50">
-              <h3 className="font-black text-xs tracking-[0.3em] text-slate-400 uppercase mb-8">Coverage Details</h3>
+            <div className="rounded-[2.5rem] p-10 border-border sticky top-28 shadow-2xl bg-surface-card">
+              <h3 className="font-black text-xs tracking-[0.3em] text-content-muted uppercase mb-8">Coverage Details</h3>
               <div className="space-y-6">
                 <div className="flex justify-between items-center">
-                  <span className="text-sm text-slate-500">Total Sources</span>
-                  <span className="text-lg font-black text-slate-900">{evidence.length}</span>
+                  <span className="text-sm text-content-secondary">Total Sources</span>
+                  <span className="text-lg font-black text-content-primary">{evidence.length}</span>
                 </div>
                 {["verified", "plausible_unverified", "speculative", "misleading"].map((v) => {
                   const count = v === verdict.verdictLabel ? 1 : 0;
@@ -407,21 +407,21 @@ export default function ClaimDetailPage() {
                     <div key={v} className="flex justify-between items-center">
                       <div className="flex items-center gap-2">
                         <div className={`w-2 h-2 rounded-full ${vStyle.bg}`} />
-                        <span className="text-sm text-slate-500 capitalize">{v.replace(/_/g, " ")}</span>
+                        <span className="text-sm text-content-secondary capitalize">{v.replace(/_/g, " ")}</span>
                       </div>
-                      <span className="text-sm font-bold text-slate-700">{count}</span>
+                      <span className="text-sm font-bold text-content-primary">{count}</span>
                     </div>
                   );
                 })}
                 {/* Verification bar */}
-                <div className="pt-4 border-t border-slate-100">
-                  <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Verification Distribution</div>
-                  <div className="h-3 bg-slate-100 rounded-full overflow-hidden">
+                <div className="pt-4 border-t border-border">
+                  <div className="text-[10px] font-black uppercase tracking-widest text-content-muted mb-3">Verification Distribution</div>
+                  <div className="h-3 bg-surface-card-hover rounded-full overflow-hidden">
                     <div className={`h-full ${style?.bg} rounded-full`} style={{ width: `${(verdict.probabilityTrue ?? 0) * 100}%` }} />
                   </div>
                   <div className="flex justify-between mt-2">
                     <span className={`text-xs font-black ${style?.text}`}>{Math.round((verdict.probabilityTrue ?? 0) * 100)}% verified</span>
-                    <span className="text-xs text-slate-400">{Math.round((1 - (verdict.probabilityTrue ?? 0)) * 100)}% unverified</span>
+                    <span className="text-xs text-content-muted">{Math.round((1 - (verdict.probabilityTrue ?? 0)) * 100)}% unverified</span>
                   </div>
                 </div>
               </div>
@@ -430,12 +430,12 @@ export default function ClaimDetailPage() {
 
           {/* Source Profile */}
           {source && (
-            <div className="glass rounded-[2.5rem] p-10 border-slate-100 shadow-2xl bg-white/50">
-              <h3 className="font-black text-xs tracking-[0.3em] text-slate-400 uppercase mb-8">Asserting Source</h3>
+            <div className="rounded-[2.5rem] p-10 border-border shadow-2xl bg-surface-card">
+              <h3 className="font-black text-xs tracking-[0.3em] text-content-muted uppercase mb-8">Asserting Source</h3>
               <div className="flex items-center space-x-4 mb-8">
                 <div className={`w-16 h-16 rounded-2xl flex items-center justify-center font-black text-xl shadow-xl ${
-                  source.logoUrl ? "bg-white p-1.5" :
-                  (source.score?.trackRecord || 0) >= 70 ? "bg-cyan-500 text-white"
+                  source.logoUrl ? "bg-surface-secondary p-1.5" :
+                  (source.score?.trackRecord || 0) >= 70 ? "bg-accent text-white"
                   : (source.score?.trackRecord || 0) >= 50 ? "bg-slate-400 text-white" : "bg-orange-500 text-white"
                 }`}>
                   {source.logoUrl ? (
@@ -445,31 +445,31 @@ export default function ClaimDetailPage() {
                   )}
                 </div>
                 <div>
-                  <div className="font-black text-xl text-slate-900">{source.displayName}</div>
-                  <div className="text-sm text-slate-500">{source.handleOrDomain}</div>
+                  <div className="font-black text-xl text-content-primary">{source.displayName}</div>
+                  <div className="text-sm text-content-secondary">{source.handleOrDomain}</div>
                 </div>
               </div>
               {source.score && (
                 <div className="space-y-6">
                   <div>
                     <div className="flex justify-between items-center mb-2">
-                      <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Track Record</span>
-                      <span className="text-lg font-black text-cyan-600">{source.score.trackRecord}</span>
+                      <span className="text-[10px] font-black uppercase tracking-widest text-content-muted">Track Record</span>
+                      <span className="text-lg font-black text-accent">{source.score.trackRecord}</span>
                     </div>
-                    <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                      <div className="h-full bg-cyan-500 rounded-full" style={{ width: `${source.score.trackRecord}%` }} />
+                    <div className="h-2 bg-surface-card-hover rounded-full overflow-hidden">
+                      <div className="h-full bg-accent rounded-full" style={{ width: `${source.score.trackRecord}%` }} />
                     </div>
                   </div>
                   <div>
                     <div className="flex justify-between items-center mb-2">
-                      <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Method Discipline</span>
-                      <span className="text-lg font-black text-slate-700">{source.score.methodDiscipline}</span>
+                      <span className="text-[10px] font-black uppercase tracking-widest text-content-muted">Method Discipline</span>
+                      <span className="text-lg font-black text-content-primary">{source.score.methodDiscipline}</span>
                     </div>
-                    <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                    <div className="h-2 bg-surface-card-hover rounded-full overflow-hidden">
                       <div className="h-full bg-slate-500 rounded-full" style={{ width: `${source.score.methodDiscipline}%` }} />
                     </div>
                   </div>
-                  <div className="pt-4 border-t border-slate-100 text-xs text-slate-500">
+                  <div className="pt-4 border-t border-border text-xs text-content-secondary">
                     Based on {source.score.sampleSize} resolved claims
                   </div>
                 </div>
@@ -478,8 +478,8 @@ export default function ClaimDetailPage() {
           )}
 
           {/* Claim Metadata */}
-          <div className="glass rounded-[2.5rem] p-10 border-slate-100 bg-white/50">
-            <h3 className="font-black text-xs tracking-[0.3em] text-slate-400 uppercase mb-8">Claim Metadata</h3>
+          <div className="rounded-[2.5rem] p-10 border-border bg-surface-card">
+            <h3 className="font-black text-xs tracking-[0.3em] text-content-muted uppercase mb-8">Claim Metadata</h3>
             <div className="space-y-4">
               {[
                 { label: "Falsifiability", value: `${Math.round((claim.falsifiabilityScore || 0) * 100)}%` },
@@ -487,9 +487,9 @@ export default function ClaimDetailPage() {
                 { label: "Resolution Type", value: claim.resolutionType },
                 { label: "Status", value: claim.status },
               ].map((item) => (
-                <div key={item.label} className="flex justify-between py-3 border-b border-slate-100">
-                  <span className="text-sm text-slate-500">{item.label}</span>
-                  <span className="text-sm font-bold text-slate-900 capitalize">{item.value}</span>
+                <div key={item.label} className="flex justify-between py-3 border-b border-border">
+                  <span className="text-sm text-content-secondary">{item.label}</span>
+                  <span className="text-sm font-bold text-content-primary capitalize">{item.value}</span>
                 </div>
               ))}
             </div>

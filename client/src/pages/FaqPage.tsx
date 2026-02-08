@@ -5,339 +5,269 @@ interface FaqItem {
   answer: React.ReactNode;
 }
 
-interface FaqCategory {
-  name: string;
-  items: FaqItem[];
-}
-
-const faqData: FaqCategory[] = [
+const faqItems: FaqItem[] = [
   {
-    name: "General",
-    items: [
-      {
-        question: "What is Confirmd?",
-        answer: (
-          <span>
-            Confirmd is a crypto news verification platform that ingests claims
-            from across the crypto ecosystem, extracts falsifiable assertions,
-            and evaluates them against primary-source evidence. Think of it as a
-            fact-checking layer for crypto -- designed for traders, researchers,
-            and anyone tired of making decisions based on hype. Learn more on
-            our{" "}
-            <a href="/about" className="text-cyan-600 font-bold hover:underline">
-              About page
-            </a>
-            .
-          </span>
-        ),
-      },
-      {
-        question: "Who is Confirmd for?",
-        answer:
-          "Confirmd is built for crypto traders, researchers, journalists, fund managers, and enthusiasts who want verified information before they act. Whether you are evaluating a rumor about an ETF filing or checking if a partnership announcement is real, Confirmd gives you the evidence to decide for yourself.",
-      },
-      {
-        question: "How often is news updated?",
-        answer:
-          "Our ingestion pipeline runs continuously, monitoring sources in near real-time. New claims typically appear within minutes of publication. Verification verdicts are updated as new evidence surfaces, so a claim's status may evolve over time.",
-      },
-      {
-        question: "Is Confirmd free to use?",
-        answer: (
-          <span>
-            Yes. The Scholar tier is completely free and gives you access to the
-            main feed, basic claim details, and a limited watchlist. For power
-            users, our Tribune and Oracle tiers unlock full evidence ladders,
-            real-time alerts, API access, and more. See the{" "}
-            <a href="/plus" className="text-cyan-600 font-bold hover:underline">
-              Confirmd Plus
-            </a>{" "}
-            page for details.
-          </span>
-        ),
-      },
-    ],
+    question: "Does Confirmd present any original news?",
+    answer:
+      "No. Confirmd aggregates and verifies claims from existing crypto news sources. We do not produce original reporting. Our value is in the verification layer -- analyzing, cross-referencing, and grading the claims made by other outlets.",
   },
   {
-    name: "Verification System",
-    items: [
-      {
-        question: "How does Confirmd verify claims?",
-        answer:
-          "Each claim passes through a multi-stage pipeline: (1) Ingestion from monitored sources, (2) NLP-based extraction of specific, falsifiable assertions, (3) Evidence matching against primary sources, on-chain data, regulatory filings, and cross-referenced reports, and (4) Verdict assignment with a probability score and evidence strength rating. The entire process is designed for transparency -- every verdict links back to its supporting evidence.",
-      },
-      {
-        question: "What do the verdict labels mean?",
-        answer: (
-          <span>
-            We use a 4-tier system:{" "}
-            <strong className="text-cyan-600">Verified</strong> means strong
-            primary-source evidence confirms the claim.{" "}
-            <strong className="text-slate-600">Plausible</strong> means some
-            supporting evidence exists but full verification is pending.{" "}
-            <strong className="text-orange-600">Speculative</strong> means
-            little to no verifiable evidence supports the claim.{" "}
-            <strong className="text-red-600">Misleading</strong> means evidence
-            actively contradicts the claim. More details are on our{" "}
-            <a href="/about" className="text-cyan-600 font-bold hover:underline">
-              About page
-            </a>
-            .
-          </span>
-        ),
-      },
-      {
-        question: "How are source credibility scores calculated?",
-        answer:
-          "Each source is scored across multiple dimensions: Track Record (historical accuracy of their claims), Method Discipline (whether they cite sources, use hedging language, and correct errors), and Sample Size (volume of claims we have analyzed). These factors produce a composite score with a confidence interval that tightens as we accumulate more data.",
-      },
-      {
-        question: "What are evidence grades (A through D)?",
-        answer:
-          "Evidence grade reflects the reliability of a supporting or contradicting source. Grade A is primary-source evidence (official filings, on-chain data). Grade B is reliable secondary reporting (established outlets with editorial standards). Grade C is mixed-reliability sources (community reports, aggregators). Grade D is low-reliability sources (anonymous tips, unverified social media).",
-      },
-    ],
+    question: "How does Confirmd decide what news stories to show me?",
+    answer:
+      "Our ingestion pipeline monitors 150+ crypto publishers, X accounts, Telegram channels, and regulatory filings in real time. Stories are ranked by claim density, verification status, and relevance. We do not use engagement-based algorithms -- the goal is to surface truth, not clicks.",
   },
   {
-    name: "Features",
-    items: [
-      {
-        question: "What is the Blindspot feature?",
-        answer: (
-          <span>
-            Blindspot surfaces claims that our system flags as speculative or
-            misleading but that are receiving significant attention in the
-            crypto ecosystem. It is designed to highlight narratives you should
-            approach with caution. Visit the{" "}
-            <a
-              href="/blindspot"
-              className="text-cyan-600 font-bold hover:underline"
-            >
-              Blindspot page
-            </a>{" "}
-            to see currently flagged claims.
-          </span>
-        ),
-      },
-      {
-        question: "Can I suggest a source to track?",
-        answer:
-          "Absolutely. We are always expanding our source network. Email us at hello@confirmd.io with the source name, URL or handle, and why you think it should be tracked. Our editorial team evaluates every suggestion.",
-      },
-      {
-        question: "What is the Signals page?",
-        answer: (
-          <span>
-            The{" "}
-            <a
-              href="/signals"
-              className="text-cyan-600 font-bold hover:underline"
-            >
-              Signals page
-            </a>{" "}
-            aggregates claims by asset and shows emerging trends -- which tokens
-            are generating the most verified activity, which are surrounded by
-            speculation, and where the narrative momentum is shifting.
-          </span>
-        ),
-      },
-      {
-        question: "Do you cover all cryptocurrencies?",
-        answer:
-          "We focus on the top 200 assets by market cap, plus any token that enters our pipeline through monitored sources. If a lesser-known token generates significant claim activity, it will appear in our system. We are continuously expanding coverage.",
-      },
-    ],
+    question: "How can I see news that is relevant to my country?",
+    answer:
+      "You can filter stories by region in the main feed. We also tag stories with the jurisdictions they affect, so you can quickly find regulatory developments, exchange news, and market events relevant to your location.",
   },
   {
-    name: "Subscriptions",
-    items: [
-      {
-        question: "What is the difference between free and Plus?",
-        answer: (
-          <span>
-            The free Scholar tier gives you access to the main feed, basic
-            verdict labels, and a 3-item watchlist. The Tribune tier ($9.99/mo)
-            unlocks full evidence ladders, 25 watchlist items, real-time alerts,
-            and source history. The Oracle tier ($29.99/mo) adds API access,
-            data export, 100 watchlist items, custom alerts, and early access to
-            new features. Full comparison on the{" "}
-            <a href="/plus" className="text-cyan-600 font-bold hover:underline">
-              Plus page
-            </a>
-            .
-          </span>
-        ),
-      },
-      {
-        question: "Can I cancel my subscription at any time?",
-        answer:
-          "Yes. All subscriptions are month-to-month with no long-term commitment. You can cancel from your account settings at any time, and you will retain access through the end of your billing period.",
-      },
-      {
-        question: "Do you offer annual pricing?",
-        answer:
-          "Annual plans are coming soon and will offer a significant discount compared to monthly billing. Join the waitlist on the Plus page to be notified when annual pricing launches.",
-      },
-    ],
+    question: "Where does the news on Confirmd come from?",
+    answer: (
+      <span>
+        We monitor 150+ sources including major crypto outlets (CoinDesk,
+        The Block, Decrypt), traditional financial media (Bloomberg, Reuters),
+        social platforms (X, Telegram), official regulatory filings (SEC,
+        CFTC), and on-chain data. Visit our{" "}
+        <a href="/sources" className="text-accent font-bold hover:underline">
+          Sources page
+        </a>{" "}
+        to see the full list.
+      </span>
+    ),
   },
   {
-    name: "Account & Technical",
-    items: [
-      {
-        question: "How do I create an account?",
-        answer:
-          "Click the 'Create Account' button in the top-right corner of any page. You can sign up with an email address. Account creation is free and gives you immediate access to the Scholar tier.",
-      },
-      {
-        question: "Is my data safe?",
-        answer: (
-          <span>
-            Yes. We follow industry-standard security practices and never sell
-            your personal data. Read our full{" "}
-            <a
-              href="/privacy"
-              className="text-cyan-600 font-bold hover:underline"
-            >
-              Privacy Policy
-            </a>{" "}
-            for details on data collection, usage, and your rights.
-          </span>
-        ),
-      },
-      {
-        question: "What browsers are supported?",
-        answer:
-          "Confirmd works on all modern browsers including Chrome, Firefox, Safari, and Edge. We recommend using the latest version for the best experience. Mobile browsers are fully supported.",
-      },
-      {
-        question: "I found a bug or inaccuracy. How do I report it?",
-        answer:
-          "Email us at hello@confirmd.io with a description of the issue. For claim inaccuracies, include the claim URL and what you believe is incorrect. We take accuracy reports extremely seriously and will investigate within 24 hours.",
-      },
-    ],
+    question: "How does the rating system on Confirmd work?",
+    answer: (
+      <span>
+        We use a 4-tier verdict system:{" "}
+        <strong className="text-factuality-high">Verified</strong> (strong
+        primary-source evidence),{" "}
+        <strong className="text-content-secondary">Plausible</strong> (some
+        supporting evidence),{" "}
+        <strong className="text-factuality-mixed">Speculative</strong> (little
+        to no evidence), and{" "}
+        <strong className="text-factuality-low">Misleading</strong> (evidence
+        contradicts the claim). Each claim also receives an evidence grade
+        (A-D) reflecting source reliability. Read our full{" "}
+        <a href="/methodology" className="text-accent font-bold hover:underline">
+          Methodology
+        </a>{" "}
+        for details.
+      </span>
+    ),
+  },
+  {
+    question: "What are the factuality ratings (High, Mixed, Low)?",
+    answer:
+      "Factuality ratings summarize overall source reliability. High (80-100%) means strong, cross-referenced evidence. Mixed (40-79%) means partial evidence or conflicting sources. Low (0-39%) means little evidence or active contradictions. These ratings are calculated using our weighted formula that considers evidence strength, source track record, cross-reference density, and recency.",
+  },
+  {
+    question: "Does Confirmd have a political agenda?",
+    answer:
+      "No. Confirmd is strictly non-partisan and non-promotional. We do not take positions on any token, protocol, or market direction. We do not hold tokens that we cover, and we accept no payment for verdicts. Our only agenda is verification.",
+  },
+  {
+    question: "How can I see fewer ads?",
+    answer: (
+      <span>
+        Confirmd Plus subscribers (Tribune and Oracle tiers) enjoy an
+        ad-reduced experience. Visit our{" "}
+        <a href="/plus" className="text-accent font-bold hover:underline">
+          Plus page
+        </a>{" "}
+        to learn more about subscription benefits.
+      </span>
+    ),
+  },
+  {
+    question: "I have a suggestion. How do I give it to you?",
+    answer: (
+      <span>
+        We love feedback! Email us at{" "}
+        <a href="mailto:hello@confirmd.io" className="text-accent font-bold hover:underline">
+          hello@confirmd.io
+        </a>{" "}
+        or visit our{" "}
+        <a href="/contact" className="text-accent font-bold hover:underline">
+          Contact page
+        </a>
+        . We read every message and regularly ship features suggested by
+        our community.
+      </span>
+    ),
+  },
+  {
+    question: "Want to know more about Confirmd?",
+    answer: (
+      <span>
+        Visit our{" "}
+        <a href="/about" className="text-accent font-bold hover:underline">
+          About page
+        </a>{" "}
+        for the full story, or check out our{" "}
+        <a href="/methodology" className="text-accent font-bold hover:underline">
+          Methodology
+        </a>{" "}
+        to understand how we verify claims.
+      </span>
+    ),
+  },
+  {
+    question: "How do I subscribe?",
+    answer: (
+      <span>
+        Confirmd subscriptions are available through our website. Visit the{" "}
+        <a href="/plus" className="text-accent font-bold hover:underline">
+          Confirmd Plus
+        </a>{" "}
+        page to compare plans and start a free trial. We accept all major
+        credit cards via Stripe.
+      </span>
+    ),
+  },
+  {
+    question: "Why am I not getting password reset emails?",
+    answer:
+      "Check your spam or junk folder first. If the email is not there, make sure you are using the same email address you registered with. Password reset emails are sent immediately but may take up to 5 minutes to arrive. If you still have issues, contact us at hello@confirmd.io.",
   },
 ];
 
 const FaqPage: React.FC = () => {
-  const [openItems, setOpenItems] = useState<Record<string, boolean>>({});
+  const [openItems, setOpenItems] = useState<Record<number, boolean>>({});
 
-  const toggleItem = (key: string) => {
-    setOpenItems((prev) => ({ ...prev, [key]: !prev[key] }));
+  const toggleItem = (idx: number) => {
+    setOpenItems((prev) => ({ ...prev, [idx]: !prev[idx] }));
   };
 
   return (
     <div className="relative z-10 animate-in">
       {/* Hero */}
-      <section className="max-w-7xl mx-auto px-6 md:px-12 pt-20 pb-16">
-        <div className="text-center max-w-3xl mx-auto">
-          <div className="inline-block px-5 py-2 bg-cyan-50 border border-cyan-100 rounded-full mb-8">
-            <span className="text-[10px] font-black uppercase tracking-[0.3em] text-cyan-600">
-              Support
-            </span>
-          </div>
-          <h1 className="text-5xl md:text-6xl font-black text-slate-900 tracking-tighter uppercase leading-[0.9] mb-6">
-            Frequently Asked<br />
-            <span className="text-cyan-600">Questions</span>
+      <section className="bg-surface-secondary border-b border-border">
+        <div className="max-w-7xl mx-auto px-6 md:px-12 pt-20 pb-16">
+          <h1 className="text-7xl md:text-9xl font-black text-content-primary tracking-tighter leading-[0.85] mb-6">
+            FAQ
           </h1>
-          <p className="text-lg text-slate-500 font-medium leading-relaxed">
-            Everything you need to know about Confirmd, our verification
-            system, and how to get the most out of the platform.
+          <p className="text-lg text-content-secondary font-medium leading-relaxed max-w-xl">
+            Here are some common questions asked about Confirmd
           </p>
         </div>
       </section>
 
-      {/* FAQ Categories */}
-      <section className="max-w-4xl mx-auto px-6 md:px-12 pb-32">
-        <div className="space-y-16">
-          {faqData.map((category) => (
-            <div key={category.name}>
-              <div className="flex items-center space-x-4 mb-8">
-                <div className="w-10 h-10 rounded-xl bg-slate-900 flex items-center justify-center">
-                  <span className="text-[10px] font-black text-white uppercase">
-                    {category.name.charAt(0)}
-                  </span>
-                </div>
-                <h2 className="text-xl font-black text-slate-900 tracking-tight uppercase">
-                  {category.name}
-                </h2>
-              </div>
+      {/* FAQ Accordion */}
+      <section className="bg-surface-secondary border-b border-border">
+        <div className="max-w-4xl mx-auto px-6 md:px-12 py-12">
+          <div className="divide-y divide-border">
+            {faqItems.map((item, idx) => {
+              const isOpen = openItems[idx] ?? false;
 
-              <div className="space-y-3">
-                {category.items.map((item, idx) => {
-                  const key = `${category.name}-${idx}`;
-                  const isOpen = openItems[key] ?? false;
-
-                  return (
-                    <div
-                      key={key}
-                      className={`glass rounded-[1.5rem] border transition-all duration-500 ${
-                        isOpen
-                          ? "border-cyan-200 shadow-lg"
-                          : "border-slate-100 hover:border-slate-200"
-                      }`}
-                    >
-                      <button
-                        onClick={() => toggleItem(key)}
-                        className="w-full flex items-center justify-between p-6 md:p-8 text-left"
-                      >
-                        <span className="text-base font-bold text-slate-900 pr-8">
-                          {item.question}
-                        </span>
-                        <div
-                          className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 transition-all duration-300 ${
-                            isOpen
-                              ? "bg-cyan-500 text-white rotate-180"
-                              : "bg-slate-100 text-slate-400"
-                          }`}
-                        >
-                          <svg
-                            className="w-4 h-4"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={3}
-                              d="M19 9l-7 7-7-7"
-                            />
-                          </svg>
-                        </div>
-                      </button>
-
-                      <div
-                        className={`overflow-hidden transition-all duration-500 ${
-                          isOpen ? "max-h-96 opacity-100" : "max-h-0 opacity-0"
+              return (
+                <div key={idx}>
+                  <button
+                    onClick={() => toggleItem(idx)}
+                    className="w-full flex items-center justify-between py-6 text-left group"
+                  >
+                    <span className="text-base font-bold text-content-primary pr-8 group-hover:text-accent transition-colors">
+                      {item.question}
+                    </span>
+                    <div className="flex-shrink-0">
+                      <svg
+                        className={`w-5 h-5 text-content-muted transition-transform duration-300 ${
+                          isOpen ? "rotate-45" : ""
                         }`}
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
                       >
-                        <div className="px-6 md:px-8 pb-6 md:pb-8 text-sm text-slate-500 font-medium leading-relaxed border-t border-slate-100 pt-6">
-                          {item.answer}
-                        </div>
-                      </div>
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M12 4v16m8-8H4"
+                        />
+                      </svg>
                     </div>
-                  );
-                })}
+                  </button>
+
+                  <div
+                    className={`overflow-hidden transition-all duration-300 ${
+                      isOpen ? "max-h-96 opacity-100 pb-6" : "max-h-0 opacity-0"
+                    }`}
+                  >
+                    <div className="text-sm text-content-secondary font-medium leading-relaxed pr-12">
+                      {item.answer}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+
+      {/* Want to know more */}
+      <section className="bg-surface-primary border-b border-border">
+        <div className="max-w-7xl mx-auto px-6 md:px-12 py-24">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-12 items-start">
+            <div>
+              <h2 className="text-4xl md:text-5xl font-black text-content-primary tracking-tighter leading-tight">
+                Want to know more about Confirmd?
+              </h2>
+            </div>
+            <div>
+              <h3 className="text-sm font-black text-content-muted uppercase tracking-widest mb-6">
+                Check out the following pages:
+              </h3>
+              <div className="space-y-3">
+                <a
+                  href="/methodology"
+                  className="block text-accent font-bold hover:underline text-lg"
+                >
+                  The Methodology of Confirmd
+                </a>
+                <a
+                  href="/about"
+                  className="block text-accent font-bold hover:underline text-lg"
+                >
+                  About Confirmd
+                </a>
+                <a
+                  href="/plus"
+                  className="block text-accent font-bold hover:underline text-lg"
+                >
+                  Confirmd Plus Subscriptions
+                </a>
               </div>
             </div>
-          ))}
+          </div>
         </div>
+      </section>
 
-        {/* Contact CTA */}
-        <div className="mt-20 glass rounded-[2.5rem] p-10 md:p-14 border border-slate-100 shadow-xl text-center">
-          <h3 className="text-2xl font-black text-slate-900 tracking-tight mb-3 uppercase">
-            Still Have Questions?
-          </h3>
-          <p className="text-slate-500 font-medium mb-8">
-            Our team is here to help. Reach out and we will get back to you
-            within 24 hours.
+      {/* Subscribe CTA */}
+      <section className="bg-accent">
+        <div className="max-w-4xl mx-auto px-6 md:px-12 py-16 text-center">
+          <h2 className="text-3xl md:text-4xl font-black text-accent-text tracking-tighter mb-4">
+            How do I subscribe?
+          </h2>
+          <p className="text-accent-text/80 font-medium max-w-lg mx-auto mb-8">
+            Confirmd Plus subscriptions are purchased through our website.
+            Start with a free trial and upgrade anytime.
           </p>
           <a
-            href="mailto:hello@confirmd.io"
-            className="inline-block bg-slate-900 text-white text-[11px] font-black px-10 py-4 rounded-xl hover:bg-cyan-600 transition-all shadow-xl uppercase tracking-[0.2em]"
+            href="/plus"
+            className="inline-block bg-surface-primary text-content-primary text-sm font-black px-10 py-4 rounded-xl hover:bg-surface-secondary transition-all uppercase tracking-wider"
           >
-            hello@confirmd.io
+            Subscribe Now
           </a>
+          <p className="text-xs text-accent-text/60 mt-6 max-w-md mx-auto">
+            For more information about features available from Confirmd, or for
+            information on how to cancel or manage your subscription, please see
+            our{" "}
+            <a href="/plus" className="underline hover:text-accent-text/80">
+              Subscriptions
+            </a>{" "}
+            page.
+          </p>
         </div>
       </section>
     </div>

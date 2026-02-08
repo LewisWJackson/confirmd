@@ -46,16 +46,16 @@ const CRYPTO_NAMES: Record<string, string> = {
 const getVerdictStyle = (label: VerdictLabel) =>
   ({
     verified: {
-      bg: "bg-cyan-500",
-      text: "text-cyan-600",
-      light: "bg-cyan-50",
-      border: "border-cyan-200",
+      bg: "bg-accent",
+      text: "text-accent",
+      light: "bg-accent/10",
+      border: "border-accent",
     },
     plausible_unverified: {
       bg: "bg-slate-500",
       text: "text-slate-600",
       light: "bg-slate-50",
-      border: "border-slate-200",
+      border: "border-border",
     },
     speculative: {
       bg: "bg-orange-500",
@@ -180,7 +180,7 @@ const SignalsPage: React.FC = () => {
         : "misleading";
 
     const dominantColor = {
-      verified: "text-cyan-600",
+      verified: "text-accent",
       speculative: "text-orange-600",
       misleading: "text-red-600",
     }[dominant];
@@ -188,12 +188,12 @@ const SignalsPage: React.FC = () => {
     return (
       <div
         key={signal.symbol}
-        className="glass rounded-[2rem] p-8 border border-slate-100 hover:border-cyan-200 hover:shadow-2xl transition-all duration-500 cursor-pointer group"
+        className="rounded-[2rem] p-8 border border-border hover:border-accent hover:shadow-2xl transition-all duration-500 cursor-pointer group bg-surface-card"
       >
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center space-x-4">
-            <div className="w-14 h-14 rounded-2xl bg-slate-900 flex items-center justify-center shadow-lg group-hover:scale-105 transition-transform overflow-hidden">
+            <div className="w-14 h-14 rounded-2xl bg-[#1a1a1a] flex items-center justify-center shadow-lg group-hover:scale-105 transition-transform overflow-hidden">
               {CRYPTO_LOGOS[signal.symbol] ? (
                 <img
                   src={CRYPTO_LOGOS[signal.symbol]}
@@ -207,10 +207,10 @@ const SignalsPage: React.FC = () => {
               )}
             </div>
             <div>
-              <h3 className="text-xl font-black text-slate-900 tracking-tight group-hover:text-cyan-600 transition-colors">
+              <h3 className="text-xl font-black text-content-primary tracking-tight group-hover:text-accent transition-colors">
                 ${signal.symbol}
               </h3>
-              <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+              <div className="text-[10px] font-black text-content-muted uppercase tracking-widest">
                 {CRYPTO_NAMES[signal.symbol] || signal.symbol} · {signal.totalClaims} claim{signal.totalClaims !== 1 ? "s" : ""}
               </div>
             </div>
@@ -222,10 +222,10 @@ const SignalsPage: React.FC = () => {
 
         {/* Verdict Distribution Bar */}
         <div className="mb-6">
-          <div className="flex h-2.5 w-full rounded-full overflow-hidden bg-slate-100 border border-slate-200 p-[1px]">
+          <div className="flex h-2.5 w-full rounded-full overflow-hidden bg-surface-card-hover border border-border p-[1px]">
             {verifiedPct > 0 && (
               <div
-                className="h-full bg-cyan-500 transition-all duration-700 first:rounded-l-full shadow-[0_0_8px_rgba(6,182,212,0.3)]"
+                className="h-full bg-accent transition-all duration-700 first:rounded-l-full shadow-accent/20"
                 style={{ width: `${verifiedPct}%` }}
               />
             )}
@@ -253,15 +253,15 @@ const SignalsPage: React.FC = () => {
         {/* Verdict Legend */}
         <div className="grid grid-cols-4 gap-3 mb-6">
           {[
-            { label: "Verified", count: dist.verified, color: "bg-cyan-500", textColor: "text-cyan-600" },
-            { label: "Plausible", count: dist.plausible, color: "bg-slate-400", textColor: "text-slate-500" },
+            { label: "Verified", count: dist.verified, color: "bg-accent", textColor: "text-accent" },
+            { label: "Plausible", count: dist.plausible, color: "bg-slate-400", textColor: "text-content-secondary" },
             { label: "Speculative", count: dist.speculative, color: "bg-orange-500", textColor: "text-orange-600" },
             { label: "Misleading", count: dist.misleading, color: "bg-red-500", textColor: "text-red-600" },
           ].map((item) => (
             <div key={item.label} className="text-center">
               <div className="flex items-center justify-center space-x-1.5 mb-1">
                 <div className={`w-1.5 h-1.5 rounded-full ${item.color}`} />
-                <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">
+                <span className="text-[8px] font-black text-content-muted uppercase tracking-widest">
                   {item.label}
                 </span>
               </div>
@@ -273,8 +273,8 @@ const SignalsPage: React.FC = () => {
         </div>
 
         {/* Recent Claims Preview */}
-        <div className="border-t border-slate-100 pt-5 space-y-3">
-          <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
+        <div className="border-t border-border pt-5 space-y-3">
+          <div className="text-[9px] font-black text-content-muted uppercase tracking-widest">
             Recent Claims
           </div>
           {signal.claims.slice(0, 3).map((claim) => {
@@ -291,7 +291,7 @@ const SignalsPage: React.FC = () => {
                     style?.bg || "bg-slate-300"
                   }`}
                 />
-                <p className="text-sm text-slate-600 font-medium leading-snug line-clamp-1">
+                <p className="text-sm text-content-secondary font-medium leading-snug line-clamp-1">
                   {claim.claimText}
                 </p>
               </div>
@@ -300,8 +300,8 @@ const SignalsPage: React.FC = () => {
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end mt-5 pt-4 border-t border-slate-100">
-          <div className="text-[10px] font-black text-cyan-600 uppercase tracking-widest group-hover:translate-x-1 transition-transform">
+        <div className="flex items-center justify-end mt-5 pt-4 border-t border-border">
+          <div className="text-[10px] font-black text-accent uppercase tracking-widest group-hover:translate-x-1 transition-transform">
             View All Signals →
           </div>
         </div>
@@ -310,10 +310,10 @@ const SignalsPage: React.FC = () => {
   };
 
   const renderEmptyState = () => (
-    <div className="col-span-full glass rounded-[2.5rem] p-16 border border-slate-100 text-center">
-      <div className="w-20 h-20 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto mb-8">
+    <div className="col-span-full rounded-[2.5rem] p-16 border border-border text-center bg-surface-card">
+      <div className="w-20 h-20 rounded-2xl bg-surface-card-hover flex items-center justify-center mx-auto mb-8">
         <svg
-          className="w-10 h-10 text-slate-300"
+          className="w-10 h-10 text-content-muted"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -326,10 +326,10 @@ const SignalsPage: React.FC = () => {
           />
         </svg>
       </div>
-      <h3 className="text-xl font-black text-slate-900 tracking-tight mb-3">
+      <h3 className="text-xl font-black text-content-primary tracking-tight mb-3">
         No Signals Available
       </h3>
-      <p className="text-sm text-slate-500 font-medium max-w-md mx-auto">
+      <p className="text-sm text-content-secondary font-medium max-w-md mx-auto">
         {isError
           ? "Unable to connect to the signals API. Please try again later."
           : "No claims matching this filter were found. Try a different filter or check back later."}
@@ -342,24 +342,24 @@ const SignalsPage: React.FC = () => {
       {[1, 2, 3, 4, 5, 6].map((i) => (
         <div
           key={i}
-          className="glass rounded-[2rem] p-8 border border-slate-100 animate-pulse"
+          className="rounded-[2rem] p-8 border border-border animate-pulse bg-surface-card"
         >
           <div className="flex items-center space-x-4 mb-6">
-            <div className="w-14 h-14 rounded-2xl bg-slate-100" />
+            <div className="w-14 h-14 rounded-2xl bg-surface-card-hover" />
             <div className="space-y-2">
-              <div className="h-5 bg-slate-100 rounded-xl w-20" />
-              <div className="h-3 bg-slate-100 rounded-lg w-32" />
+              <div className="h-5 bg-surface-card-hover rounded-xl w-20" />
+              <div className="h-3 bg-surface-card-hover rounded-lg w-32" />
             </div>
           </div>
-          <div className="h-2.5 bg-slate-100 rounded-full mb-6" />
+          <div className="h-2.5 bg-surface-card-hover rounded-full mb-6" />
           <div className="grid grid-cols-4 gap-3 mb-6">
             {[1, 2, 3, 4].map((j) => (
-              <div key={j} className="h-10 bg-slate-50 rounded-lg" />
+              <div key={j} className="h-10 bg-surface-primary rounded-lg" />
             ))}
           </div>
           <div className="space-y-2">
-            <div className="h-4 bg-slate-50 rounded-lg w-full" />
-            <div className="h-4 bg-slate-50 rounded-lg w-3/4" />
+            <div className="h-4 bg-surface-primary rounded-lg w-full" />
+            <div className="h-4 bg-surface-primary rounded-lg w-3/4" />
           </div>
         </div>
       ))}
@@ -371,15 +371,15 @@ const SignalsPage: React.FC = () => {
       {/* Hero */}
       <section className="max-w-7xl mx-auto px-6 md:px-12 pt-20 pb-8">
         <div className="max-w-4xl">
-          <div className="inline-block px-5 py-2 bg-cyan-50 border border-cyan-100 rounded-full mb-8">
-            <span className="text-[10px] font-black uppercase tracking-[0.3em] text-cyan-600">
+          <div className="inline-block px-5 py-2 bg-accent/10 border border-accent rounded-full mb-8">
+            <span className="text-[10px] font-black uppercase tracking-[0.3em] text-accent">
               Intelligence
             </span>
           </div>
-          <h1 className="text-5xl md:text-7xl font-black text-slate-900 tracking-tighter uppercase leading-[0.9] mb-6">
+          <h1 className="text-5xl md:text-7xl font-black text-content-primary tracking-tighter uppercase leading-[0.9] mb-6">
             Signals
           </h1>
-          <p className="text-lg text-slate-500 font-medium leading-relaxed max-w-2xl">
+          <p className="text-lg text-content-secondary font-medium leading-relaxed max-w-2xl">
             Emerging trends across the crypto ecosystem. See which assets are
             generating verified activity, which are surrounded by speculation,
             and where the narrative momentum is shifting.
@@ -396,8 +396,8 @@ const SignalsPage: React.FC = () => {
               onClick={() => setActiveFilter(tab.key)}
               className={`px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-[0.15em] transition-all duration-300 ${
                 activeFilter === tab.key
-                  ? "bg-slate-900 text-white shadow-lg"
-                  : "bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-700"
+                  ? "bg-accent text-white shadow-lg"
+                  : "bg-surface-card-hover text-content-secondary hover:bg-surface-card-hover hover:text-content-primary"
               }`}
             >
               {tab.label}
@@ -422,21 +422,21 @@ const SignalsPage: React.FC = () => {
       {/* Signal Summary Bar */}
       {!isLoading && signals.length > 0 && (
         <section className="max-w-7xl mx-auto px-6 md:px-12 pb-12">
-          <div className="glass rounded-[2rem] p-6 md:p-8 border border-slate-100 shadow-sm">
+          <div className="rounded-[2rem] p-6 md:p-8 border border-border shadow-sm bg-surface-card">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
               <div className="text-center">
-                <div className="text-3xl font-black text-slate-900 tracking-tighter">
+                <div className="text-3xl font-black text-content-primary tracking-tighter">
                   {signals.length}
                 </div>
-                <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-1">
+                <div className="text-[9px] font-black text-content-muted uppercase tracking-widest mt-1">
                   Assets Tracked
                 </div>
               </div>
               <div className="text-center">
-                <div className="text-3xl font-black text-cyan-600 tracking-tighter">
+                <div className="text-3xl font-black text-accent tracking-tighter">
                   {signals.reduce((s, a) => s + a.verdictDistribution.verified, 0)}
                 </div>
-                <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-1">
+                <div className="text-[9px] font-black text-content-muted uppercase tracking-widest mt-1">
                   Verified Claims
                 </div>
               </div>
@@ -444,7 +444,7 @@ const SignalsPage: React.FC = () => {
                 <div className="text-3xl font-black text-orange-600 tracking-tighter">
                   {signals.reduce((s, a) => s + a.verdictDistribution.speculative, 0)}
                 </div>
-                <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-1">
+                <div className="text-[9px] font-black text-content-muted uppercase tracking-widest mt-1">
                   Speculative
                 </div>
               </div>
@@ -452,7 +452,7 @@ const SignalsPage: React.FC = () => {
                 <div className="text-3xl font-black text-red-600 tracking-tighter">
                   {signals.reduce((s, a) => s + a.verdictDistribution.misleading, 0)}
                 </div>
-                <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-1">
+                <div className="text-[9px] font-black text-content-muted uppercase tracking-widest mt-1">
                   Misleading
                 </div>
               </div>

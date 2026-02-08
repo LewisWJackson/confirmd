@@ -2,6 +2,7 @@ import React, { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { fetchStories } from "../lib/api";
+import { FactualityBar } from "../components/FactualityBar";
 
 function timeAgo(dateStr: string): string {
   const now = Date.now();
@@ -17,21 +18,53 @@ function timeAgo(dateStr: string): string {
   return `${Math.floor(diffDay / 7)}w ago`;
 }
 
-function CredibilityBar({ distribution }: { distribution: { high: number; medium: number; low: number } }) {
-  const total = distribution.high + distribution.medium + distribution.low;
-  if (total === 0) return null;
-  const highPct = (distribution.high / total) * 100;
-  const medPct = (distribution.medium / total) * 100;
-  const lowPct = (distribution.low / total) * 100;
+/* --- Story Card ----------------------------------------------- */
+
+function StoryCard({ story, onClick }: { story: any; onClick: () => void }) {
+  const dist = story.credibilityDistribution || { high: 0, medium: 0, low: 0 };
 
   return (
-    <div className="w-full h-2 rounded-full overflow-hidden flex bg-slate-100">
-      {highPct > 0 && <div className="bg-emerald-500 h-full" style={{ width: `${highPct}%` }} />}
-      {medPct > 0 && <div className="bg-amber-400 h-full" style={{ width: `${medPct}%` }} />}
-      {lowPct > 0 && <div className="bg-red-500 h-full" style={{ width: `${lowPct}%` }} />}
+    <div
+      onClick={onClick}
+      className="group cursor-pointer rounded-xl overflow-hidden bg-surface-card border border-border hover:bg-surface-card-hover transition-all duration-300"
+    >
+      {story.imageUrl && (
+        <div className="relative aspect-[16/9] overflow-hidden">
+          <img
+            src={story.imageUrl}
+            alt=""
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+            onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+          />
+          <div className="absolute top-2 left-2">
+            <span className="text-[9px] font-bold px-2 py-1 rounded bg-black/60 text-white backdrop-blur-sm">
+              {story.sourceCount || 0} sources
+            </span>
+          </div>
+        </div>
+      )}
+      <div className="p-4">
+        <h3 className="text-sm font-bold text-content-primary leading-snug mb-3 group-hover:text-accent transition-colors line-clamp-3">
+          {story.title}
+        </h3>
+        <FactualityBar distribution={dist} size="sm" showLabels={false} />
+        <div className="flex items-center gap-2 mt-2">
+          <span className="text-[9px] text-content-muted font-medium">
+            {story.sourceCount || 0} sources
+          </span>
+          {story.category && (
+            <>
+              <span className="text-content-muted">|</span>
+              <span className="text-[9px] text-content-muted font-medium">{story.category}</span>
+            </>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
+
+/* --- Main BlindspotPage --------------------------------------- */
 
 const BlindspotPage: React.FC = () => {
   const [, setLocation] = useLocation();
@@ -41,195 +74,209 @@ const BlindspotPage: React.FC = () => {
     queryFn: () => fetchStories(),
   });
 
-  // Filter for blindspot stories: no high-credibility sources
-  const blindspotStories = useMemo(() => {
+  // High factuality stories: predominantly high-credibility sources
+  const highFactualityStories = useMemo(() => {
     return stories.filter((s: any) => {
       const dist = s.credibilityDistribution || { high: 0, medium: 0, low: 0 };
-      return dist.high === 0;
+      const total = dist.high + dist.medium + dist.low;
+      if (total === 0) return false;
+      return dist.high / total > 0.5;
     });
   }, [stories]);
 
-  // Blindspot score: percentage of total stories that lack high-credibility coverage
-  const blindspotScore = stories.length > 0
-    ? Math.round((blindspotStories.length / stories.length) * 100)
-    : 0;
+  // Low factuality stories: predominantly low-credibility sources
+  const lowFactualityStories = useMemo(() => {
+    return stories.filter((s: any) => {
+      const dist = s.credibilityDistribution || { high: 0, medium: 0, low: 0 };
+      const total = dist.high + dist.medium + dist.low;
+      if (total === 0) return false;
+      return dist.low / total > 0.4;
+    });
+  }, [stories]);
+
+  // Trending topics from assets
+  const trendingTopics = useMemo(() => {
+    const counts: Record<string, number> = {};
+    stories.forEach((s: any) => {
+      (s.assetSymbols || []).forEach((sym: string) => {
+        counts[sym] = (counts[sym] || 0) + 1;
+      });
+      if (s.category) {
+        counts[s.category] = (counts[s.category] || 0) + 1;
+      }
+    });
+    return Object.entries(counts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 12);
+  }, [stories]);
 
   return (
-    <div className="relative z-10 animate-in fade-in duration-1000">
-      {/* Hero */}
-      <section className="bg-newspaper relative">
-        <div className="relative z-10 max-w-7xl mx-auto px-6 md:px-12 pt-20 pb-12">
-          <div className="max-w-4xl">
-            <div className="inline-block px-5 py-2 bg-orange-50 border border-orange-100 rounded-full mb-8">
-              <span className="text-[10px] font-black uppercase tracking-[0.3em] text-orange-600">
-                Credibility Gap Detector
-              </span>
+    <div className="min-h-screen bg-surface-primary animate-in fade-in duration-1000">
+      {/* Promo banner */}
+      <div className="bg-accent text-accent-text text-center py-2 px-4">
+        <span className="text-[12px] font-bold">
+          See every side of every crypto story.{" "}
+          <button onClick={() => setLocation("/plus")} className="underline font-black hover:opacity-80 transition-opacity">
+            Get Started
+          </button>
+        </span>
+      </div>
+
+      {/* Hero section */}
+      <section className="border-b border-border">
+        <div className="max-w-7xl mx-auto px-4 md:px-8 py-12 md:py-16">
+          <div className="max-w-3xl">
+            <div className="flex items-center gap-3 mb-4">
+              <svg className="w-8 h-8 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-5 0-9.27-3.11-11-7.5a11.72 11.72 0 013.168-4.477M6.343 6.343A9.97 9.97 0 0112 5c5 0 9.27 3.11 11 7.5a11.7 11.7 0 01-4.373 5.157M6.343 6.343L17.657 17.657M6.343 6.343l11.314 11.314" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M1 1l22 22" />
+              </svg>
+              <h1 className="text-4xl md:text-5xl font-black text-content-primary tracking-tight">
+                Blindspot
+              </h1>
             </div>
-            <h1 className="text-5xl md:text-7xl font-black text-slate-900 tracking-tighter uppercase leading-[0.9] mb-6">
-              BLINDSP
-              <span className="inline-block w-[0.65em] h-[0.65em] bg-orange-500 rounded-full relative -top-[0.05em] mx-[0.02em] shadow-[0_0_20px_rgba(249,115,22,0.4)]" />
-              T
-            </h1>
-            <p className="text-lg text-slate-500 font-medium leading-relaxed max-w-2xl">
-              Stories only covered by low-credibility sources. These narratives have no
-              high-credibility source backing -- approach with extra scrutiny and look
-              for independent verification before sharing.
+            <p className="text-lg text-content-secondary leading-relaxed mb-6">
+              Similar stories reported differently. Stories covered only by one end of the
+              factuality spectrum may represent credibility blindspots. Compare how high
+              and low factuality sources cover the same topics.
             </p>
+            <button
+              onClick={() => setLocation("/plus")}
+              className="px-5 py-2.5 bg-accent text-accent-text rounded-lg text-[11px] font-black uppercase tracking-widest hover:bg-accent-hover transition-colors"
+            >
+              Sign up for the Blindspot Report
+            </button>
           </div>
         </div>
       </section>
 
-      {/* Blindspot Score */}
-      {!isLoading && stories.length > 0 && (
-        <section className="max-w-7xl mx-auto px-6 md:px-12 pb-12">
-          <div className="rounded-2xl p-8 md:p-10 border border-orange-100 bg-white shadow-sm">
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
-              <div>
-                <div className="text-[10px] font-black text-orange-600 uppercase tracking-[0.3em] mb-2">
-                  Blindspot Score
-                </div>
-                <div className="flex items-baseline space-x-3">
-                  <span className="text-5xl font-black text-slate-900 tracking-tighter">
-                    {blindspotScore}%
-                  </span>
-                </div>
-                <p className="text-sm text-slate-500 font-medium mt-2">
-                  {blindspotStories.length} of {stories.length} stories lack high-credibility coverage.{" "}
-                  {blindspotScore > 50
-                    ? "High blindspot ratio -- many stories need better sourcing."
-                    : blindspotScore > 20
-                    ? "Moderate blindspot levels in the ecosystem."
-                    : "Most stories have credible source coverage."}
-                </p>
-              </div>
-              <div className="w-full md:w-64">
-                <div className="h-3 bg-slate-100 rounded-full overflow-hidden">
-                  <div
-                    className="h-full rounded-full transition-all duration-1000"
-                    style={{
-                      width: `${blindspotScore}%`,
-                      background: "linear-gradient(90deg, #f59e0b, #ef4444)",
-                    }}
-                  />
-                </div>
-                <div className="flex justify-between mt-2 text-[9px] font-black text-slate-400 uppercase tracking-widest">
-                  <span>Low</span>
-                  <span>High</span>
-                </div>
-              </div>
+      {/* Newsletter CTA */}
+      <section className="max-w-7xl mx-auto px-4 md:px-8 py-6">
+        <div className="rounded-xl bg-surface-card border border-border p-5 flex flex-col sm:flex-row items-center gap-4">
+          <div className="flex items-center gap-3 flex-1">
+            <div className="w-10 h-10 rounded-full bg-accent/20 flex items-center justify-center flex-shrink-0">
+              <svg className="w-5 h-5 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+              </svg>
+            </div>
+            <div>
+              <p className="text-sm font-bold text-content-primary">Sign up for the Blindspot Report newsletter</p>
+              <p className="text-[11px] text-content-muted">Get daily blindspot analysis delivered to your inbox.</p>
             </div>
           </div>
-        </section>
-      )}
+          <button
+            onClick={() => setLocation("/plus")}
+            className="px-5 py-2.5 bg-accent text-accent-text rounded-lg text-[11px] font-black uppercase tracking-widest hover:bg-accent-hover transition-colors whitespace-nowrap"
+          >
+            Subscribe
+          </button>
+        </div>
+      </section>
 
-      {/* Blindspot Stories */}
-      <section className="max-w-7xl mx-auto px-6 md:px-12 pb-32">
+      {/* Two-column: High vs Low Factuality */}
+      <section className="max-w-7xl mx-auto px-4 md:px-8 py-8">
         {isLoading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {[1, 2, 3, 4].map((i) => (
-              <div key={i} className="rounded-2xl border border-slate-200 bg-white p-6 animate-pulse">
-                <div className="h-5 bg-slate-200 rounded-lg w-20 mb-4" />
-                <div className="h-6 bg-slate-200 rounded-lg w-full mb-2" />
-                <div className="h-6 bg-slate-200 rounded-lg w-3/4 mb-4" />
-                <div className="h-2 bg-slate-100 rounded-full w-full mb-4" />
-                <div className="flex gap-2">
-                  <div className="w-7 h-7 bg-slate-200 rounded-full" />
-                  <div className="w-7 h-7 bg-slate-200 rounded-full" />
-                </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            {[0, 1].map((col) => (
+              <div key={col} className="space-y-4">
+                <div className="h-6 bg-surface-card rounded w-40 animate-pulse" />
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="rounded-xl border border-border bg-surface-card p-4 animate-pulse">
+                    <div className="aspect-[16/9] bg-surface-card-hover rounded mb-3" />
+                    <div className="h-4 bg-surface-card-hover rounded w-full mb-2" />
+                    <div className="h-4 bg-surface-card-hover rounded w-3/4 mb-3" />
+                    <div className="h-2 bg-surface-card-hover rounded w-full" />
+                  </div>
+                ))}
               </div>
             ))}
           </div>
-        ) : blindspotStories.length === 0 ? (
-          <div className="rounded-2xl border border-slate-200 bg-white p-16 text-center">
-            <div className="w-16 h-16 rounded-2xl bg-emerald-50 flex items-center justify-center mx-auto mb-6">
-              <svg className="w-8 h-8 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
-            </div>
-            <h3 className="text-xl font-black text-slate-900 tracking-tight">No blindspots detected</h3>
-            <p className="text-sm font-medium text-slate-500 mt-2">
-              All current stories have at least one high-credibility source covering them. The signal is clear.
-            </p>
-          </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {blindspotStories.map((story: any) => {
-              const dist = story.credibilityDistribution || { high: 0, medium: 0, low: 0 };
-              const topSources = story.topSources || [];
-
-              return (
-                <div
-                  key={story.id}
-                  onClick={() => setLocation(`/stories/${story.id}`)}
-                  className="group cursor-pointer rounded-2xl border border-orange-100 bg-white p-6 hover:shadow-[0_6px_30px_rgba(249,115,22,0.08)] transition-all duration-500 hover:-translate-y-1"
-                >
-                  {/* Warning badge */}
-                  <div className="flex items-center justify-between mb-4">
-                    <span className="text-[9px] font-black tracking-[0.2em] uppercase px-2.5 py-1 rounded-lg bg-orange-50 text-orange-600 border border-orange-100">
-                      No high-credibility sources
-                    </span>
-                    <span className="text-[10px] font-medium text-slate-400">
-                      {story.latestItemTimestamp ? timeAgo(story.latestItemTimestamp) : ""}
-                    </span>
-                  </div>
-
-                  {/* Title */}
-                  <h3 className="text-lg font-black text-slate-900 tracking-tight leading-snug mb-4 group-hover:text-orange-600 transition-colors line-clamp-3">
-                    {story.title}
-                  </h3>
-
-                  {/* Source count */}
-                  <div className="flex items-center gap-2 mb-4">
-                    <span className="text-[10px] font-bold text-slate-500">
-                      {story.sourceCount || 0} sources
-                    </span>
-                    {story.category && (
-                      <>
-                        <span className="text-slate-300">|</span>
-                        <span className="text-[10px] font-bold text-slate-500">{story.category}</span>
-                      </>
-                    )}
-                  </div>
-
-                  {/* Credibility bar */}
-                  <div className="mb-4">
-                    <CredibilityBar distribution={dist} />
-                    <div className="flex items-center gap-3 mt-1.5 text-[9px] font-bold text-slate-400">
-                      {dist.medium > 0 && <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-amber-400" />Med {dist.medium}</span>}
-                      {dist.low > 0 && <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-red-500" />Low {dist.low}</span>}
-                    </div>
-                  </div>
-
-                  {/* Source logos + assets */}
-                  <div className="flex items-center justify-between pt-4 border-t border-slate-100">
-                    <div className="flex items-center -space-x-2">
-                      {topSources.slice(0, 3).map((s: any, i: number) => (
-                        <div
-                          key={s.id || i}
-                          className="w-7 h-7 rounded-full border-2 border-white bg-slate-100 flex items-center justify-center overflow-hidden shadow-sm"
-                          style={{ zIndex: 3 - i }}
-                        >
-                          {s.logoUrl ? (
-                            <img src={s.logoUrl} alt={s.displayName} className="w-full h-full object-cover" />
-                          ) : (
-                            <span className="text-[9px] font-black text-slate-500">{s.displayName?.charAt(0) || "?"}</span>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                    <div className="flex flex-wrap gap-1">
-                      {(story.assetSymbols || []).slice(0, 3).map((s: string) => (
-                        <span key={s} className="px-2 py-0.5 bg-slate-100 text-slate-500 rounded-md text-[9px] font-black uppercase tracking-wider">
-                          {s}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            {/* High Factuality Column */}
+            <div>
+              <div className="flex items-center gap-2 mb-6">
+                <span className="w-3 h-3 rounded-full bg-factuality-high" />
+                <h2 className="text-lg font-black text-content-primary tracking-tight">High Factuality</h2>
+              </div>
+              <p className="text-[11px] text-content-muted mb-4">
+                Stories predominantly covered by high-factuality sources.
+              </p>
+              {highFactualityStories.length === 0 ? (
+                <div className="rounded-xl border border-border bg-surface-card p-8 text-center">
+                  <p className="text-sm text-content-muted">No stories currently dominated by high-factuality sources.</p>
                 </div>
-              );
-            })}
+              ) : (
+                <div className="space-y-4">
+                  {highFactualityStories.slice(0, 6).map((story: any) => (
+                    <StoryCard
+                      key={story.id}
+                      story={story}
+                      onClick={() => setLocation(`/stories/${story.id}`)}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Low Factuality Column */}
+            <div>
+              <div className="flex items-center gap-2 mb-6">
+                <span className="w-3 h-3 rounded-full bg-factuality-low" />
+                <h2 className="text-lg font-black text-content-primary tracking-tight">Low Factuality</h2>
+              </div>
+              <p className="text-[11px] text-content-muted mb-4">
+                Stories predominantly covered by low-factuality sources.
+              </p>
+              {lowFactualityStories.length === 0 ? (
+                <div className="rounded-xl border border-border bg-surface-card p-8 text-center">
+                  <p className="text-sm text-content-muted">No stories currently dominated by low-factuality sources.</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {lowFactualityStories.slice(0, 6).map((story: any) => (
+                    <StoryCard
+                      key={story.id}
+                      story={story}
+                      onClick={() => setLocation(`/stories/${story.id}`)}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         )}
+      </section>
+
+      {/* Upgrade CTA */}
+      <section className="max-w-7xl mx-auto px-4 md:px-8 py-6">
+        <div className="rounded-xl bg-surface-card border border-accent/30 p-6 text-center">
+          <p className="text-sm text-content-secondary mb-3">
+            You have reached your limit of free news Blindspots. Subscribe to unlock access to the Blindspot feed and much more.
+          </p>
+          <button
+            onClick={() => setLocation("/plus")}
+            className="px-6 py-3 bg-accent text-accent-text rounded-lg text-[11px] font-black uppercase tracking-widest hover:bg-accent-hover transition-colors"
+          >
+            Subscribe Now
+          </button>
+        </div>
+      </section>
+
+      {/* Trending Topics */}
+      <section className="max-w-7xl mx-auto px-4 md:px-8 py-12 pb-20">
+        <h2 className="text-lg font-black text-content-primary tracking-tight mb-6">Trending Topics</h2>
+        <div className="flex flex-wrap gap-3">
+          {trendingTopics.map(([topic, count]) => (
+            <button
+              key={topic}
+              onClick={() => setLocation(`/topic/${topic.toLowerCase()}`)}
+              className="px-4 py-2 bg-surface-card text-content-primary rounded-lg text-[12px] font-bold border border-border hover:bg-accent hover:text-accent-text hover:border-accent transition-colors"
+            >
+              {topic}
+            </button>
+          ))}
+        </div>
       </section>
     </div>
   );

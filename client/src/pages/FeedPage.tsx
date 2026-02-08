@@ -3,11 +3,12 @@ import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { fetchStories, fetchCreatorFeed } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
+import { FactualityBar } from "../components/FactualityBar";
 import TierBadge from "../components/TierBadge";
 
 const CATEGORIES = ["All", "Regulation", "DeFi", "Security", "Markets", "Technology"];
 
-/* ─── Helpers ─────────────────────────────────────────── */
+/* --- Helpers -------------------------------------------------- */
 
 function timeAgo(dateStr: string): string {
   const now = Date.now();
@@ -23,20 +24,17 @@ function timeAgo(dateStr: string): string {
   return `${Math.floor(diffDay / 7)}w ago`;
 }
 
-/* ─── Factuality helpers ─────────────────────────────── */
-
-function getFactualityLabel(trackRecord: number): { label: string; color: string; bg: string; border: string } {
-  if (trackRecord >= 70) return { label: "High Factuality", color: "text-emerald-700", bg: "bg-emerald-50", border: "border-emerald-200" };
-  if (trackRecord >= 50) return { label: "Mixed Factuality", color: "text-amber-700", bg: "bg-amber-50", border: "border-amber-200" };
-  return { label: "Low Factuality", color: "text-red-700", bg: "bg-red-50", border: "border-red-200" };
+function getFactualityLabel(trackRecord: number): { label: string; colorClass: string } {
+  if (trackRecord >= 70) return { label: "High Factuality", colorClass: "bg-factuality-high text-white" };
+  if (trackRecord >= 50) return { label: "Mixed Factuality", colorClass: "bg-factuality-mixed text-white" };
+  return { label: "Low Factuality", colorClass: "bg-factuality-low text-white" };
 }
 
-/* ─── Source Factuality Line (for single-source stories) ─ */
+/* --- Source Factuality Line ----------------------------------- */
 
-function SourceFactualityLine({ source, variant = "dark" }: { source: any; variant?: "dark" | "light" }) {
+function SourceFactualityLine({ source }: { source: any }) {
   const tr = source?.trackRecord ?? 0;
   const fact = getFactualityLabel(tr);
-  const isLight = variant === "light";
 
   return (
     <div className="flex items-center gap-2">
@@ -48,99 +46,37 @@ function SourceFactualityLine({ source, variant = "dark" }: { source: any; varia
           onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
         />
       ) : (
-        <div className={`w-4 h-4 rounded ${isLight ? "bg-white/20" : "bg-stone-200"} flex items-center justify-center`}>
-          <span className={`text-[7px] font-bold ${isLight ? "text-white" : "text-stone-500"}`}>{(source?.displayName || "?").charAt(0)}</span>
+        <div className="w-4 h-4 rounded bg-surface-card-hover flex items-center justify-center">
+          <span className="text-[7px] font-bold text-content-muted">{(source?.displayName || "?").charAt(0)}</span>
         </div>
       )}
-      <span className={`text-[11px] font-bold ${isLight ? "text-white/90" : "text-stone-600"}`}>
+      <span className="text-[11px] font-bold text-content-secondary">
         {source?.displayName || "Unknown"}
       </span>
-      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${fact.bg} ${fact.color} ${fact.border} border`}>
+      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${fact.colorClass}`}>
         {fact.label}
       </span>
     </div>
   );
 }
 
-/* ─── Labeled Credibility Bar (for multi-source stories) ─ */
-
-function LabeledCredibilityBar({
-  distribution,
-  size = "md",
-}: {
-  distribution: { high: number; medium: number; low: number };
-  size?: "sm" | "md" | "lg";
-}) {
-  const total = distribution.high + distribution.medium + distribution.low;
-  if (total === 0) return null;
-  const highPct = Math.round((distribution.high / total) * 100);
-  const medPct = Math.round((distribution.medium / total) * 100);
-  const lowPct = 100 - highPct - medPct;
-
-  const h = size === "lg" ? "h-6" : size === "md" ? "h-5" : "h-4";
-  const textSize = size === "lg" ? "text-[10px]" : "text-[8px]";
-
-  return (
-    <div className={`w-full ${h} rounded-full overflow-hidden flex`}>
-      {highPct > 0 && (
-        <div
-          className="bg-emerald-500 h-full flex items-center justify-center transition-all duration-700"
-          style={{ width: `${highPct}%` }}
-        >
-          {highPct >= 15 && (
-            <span className={`${textSize} font-bold text-white leading-none`}>
-              Factual {highPct}%
-            </span>
-          )}
-        </div>
-      )}
-      {medPct > 0 && (
-        <div
-          className="bg-amber-400 h-full flex items-center justify-center transition-all duration-700"
-          style={{ width: `${medPct}%` }}
-        >
-          {medPct >= 15 && (
-            <span className={`${textSize} font-bold text-white leading-none`}>
-              Mixed {medPct}%
-            </span>
-          )}
-        </div>
-      )}
-      {lowPct > 0 && (
-        <div
-          className="bg-red-500 h-full flex items-center justify-center transition-all duration-700"
-          style={{ width: `${lowPct}%` }}
-        >
-          {lowPct >= 15 && (
-            <span className={`${textSize} font-bold text-white leading-none`}>
-              Low {lowPct}%
-            </span>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* ─── Confidence Badge ────────────────────────────────── */
+/* --- Confidence Badge ----------------------------------------- */
 
 function ConfidenceBadge({ confidence }: { confidence: string }) {
   const styles: Record<string, string> = {
-    strong: "bg-red-50 text-red-600 border-red-200",
-    medium: "bg-amber-50 text-amber-600 border-amber-200",
-    weak: "bg-slate-50 text-slate-500 border-slate-200",
+    strong: "bg-factuality-low/10 text-factuality-low border-factuality-low/30",
+    medium: "bg-factuality-mixed/10 text-factuality-mixed border-factuality-mixed/30",
+    weak: "bg-surface-card text-content-muted border-border",
   };
   const key = (confidence || "").toLowerCase();
   return (
-    <span
-      className={`px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider rounded-md border ${styles[key] || styles.weak}`}
-    >
+    <span className={`px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider rounded-md border ${styles[key] || styles.weak}`}>
       {confidence || "Unknown"}
     </span>
   );
 }
 
-/* ─── Hero Story (center top) ─────────────────────────── */
+/* --- Hero Story (center top) ---------------------------------- */
 
 function HeroStory({ story, onClick }: { story: any; onClick: () => void }) {
   const dist = story.credibilityDistribution || { high: 0, medium: 0, low: 0 };
@@ -150,7 +86,7 @@ function HeroStory({ story, onClick }: { story: any; onClick: () => void }) {
   return (
     <div
       onClick={onClick}
-      className="group cursor-pointer rounded-xl overflow-hidden relative bg-slate-900 mb-6"
+      className="group cursor-pointer rounded-xl overflow-hidden relative bg-surface-card mb-6"
     >
       <div className="relative aspect-[16/8] overflow-hidden">
         {story.imageUrl ? (
@@ -159,19 +95,17 @@ function HeroStory({ story, onClick }: { story: any; onClick: () => void }) {
             alt={story.title}
             loading="eager"
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
-            onError={(e) => {
-              (e.target as HTMLImageElement).style.display = "none";
-            }}
+            onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
           />
         ) : (
-          <div className="w-full h-full bg-gradient-to-br from-slate-800 to-cyan-900" />
+          <div className="w-full h-full bg-gradient-to-br from-surface-secondary to-surface-card" />
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
 
         {/* Category badge top-left */}
         <div className="absolute top-4 left-4 flex items-center gap-2">
           {story.category && (
-            <span className="text-[9px] font-bold tracking-widest uppercase px-2.5 py-1 rounded-md bg-cyan-500/90 text-white backdrop-blur-sm">
+            <span className="text-[9px] font-bold tracking-widest uppercase px-2.5 py-1 rounded-md bg-accent text-accent-text backdrop-blur-sm">
               {story.category}
             </span>
           )}
@@ -182,14 +116,13 @@ function HeroStory({ story, onClick }: { story: any; onClick: () => void }) {
 
         {/* Headline overlay at bottom */}
         <div className="absolute bottom-0 left-0 right-0 p-5 pb-4">
-          <h2 className="text-xl md:text-2xl font-black text-white tracking-tight leading-tight mb-3 group-hover:text-cyan-200 transition-colors">
+          <h2 className="text-xl md:text-2xl font-black text-white tracking-tight leading-tight mb-3 group-hover:text-accent transition-colors">
             {story.title}
           </h2>
-          {/* Single source: show source name + factuality badge. Multi: show bar */}
           {isSingleSource && topSources[0] ? (
-            <SourceFactualityLine source={topSources[0]} variant="light" />
+            <SourceFactualityLine source={topSources[0]} />
           ) : (
-            <LabeledCredibilityBar distribution={dist} size="md" />
+            <FactualityBar distribution={dist} size="md" />
           )}
         </div>
       </div>
@@ -197,7 +130,7 @@ function HeroStory({ story, onClick }: { story: any; onClick: () => void }) {
   );
 }
 
-/* ─── Story List Row (center feed) ────────────────────── */
+/* --- Story List Row (center feed) ----------------------------- */
 
 function StoryListRow({ story, onClick }: { story: any; onClick: () => void }) {
   const dist = story.credibilityDistribution || { high: 0, medium: 0, low: 0 };
@@ -207,16 +140,16 @@ function StoryListRow({ story, onClick }: { story: any; onClick: () => void }) {
   return (
     <div
       onClick={onClick}
-      className="group cursor-pointer py-4 border-b border-[#e5ddd0] last:border-b-0 hover:bg-[#efe9df] transition-colors px-3 rounded-lg -mx-3"
+      className="group cursor-pointer py-4 border-b border-border last:border-b-0 hover:bg-surface-card-hover transition-colors px-3 rounded-lg -mx-3"
     >
       {/* Category + time */}
       <div className="flex items-center gap-2 mb-1.5">
         {story.category && (
-          <span className="text-[9px] font-bold uppercase tracking-widest text-cyan-600">
+          <span className="text-[9px] font-bold uppercase tracking-widest text-accent">
             {story.category}
           </span>
         )}
-        <span className="text-[9px] text-stone-400">
+        <span className="text-[9px] text-content-muted">
           {story.latestItemTimestamp ? timeAgo(story.latestItemTimestamp) : ""}
         </span>
       </div>
@@ -224,30 +157,27 @@ function StoryListRow({ story, onClick }: { story: any; onClick: () => void }) {
       {/* Headline + thumbnail row */}
       <div className="flex items-start gap-4">
         <div className="flex-1 min-w-0">
-          <h3 className="text-[15px] font-bold text-stone-900 leading-snug mb-2 group-hover:text-cyan-700 transition-colors line-clamp-2">
+          <h3 className="text-[15px] font-bold text-content-primary leading-snug mb-2 group-hover:text-accent transition-colors line-clamp-2">
             {story.title}
           </h3>
-          {/* Single source: show source + factuality. Multi: show bar + count */}
           {isSingleSource && topSources[0] ? (
             <SourceFactualityLine source={topSources[0]} />
           ) : (
             <>
-              <LabeledCredibilityBar distribution={dist} size="sm" />
-              <div className="mt-1.5 text-[10px] font-medium text-stone-400">
+              <FactualityBar distribution={dist} size="sm" />
+              <div className="mt-1.5 text-[10px] font-medium text-content-muted">
                 {story.sourceCount || 0} sources
               </div>
             </>
           )}
         </div>
         {story.imageUrl && (
-          <div className="w-20 h-20 rounded-lg overflow-hidden flex-shrink-0 bg-stone-200">
+          <div className="w-20 h-20 rounded-lg overflow-hidden flex-shrink-0 bg-surface-card">
             <img
               src={story.imageUrl}
               alt=""
               className="w-full h-full object-cover"
-              onError={(e) => {
-                (e.target as HTMLImageElement).style.display = "none";
-              }}
+              onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
             />
           </div>
         )}
@@ -256,7 +186,7 @@ function StoryListRow({ story, onClick }: { story: any; onClick: () => void }) {
   );
 }
 
-/* ─── Left Sidebar: Top News Compact ──────────────────── */
+/* --- Left Sidebar: Top News ----------------------------------- */
 
 function TopNewsSidebar({
   stories,
@@ -269,7 +199,7 @@ function TopNewsSidebar({
 
   return (
     <div>
-      <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-stone-400 mb-3 px-1">
+      <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-content-muted mb-3 px-1">
         Top News
       </h3>
       <div className="space-y-0">
@@ -279,22 +209,20 @@ function TopNewsSidebar({
             <div
               key={story.id || idx}
               onClick={() => onStoryClick(story.id)}
-              className="group cursor-pointer flex items-start gap-2.5 py-2.5 border-b border-[#e5ddd0] last:border-b-0 hover:bg-[#efe9df] transition-colors rounded px-1 -mx-1"
+              className="group cursor-pointer flex items-start gap-2.5 py-2.5 border-b border-border last:border-b-0 hover:bg-surface-card-hover transition-colors rounded px-1 -mx-1"
             >
               {story.imageUrl && (
-                <div className="w-12 h-12 rounded overflow-hidden flex-shrink-0 bg-stone-200">
+                <div className="w-12 h-12 rounded overflow-hidden flex-shrink-0 bg-surface-card">
                   <img
                     src={story.imageUrl}
                     alt=""
                     className="w-full h-full object-cover"
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).style.display = "none";
-                    }}
+                    onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
                   />
                 </div>
               )}
               <div className="flex-1 min-w-0">
-                <p className="text-[12px] font-bold text-stone-800 leading-tight line-clamp-2 group-hover:text-cyan-700 transition-colors">
+                <p className="text-[12px] font-bold text-content-primary leading-tight line-clamp-2 group-hover:text-accent transition-colors">
                   {story.title}
                 </p>
                 <div className="mt-1">
@@ -302,8 +230,8 @@ function TopNewsSidebar({
                     <SourceFactualityLine source={story.topSources[0]} />
                   ) : (
                     <>
-                      <LabeledCredibilityBar distribution={dist} size="sm" />
-                      <span className="text-[9px] text-stone-400 mt-0.5 block">
+                      <FactualityBar distribution={dist} size="sm" />
+                      <span className="text-[9px] text-content-muted mt-0.5 block">
                         {story.sourceCount || 0} sources
                       </span>
                     </>
@@ -318,7 +246,7 @@ function TopNewsSidebar({
   );
 }
 
-/* ─── Right Sidebar: Blindspot ────────────────────────── */
+/* --- Right Sidebar: Blindspot --------------------------------- */
 
 function BlindspotSection({
   stories,
@@ -327,7 +255,6 @@ function BlindspotSection({
   stories: any[];
   onStoryClick: (id: string) => void;
 }) {
-  // Blindspot = stories where low credibility dominates (>50% of sources are low)
   const blindspotStories = useMemo(() => {
     return stories
       .filter((s: any) => {
@@ -342,9 +269,9 @@ function BlindspotSection({
   if (blindspotStories.length === 0) return null;
 
   return (
-    <div className="bg-red-50/60 rounded-xl p-4 border border-red-100">
+    <div className="bg-surface-card rounded-xl p-4 border border-border">
       <div className="flex items-center gap-2 mb-3">
-        <svg className="w-4 h-4 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className="w-4 h-4 text-factuality-low" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -353,11 +280,11 @@ function BlindspotSection({
           />
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M1 1l22 22" />
         </svg>
-        <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-red-600">
+        <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-factuality-low">
           Blindspot
         </h3>
       </div>
-      <p className="text-[10px] text-red-400 mb-3 leading-relaxed">
+      <p className="text-[10px] text-content-muted mb-3 leading-relaxed">
         Stories covered mostly by low-credibility sources. Read with caution.
       </p>
       <div className="space-y-0">
@@ -367,12 +294,12 @@ function BlindspotSection({
             <div
               key={story.id}
               onClick={() => onStoryClick(story.id)}
-              className="cursor-pointer py-2 border-b border-red-100 last:border-b-0 hover:bg-red-50 transition-colors rounded px-1 -mx-1"
+              className="cursor-pointer py-2 border-b border-border last:border-b-0 hover:bg-surface-card-hover transition-colors rounded px-1 -mx-1"
             >
-              <p className="text-[12px] font-bold text-stone-800 leading-tight line-clamp-2 mb-1">
+              <p className="text-[12px] font-bold text-content-primary leading-tight line-clamp-2 mb-1">
                 {story.title}
               </p>
-              <LabeledCredibilityBar distribution={dist} size="sm" />
+              <FactualityBar distribution={dist} size="sm" />
             </div>
           );
         })}
@@ -381,7 +308,7 @@ function BlindspotSection({
   );
 }
 
-/* ─── Right Sidebar: Creator Predictions (fully visible) ─ */
+/* --- Right Sidebar: Creator Predictions ----------------------- */
 
 function CreatorPredictionsSection({
   predictions,
@@ -396,9 +323,9 @@ function CreatorPredictionsSection({
   if (items.length === 0) return null;
 
   return (
-    <div className="bg-violet-50/60 rounded-xl p-4 border border-violet-100">
+    <div className="bg-surface-card rounded-xl p-4 border border-border">
       <div className="flex items-center gap-2 mb-3">
-        <svg className="w-4 h-4 text-violet-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className="w-4 h-4 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -406,7 +333,7 @@ function CreatorPredictionsSection({
             d="M9.663 17h4.674M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
           />
         </svg>
-        <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-violet-600">
+        <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-accent">
           Creator Predictions
         </h3>
       </div>
@@ -415,7 +342,6 @@ function CreatorPredictionsSection({
           const creatorName = prediction.creator?.channelName || "Unknown";
           const avatarUrl = prediction.creator?.avatarUrl;
           const creatorTier = prediction.creator?.tier;
-          const creatorId = prediction.creator?.id;
           const claimText = prediction.claimText || "";
           const confidence = prediction.confidenceLanguage || "";
           const accuracy = prediction.creator?.overallAccuracy;
@@ -425,45 +351,43 @@ function CreatorPredictionsSection({
             <div
               key={prediction.id || idx}
               onClick={() => onPredictionClick(prediction)}
-              className="cursor-pointer py-3 border-b border-violet-100 last:border-b-0 hover:bg-violet-50 transition-colors rounded px-1 -mx-1"
+              className="cursor-pointer py-3 border-b border-border last:border-b-0 hover:bg-surface-card-hover transition-colors rounded px-1 -mx-1"
             >
               {/* Avatar + name row */}
               <div className="flex items-center gap-2 mb-1.5">
-                <div className="w-6 h-6 rounded-full bg-violet-200 flex items-center justify-center overflow-hidden flex-shrink-0">
+                <div className="w-6 h-6 rounded-full bg-accent/20 flex items-center justify-center overflow-hidden flex-shrink-0">
                   {avatarUrl ? (
                     <img
                       src={avatarUrl}
                       alt={creatorName}
                       className="w-full h-full object-cover"
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).style.display = "none";
-                      }}
+                      onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
                     />
                   ) : (
-                    <span className="text-[9px] font-bold text-violet-500">
+                    <span className="text-[9px] font-bold text-accent">
                       {creatorName.charAt(0)}
                     </span>
                   )}
                 </div>
-                <span className="text-[11px] font-bold text-stone-800 truncate">
+                <span className="text-[11px] font-bold text-content-primary truncate">
                   {creatorName}
                 </span>
                 {creatorTier && <TierBadge tier={creatorTier} size="sm" />}
               </div>
               {/* Claim text */}
-              <p className="text-[11px] text-stone-600 leading-snug line-clamp-2 mb-1.5">
+              <p className="text-[11px] text-content-secondary leading-snug line-clamp-2 mb-1.5">
                 {claimText}
               </p>
               {/* Meta row */}
               <div className="flex flex-wrap items-center gap-1.5">
                 {confidence && <ConfidenceBadge confidence={confidence} />}
                 {prediction.category && (
-                  <span className="px-1.5 py-0.5 bg-violet-100 text-violet-600 rounded text-[8px] font-bold uppercase tracking-wider">
+                  <span className="px-1.5 py-0.5 bg-accent/10 text-accent rounded text-[8px] font-bold uppercase tracking-wider">
                     {prediction.category}
                   </span>
                 )}
                 {accuracy != null && (
-                  <span className="text-[8px] font-bold text-violet-400">
+                  <span className="text-[8px] font-bold text-content-muted">
                     {Math.round(accuracy)}% acc / {totalClaims || 0} claims
                   </span>
                 )}
@@ -476,7 +400,7 @@ function CreatorPredictionsSection({
   );
 }
 
-/* ─── Right Sidebar: Trending Assets ──────────────────── */
+/* --- Right Sidebar: My News Files / Trending Assets ----------- */
 
 function TrendingAssetsSection({ stories }: { stories: any[] }) {
   const trendingAssets = useMemo(() => {
@@ -494,18 +418,18 @@ function TrendingAssetsSection({ stories }: { stories: any[] }) {
   if (trendingAssets.length === 0) return null;
 
   return (
-    <div className="bg-white/60 rounded-xl p-4 border border-[#e5ddd0]">
-      <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-stone-400 mb-3">
+    <div className="bg-surface-card rounded-xl p-4 border border-border">
+      <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-content-muted mb-3">
         Trending Assets
       </h3>
       <div className="flex flex-wrap gap-2">
         {trendingAssets.map(([symbol, count]) => (
           <span
             key={symbol}
-            className="px-2.5 py-1.5 bg-[#efe9df] text-stone-700 rounded-lg text-[11px] font-bold"
+            className="px-2.5 py-1.5 bg-surface-card-hover text-content-primary rounded-lg text-[11px] font-bold"
           >
             {symbol}{" "}
-            <span className="text-stone-400 font-normal text-[9px]">({count})</span>
+            <span className="text-content-muted font-normal text-[9px]">({count})</span>
           </span>
         ))}
       </div>
@@ -513,21 +437,52 @@ function TrendingAssetsSection({ stories }: { stories: any[] }) {
   );
 }
 
-/* ─── Loading Skeleton ────────────────────────────────── */
+/* --- Daily Local News (right sidebar) ------------------------- */
+
+function DailyLocalNews({ stories, onStoryClick }: { stories: any[]; onStoryClick: (id: string) => void }) {
+  const recentStories = stories.slice(0, 4);
+  if (recentStories.length === 0) return null;
+
+  return (
+    <div className="bg-surface-card rounded-xl p-4 border border-border">
+      <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-content-muted mb-3">
+        Daily Local News
+      </h3>
+      <div className="space-y-0">
+        {recentStories.map((story: any, idx: number) => (
+          <div
+            key={story.id || idx}
+            onClick={() => onStoryClick(story.id)}
+            className="cursor-pointer py-2 border-b border-border last:border-b-0 hover:bg-surface-card-hover transition-colors rounded px-1 -mx-1"
+          >
+            <p className="text-[11px] font-bold text-content-primary leading-tight line-clamp-2">
+              {story.title}
+            </p>
+            <span className="text-[9px] text-content-muted mt-0.5 block">
+              {story.latestItemTimestamp ? timeAgo(story.latestItemTimestamp) : ""}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* --- Loading Skeleton ----------------------------------------- */
 
 function LoadingSkeleton() {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[220px_1fr_260px] gap-6">
       {/* Left sidebar skeleton */}
       <div className="hidden lg:block space-y-3">
-        <div className="h-3 bg-stone-200/50 rounded w-16 mb-4 animate-pulse" />
+        <div className="h-3 bg-surface-card rounded w-16 mb-4 animate-pulse" />
         {[1, 2, 3, 4, 5].map((i) => (
           <div key={i} className="flex items-start gap-2 animate-pulse">
-            <div className="w-12 h-12 bg-stone-200/50 rounded flex-shrink-0" />
+            <div className="w-12 h-12 bg-surface-card rounded flex-shrink-0" />
             <div className="flex-1 space-y-1.5 pt-1">
-              <div className="h-3 bg-stone-200/50 rounded w-full" />
-              <div className="h-3 bg-stone-200/50 rounded w-3/4" />
-              <div className="h-2 bg-stone-200/50 rounded w-full" />
+              <div className="h-3 bg-surface-card rounded w-full" />
+              <div className="h-3 bg-surface-card rounded w-3/4" />
+              <div className="h-2 bg-surface-card rounded w-full" />
             </div>
           </div>
         ))}
@@ -535,40 +490,40 @@ function LoadingSkeleton() {
       {/* Center skeleton */}
       <div className="space-y-4">
         <div className="rounded-xl overflow-hidden animate-pulse">
-          <div className="aspect-[16/8] bg-stone-200/50" />
+          <div className="aspect-[16/8] bg-surface-card" />
         </div>
         {[1, 2, 3, 4].map((i) => (
-          <div key={i} className="py-4 border-b border-stone-200/30 animate-pulse">
-            <div className="h-2 bg-stone-200/50 rounded w-24 mb-2" />
+          <div key={i} className="py-4 border-b border-border animate-pulse">
+            <div className="h-2 bg-surface-card rounded w-24 mb-2" />
             <div className="flex gap-4">
               <div className="flex-1 space-y-2">
-                <div className="h-4 bg-stone-200/50 rounded w-full" />
-                <div className="h-4 bg-stone-200/50 rounded w-3/4" />
-                <div className="h-3 bg-stone-200/50 rounded w-full" />
+                <div className="h-4 bg-surface-card rounded w-full" />
+                <div className="h-4 bg-surface-card rounded w-3/4" />
+                <div className="h-3 bg-surface-card rounded w-full" />
               </div>
-              <div className="w-20 h-20 bg-stone-200/50 rounded-lg flex-shrink-0" />
+              <div className="w-20 h-20 bg-surface-card rounded-lg flex-shrink-0" />
             </div>
           </div>
         ))}
       </div>
       {/* Right sidebar skeleton */}
       <div className="hidden lg:block space-y-4">
-        <div className="bg-red-50/30 rounded-xl p-4 animate-pulse space-y-3">
-          <div className="h-3 bg-red-100 rounded w-20" />
-          <div className="h-8 bg-red-50 rounded" />
-          <div className="h-8 bg-red-50 rounded" />
+        <div className="bg-surface-card rounded-xl p-4 animate-pulse space-y-3">
+          <div className="h-3 bg-surface-card-hover rounded w-20" />
+          <div className="h-8 bg-surface-card-hover rounded" />
+          <div className="h-8 bg-surface-card-hover rounded" />
         </div>
-        <div className="bg-violet-50/30 rounded-xl p-4 animate-pulse space-y-3">
-          <div className="h-3 bg-violet-100 rounded w-28" />
-          <div className="h-12 bg-violet-50 rounded" />
-          <div className="h-12 bg-violet-50 rounded" />
+        <div className="bg-surface-card rounded-xl p-4 animate-pulse space-y-3">
+          <div className="h-3 bg-surface-card-hover rounded w-28" />
+          <div className="h-12 bg-surface-card-hover rounded" />
+          <div className="h-12 bg-surface-card-hover rounded" />
         </div>
       </div>
     </div>
   );
 }
 
-/* ─── Main FeedPage ───────────────────────────────────── */
+/* --- Main FeedPage -------------------------------------------- */
 
 export default function FeedPage() {
   const [, setLocation] = useLocation();
@@ -595,7 +550,7 @@ export default function FeedPage() {
   // Split stories for layout
   const heroStory = filteredStories.length > 0 ? filteredStories[0] : null;
   const centerStories = filteredStories.slice(1);
-  const sidebarStories = stories; // Use all stories for sidebar, unfiltered
+  const sidebarStories = stories;
 
   const handleStoryClick = (id: string) => setLocation(`/stories/${id}`);
 
@@ -611,7 +566,17 @@ export default function FeedPage() {
   };
 
   return (
-    <div className="animate-in fade-in duration-1000 min-h-screen bg-[#f5f0e8]">
+    <div className="animate-in fade-in duration-1000 min-h-screen bg-surface-primary">
+      {/* Promo banner */}
+      <div className="bg-accent text-accent-text text-center py-2 px-4">
+        <span className="text-[12px] font-bold">
+          See every side of every crypto story.{" "}
+          <button onClick={() => setLocation("/plus")} className="underline font-black hover:opacity-80 transition-opacity">
+            Get Started
+          </button>
+        </span>
+      </div>
+
       {/* Category pills */}
       <section className="max-w-[1280px] mx-auto px-4 md:px-8 pt-6 pb-4">
         <div className="flex flex-wrap gap-2">
@@ -621,8 +586,8 @@ export default function FeedPage() {
               onClick={() => setActiveCategory(cat)}
               className={`px-4 py-2 rounded-full text-[11px] font-bold uppercase tracking-wider transition-all ${
                 activeCategory === cat
-                  ? "bg-stone-800 text-white shadow-md"
-                  : "bg-white/70 text-stone-500 hover:bg-white hover:text-stone-700 border border-[#e5ddd0]"
+                  ? "bg-accent text-accent-text shadow-md"
+                  : "bg-surface-card text-content-secondary hover:bg-surface-card-hover hover:text-content-primary border border-border"
               }`}
             >
               {cat}
@@ -636,24 +601,14 @@ export default function FeedPage() {
         {storiesLoading ? (
           <LoadingSkeleton />
         ) : filteredStories.length === 0 ? (
-          <div className="rounded-xl border border-[#e5ddd0] bg-white/60 p-16 text-center">
-            <div className="w-14 h-14 bg-stone-100 rounded-xl flex items-center justify-center mx-auto mb-4">
-              <svg
-                className="w-7 h-7 text-stone-300"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z"
-                />
+          <div className="rounded-xl border border-border bg-surface-card p-16 text-center">
+            <div className="w-14 h-14 bg-surface-card-hover rounded-xl flex items-center justify-center mx-auto mb-4">
+              <svg className="w-7 h-7 text-content-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z" />
               </svg>
             </div>
-            <h3 className="text-lg font-black text-stone-900 tracking-tight">No stories yet</h3>
-            <p className="text-sm text-stone-500 mt-2 font-medium">
+            <h3 className="text-lg font-black text-content-primary tracking-tight">No stories yet</h3>
+            <p className="text-sm text-content-secondary mt-2 font-medium">
               {activeCategory !== "All"
                 ? `No stories in the ${activeCategory} category right now. Try a different filter.`
                 : "Stories will appear here once the pipeline processes incoming news."}
@@ -661,24 +616,21 @@ export default function FeedPage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-[220px_1fr_260px] gap-6">
-            {/* ─── LEFT SIDEBAR ─── */}
+            {/* LEFT SIDEBAR */}
             <aside className="hidden lg:block">
               <div className="sticky top-24">
                 <TopNewsSidebar stories={sidebarStories} onStoryClick={handleStoryClick} />
               </div>
             </aside>
 
-            {/* ─── CENTER COLUMN ─── */}
+            {/* CENTER COLUMN */}
             <main className="min-w-0">
-              {/* Hero story */}
               {heroStory && (
                 <HeroStory
                   story={heroStory}
                   onClick={() => handleStoryClick(heroStory.id)}
                 />
               )}
-
-              {/* Story list rows */}
               <div>
                 {centerStories.map((story: any) => (
                   <StoryListRow
@@ -690,10 +642,14 @@ export default function FeedPage() {
               </div>
             </main>
 
-            {/* ─── RIGHT SIDEBAR ─── */}
+            {/* RIGHT SIDEBAR */}
             <aside className="hidden lg:block">
               <div className="sticky top-24 space-y-5">
                 <BlindspotSection
+                  stories={sidebarStories}
+                  onStoryClick={handleStoryClick}
+                />
+                <DailyLocalNews
                   stories={sidebarStories}
                   onStoryClick={handleStoryClick}
                 />
