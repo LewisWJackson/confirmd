@@ -40,6 +40,7 @@ export const Header: React.FC = () => {
   const navItems = [
     { path: '/', label: 'Stories', gated: false },
     { path: '/blindspot', label: 'Blindspot', gated: false },
+    { path: '/creators', label: 'Creators', gated: true },
     { path: '/sources', label: 'Sources', gated: false },
     { path: '/signals', label: 'Signals', gated: true },
   ];

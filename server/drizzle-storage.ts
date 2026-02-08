@@ -13,6 +13,11 @@ import {
   storyItems,
   sourceScores,
   users,
+  creators,
+  creatorVideos,
+  creatorClaims,
+  creatorScores,
+  disputes,
 } from "../shared/schema.js";
 import type {
   Source,
@@ -31,6 +36,16 @@ import type {
   SourceScore,
   User,
   InsertUser,
+  Creator,
+  InsertCreator,
+  CreatorVideo,
+  InsertCreatorVideo,
+  CreatorClaim,
+  InsertCreatorClaim,
+  CreatorScore,
+  InsertCreatorScore,
+  Dispute,
+  InsertDispute,
 } from "../shared/schema.js";
 
 export class DrizzleStorage implements IStorage {
@@ -418,6 +433,141 @@ export class DrizzleStorage implements IStorage {
       .update(users)
       .set({ subscriptionTier: tier })
       .where(eq(users.id, userId));
+  }
+
+  // ── Creators ─────────────────────────────────────────────────────
+
+  async createCreator(data: InsertCreator): Promise<Creator> {
+    const [creator] = await this.db.insert(creators).values(data).returning();
+    return creator;
+  }
+
+  async getCreator(id: string): Promise<Creator | undefined> {
+    const [creator] = await this.db.select().from(creators).where(eq(creators.id, id));
+    return creator;
+  }
+
+  async getCreatorByChannelId(channelId: string): Promise<Creator | undefined> {
+    const [creator] = await this.db
+      .select()
+      .from(creators)
+      .where(eq(creators.youtubeChannelId, channelId));
+    return creator;
+  }
+
+  async getCreators(activeOnly?: boolean): Promise<Creator[]> {
+    if (activeOnly) {
+      return this.db.select().from(creators).where(eq(creators.isActive, true));
+    }
+    return this.db.select().from(creators);
+  }
+
+  async updateCreator(id: string, data: Partial<Creator>): Promise<void> {
+    await this.db.update(creators).set({ ...data, updatedAt: new Date() }).where(eq(creators.id, id));
+  }
+
+  // ── Creator Videos ──────────────────────────────────────────────
+
+  async createCreatorVideo(data: InsertCreatorVideo): Promise<CreatorVideo> {
+    const [video] = await this.db.insert(creatorVideos).values(data).returning();
+    return video;
+  }
+
+  async getCreatorVideo(id: string): Promise<CreatorVideo | undefined> {
+    const [video] = await this.db.select().from(creatorVideos).where(eq(creatorVideos.id, id));
+    return video;
+  }
+
+  async getCreatorVideoByYoutubeId(youtubeVideoId: string): Promise<CreatorVideo | undefined> {
+    const [video] = await this.db
+      .select()
+      .from(creatorVideos)
+      .where(eq(creatorVideos.youtubeVideoId, youtubeVideoId));
+    return video;
+  }
+
+  async getCreatorVideos(creatorId: string, limit?: number): Promise<CreatorVideo[]> {
+    let query = this.db
+      .select()
+      .from(creatorVideos)
+      .where(eq(creatorVideos.creatorId, creatorId))
+      .orderBy(desc(creatorVideos.createdAt))
+      .$dynamic();
+    if (limit) {
+      query = query.limit(limit);
+    }
+    return query;
+  }
+
+  async updateCreatorVideo(id: string, data: Partial<CreatorVideo>): Promise<void> {
+    await this.db.update(creatorVideos).set(data).where(eq(creatorVideos.id, id));
+  }
+
+  // ── Creator Claims ──────────────────────────────────────────────
+
+  async createCreatorClaim(data: InsertCreatorClaim): Promise<CreatorClaim> {
+    const [claim] = await this.db.insert(creatorClaims).values(data).returning();
+    return claim;
+  }
+
+  async getCreatorClaim(id: string): Promise<CreatorClaim | undefined> {
+    const [claim] = await this.db.select().from(creatorClaims).where(eq(creatorClaims.id, id));
+    return claim;
+  }
+
+  async getCreatorClaims(filters?: { creatorId?: string; status?: string; category?: string; limit?: number; offset?: number }): Promise<CreatorClaim[]> {
+    let query = this.db.select().from(creatorClaims).$dynamic();
+    if (filters?.creatorId) {
+      query = query.where(eq(creatorClaims.creatorId, filters.creatorId));
+    }
+    if (filters?.status) {
+      query = query.where(eq(creatorClaims.status, filters.status as any));
+    }
+    if (filters?.category) {
+      query = query.where(eq(creatorClaims.category, filters.category as any));
+    }
+    query = query.orderBy(desc(creatorClaims.createdAt));
+    const limit = filters?.limit ?? 50;
+    const offset = filters?.offset ?? 0;
+    query = query.limit(limit).offset(offset);
+    return query;
+  }
+
+  async updateCreatorClaim(id: string, data: Partial<CreatorClaim>): Promise<void> {
+    await this.db.update(creatorClaims).set({ ...data, updatedAt: new Date() }).where(eq(creatorClaims.id, id));
+  }
+
+  // ── Creator Scores ──────────────────────────────────────────────
+
+  async createCreatorScore(data: InsertCreatorScore): Promise<CreatorScore> {
+    const [score] = await this.db.insert(creatorScores).values(data).returning();
+    return score;
+  }
+
+  async getCreatorScoreHistory(creatorId: string): Promise<CreatorScore[]> {
+    return this.db
+      .select()
+      .from(creatorScores)
+      .where(eq(creatorScores.creatorId, creatorId))
+      .orderBy(desc(creatorScores.calculatedAt));
+  }
+
+  // ── Disputes ────────────────────────────────────────────────────
+
+  async createDispute(data: InsertDispute): Promise<Dispute> {
+    const [dispute] = await this.db.insert(disputes).values(data).returning();
+    return dispute;
+  }
+
+  async getDisputesByClaimId(claimId: string): Promise<Dispute[]> {
+    return this.db
+      .select()
+      .from(disputes)
+      .where(eq(disputes.claimId, claimId));
+  }
+
+  async updateDispute(id: string, data: Partial<Dispute>): Promise<void> {
+    await this.db.update(disputes).set(data).where(eq(disputes.id, id));
   }
 
   // ── Pipeline Stats ───────────────────────────────────────────────

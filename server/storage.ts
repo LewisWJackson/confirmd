@@ -15,6 +15,16 @@ import type {
   SourceScore,
   User,
   InsertUser,
+  Creator,
+  InsertCreator,
+  CreatorVideo,
+  InsertCreatorVideo,
+  CreatorClaim,
+  InsertCreatorClaim,
+  CreatorScore,
+  InsertCreatorScore,
+  Dispute,
+  InsertDispute,
 } from "../shared/schema.js";
 import { db } from "./db.js";
 import { DrizzleStorage } from "./drizzle-storage.js";
@@ -75,6 +85,35 @@ export interface IStorage {
   getUserByEmail(email: string): Promise<User | undefined>;
   getUserById(id: string): Promise<User | undefined>;
   updateUserTier(userId: string, tier: string): Promise<void>;
+
+  // Creators
+  createCreator(data: InsertCreator): Promise<Creator>;
+  getCreator(id: string): Promise<Creator | undefined>;
+  getCreatorByChannelId(channelId: string): Promise<Creator | undefined>;
+  getCreators(activeOnly?: boolean): Promise<Creator[]>;
+  updateCreator(id: string, data: Partial<Creator>): Promise<void>;
+
+  // Creator Videos
+  createCreatorVideo(data: InsertCreatorVideo): Promise<CreatorVideo>;
+  getCreatorVideo(id: string): Promise<CreatorVideo | undefined>;
+  getCreatorVideoByYoutubeId(youtubeVideoId: string): Promise<CreatorVideo | undefined>;
+  getCreatorVideos(creatorId: string, limit?: number): Promise<CreatorVideo[]>;
+  updateCreatorVideo(id: string, data: Partial<CreatorVideo>): Promise<void>;
+
+  // Creator Claims
+  createCreatorClaim(data: InsertCreatorClaim): Promise<CreatorClaim>;
+  getCreatorClaim(id: string): Promise<CreatorClaim | undefined>;
+  getCreatorClaims(filters?: { creatorId?: string; status?: string; category?: string; limit?: number; offset?: number }): Promise<CreatorClaim[]>;
+  updateCreatorClaim(id: string, data: Partial<CreatorClaim>): Promise<void>;
+
+  // Creator Scores
+  createCreatorScore(data: InsertCreatorScore): Promise<CreatorScore>;
+  getCreatorScoreHistory(creatorId: string): Promise<CreatorScore[]>;
+
+  // Disputes
+  createDispute(data: InsertDispute): Promise<Dispute>;
+  getDisputesByClaimId(claimId: string): Promise<Dispute[]>;
+  updateDispute(id: string, data: Partial<Dispute>): Promise<void>;
 
   // Pipeline Stats
   getPipelineStats(): Promise<PipelineStats>;
@@ -143,6 +182,11 @@ export class MemStorage implements IStorage {
   private storyItemJoins: Map<string, StoryItemJoin> = new Map();
   private sourceScores: Map<string, SourceScore> = new Map();
   private users: Map<string, User> = new Map();
+  private creatorsMap: Map<string, Creator> = new Map();
+  private creatorVideosMap: Map<string, CreatorVideo> = new Map();
+  private creatorClaimsMap: Map<string, CreatorClaim> = new Map();
+  private creatorScoresMap: Map<string, CreatorScore> = new Map();
+  private disputesMap: Map<string, Dispute> = new Map();
   private lastPipelineRun: string | null = null;
 
   // ── Sources ──────────────────────────────────────────────────────
@@ -611,6 +655,244 @@ export class MemStorage implements IStorage {
     const user = this.users.get(userId);
     if (user) {
       this.users.set(userId, { ...user, subscriptionTier: tier });
+    }
+  }
+
+  // ── Creators ─────────────────────────────────────────────────────
+
+  async createCreator(data: InsertCreator): Promise<Creator> {
+    const id = crypto.randomUUID();
+    const now = new Date();
+    const creator: Creator = {
+      id,
+      youtubeChannelId: data.youtubeChannelId,
+      channelHandle: data.channelHandle ?? null,
+      channelName: data.channelName,
+      channelUrl: data.channelUrl,
+      avatarUrl: data.avatarUrl ?? null,
+      bannerUrl: data.bannerUrl ?? null,
+      subscriberCount: data.subscriberCount ?? 0,
+      description: data.description ?? null,
+      primaryNiche: data.primaryNiche ?? "crypto",
+      trackingSince: now,
+      isActive: data.isActive ?? true,
+      overallAccuracy: data.overallAccuracy ?? 0,
+      totalClaims: data.totalClaims ?? 0,
+      verifiedTrue: data.verifiedTrue ?? 0,
+      verifiedFalse: data.verifiedFalse ?? 0,
+      pendingClaims: data.pendingClaims ?? 0,
+      tier: data.tier ?? "unranked",
+      rankOverall: data.rankOverall ?? null,
+      rankChange: data.rankChange ?? 0,
+      currentSentiment: data.currentSentiment ?? "neutral",
+      priceAccuracy: data.priceAccuracy ?? 0,
+      timelineAccuracy: data.timelineAccuracy ?? 0,
+      regulatoryAccuracy: data.regulatoryAccuracy ?? 0,
+      partnershipAccuracy: data.partnershipAccuracy ?? 0,
+      technologyAccuracy: data.technologyAccuracy ?? 0,
+      marketAccuracy: data.marketAccuracy ?? 0,
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.creatorsMap.set(id, creator);
+    return creator;
+  }
+
+  async getCreator(id: string): Promise<Creator | undefined> {
+    return this.creatorsMap.get(id);
+  }
+
+  async getCreatorByChannelId(channelId: string): Promise<Creator | undefined> {
+    return Array.from(this.creatorsMap.values()).find(
+      (c) => c.youtubeChannelId === channelId
+    );
+  }
+
+  async getCreators(activeOnly?: boolean): Promise<Creator[]> {
+    let results = Array.from(this.creatorsMap.values());
+    if (activeOnly) {
+      results = results.filter((c) => c.isActive);
+    }
+    return results;
+  }
+
+  async updateCreator(id: string, data: Partial<Creator>): Promise<void> {
+    const creator = this.creatorsMap.get(id);
+    if (creator) {
+      Object.assign(creator, data, { updatedAt: new Date() });
+    }
+  }
+
+  // ── Creator Videos ──────────────────────────────────────────────
+
+  async createCreatorVideo(data: InsertCreatorVideo): Promise<CreatorVideo> {
+    const id = crypto.randomUUID();
+    const video: CreatorVideo = {
+      id,
+      creatorId: data.creatorId,
+      youtubeVideoId: data.youtubeVideoId,
+      title: data.title,
+      description: data.description ?? null,
+      publishedAt: data.publishedAt ? new Date(data.publishedAt as unknown as string) : null,
+      durationSeconds: data.durationSeconds ?? 0,
+      viewCount: data.viewCount ?? 0,
+      thumbnailUrl: data.thumbnailUrl ?? null,
+      transcriptStatus: data.transcriptStatus ?? "pending",
+      transcriptText: data.transcriptText ?? null,
+      transcriptSource: data.transcriptSource ?? null,
+      claimsExtracted: data.claimsExtracted ?? false,
+      createdAt: new Date(),
+    };
+    this.creatorVideosMap.set(id, video);
+    return video;
+  }
+
+  async getCreatorVideo(id: string): Promise<CreatorVideo | undefined> {
+    return this.creatorVideosMap.get(id);
+  }
+
+  async getCreatorVideoByYoutubeId(youtubeVideoId: string): Promise<CreatorVideo | undefined> {
+    return Array.from(this.creatorVideosMap.values()).find(
+      (v) => v.youtubeVideoId === youtubeVideoId
+    );
+  }
+
+  async getCreatorVideos(creatorId: string, limit?: number): Promise<CreatorVideo[]> {
+    let results = Array.from(this.creatorVideosMap.values()).filter(
+      (v) => v.creatorId === creatorId
+    );
+    results.sort((a, b) => new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime());
+    if (limit) {
+      results = results.slice(0, limit);
+    }
+    return results;
+  }
+
+  async updateCreatorVideo(id: string, data: Partial<CreatorVideo>): Promise<void> {
+    const video = this.creatorVideosMap.get(id);
+    if (video) {
+      Object.assign(video, data);
+    }
+  }
+
+  // ── Creator Claims ──────────────────────────────────────────────
+
+  async createCreatorClaim(data: InsertCreatorClaim): Promise<CreatorClaim> {
+    const id = crypto.randomUUID();
+    const now = new Date();
+    const claim: CreatorClaim = {
+      id,
+      creatorId: data.creatorId,
+      videoId: data.videoId,
+      claimText: data.claimText,
+      category: data.category,
+      specificityScore: data.specificityScore ?? 5,
+      confidenceLanguage: data.confidenceLanguage ?? "medium",
+      statedTimeframe: data.statedTimeframe ?? null,
+      timeframeDeadline: data.timeframeDeadline ? new Date(data.timeframeDeadline as unknown as string) : null,
+      isVerifiable: data.isVerifiable ?? true,
+      videoTimestampSeconds: data.videoTimestampSeconds ?? 0,
+      status: data.status ?? "pending",
+      verificationDate: data.verificationDate ? new Date(data.verificationDate as unknown as string) : null,
+      verificationEvidence: data.verificationEvidence ?? null,
+      verificationNotes: data.verificationNotes ?? null,
+      aiExtractionConfidence: data.aiExtractionConfidence ?? 0.8,
+      assetSymbols: (data.assetSymbols as string[] | null) ?? [],
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.creatorClaimsMap.set(id, claim);
+    return claim;
+  }
+
+  async getCreatorClaim(id: string): Promise<CreatorClaim | undefined> {
+    return this.creatorClaimsMap.get(id);
+  }
+
+  async getCreatorClaims(filters?: { creatorId?: string; status?: string; category?: string; limit?: number; offset?: number }): Promise<CreatorClaim[]> {
+    let results = Array.from(this.creatorClaimsMap.values());
+    if (filters?.creatorId) {
+      results = results.filter((c) => c.creatorId === filters.creatorId);
+    }
+    if (filters?.status) {
+      results = results.filter((c) => c.status === filters.status);
+    }
+    if (filters?.category) {
+      results = results.filter((c) => c.category === filters.category);
+    }
+    results.sort((a, b) => new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime());
+    const offset = filters?.offset ?? 0;
+    const limit = filters?.limit ?? 50;
+    return results.slice(offset, offset + limit);
+  }
+
+  async updateCreatorClaim(id: string, data: Partial<CreatorClaim>): Promise<void> {
+    const claim = this.creatorClaimsMap.get(id);
+    if (claim) {
+      Object.assign(claim, data, { updatedAt: new Date() });
+    }
+  }
+
+  // ── Creator Scores ──────────────────────────────────────────────
+
+  async createCreatorScore(data: InsertCreatorScore): Promise<CreatorScore> {
+    const id = crypto.randomUUID();
+    const score: CreatorScore = {
+      id,
+      creatorId: data.creatorId,
+      calculatedAt: new Date(),
+      overallAccuracy: data.overallAccuracy,
+      priceAccuracy: data.priceAccuracy ?? 0,
+      timelineAccuracy: data.timelineAccuracy ?? 0,
+      regulatoryAccuracy: data.regulatoryAccuracy ?? 0,
+      partnershipAccuracy: data.partnershipAccuracy ?? 0,
+      technologyAccuracy: data.technologyAccuracy ?? 0,
+      marketAccuracy: data.marketAccuracy ?? 0,
+      totalClaimsScored: data.totalClaimsScored,
+      claimsPending: data.claimsPending ?? 0,
+      rankOverall: data.rankOverall,
+      rankChange: data.rankChange ?? 0,
+    };
+    this.creatorScoresMap.set(id, score);
+    return score;
+  }
+
+  async getCreatorScoreHistory(creatorId: string): Promise<CreatorScore[]> {
+    return Array.from(this.creatorScoresMap.values())
+      .filter((s) => s.creatorId === creatorId)
+      .sort((a, b) => new Date(b.calculatedAt!).getTime() - new Date(a.calculatedAt!).getTime());
+  }
+
+  // ── Disputes ────────────────────────────────────────────────────
+
+  async createDispute(data: InsertDispute): Promise<Dispute> {
+    const id = crypto.randomUUID();
+    const dispute: Dispute = {
+      id,
+      claimId: data.claimId,
+      disputeType: data.disputeType,
+      evidence: data.evidence ?? null,
+      submitterNote: data.submitterNote ?? null,
+      status: data.status ?? "pending",
+      aiAnalysis: data.aiAnalysis ?? null,
+      aiConfidence: data.aiConfidence ?? null,
+      resolvedAt: data.resolvedAt ? new Date(data.resolvedAt as unknown as string) : null,
+      createdAt: new Date(),
+    };
+    this.disputesMap.set(id, dispute);
+    return dispute;
+  }
+
+  async getDisputesByClaimId(claimId: string): Promise<Dispute[]> {
+    return Array.from(this.disputesMap.values()).filter(
+      (d) => d.claimId === claimId
+    );
+  }
+
+  async updateDispute(id: string, data: Partial<Dispute>): Promise<void> {
+    const dispute = this.disputesMap.get(id);
+    if (dispute) {
+      Object.assign(dispute, data);
     }
   }
 

@@ -28,6 +28,20 @@ export const evidenceGradeEnum = pgEnum("evidence_grade", ["A", "B", "C", "D"]);
 export const verdictLabelEnum = pgEnum("verdict_label", ["verified", "plausible_unverified", "speculative", "misleading"]);
 export const resolutionOutcomeEnum = pgEnum("resolution_outcome", ["true", "false", "unresolved", "partially_true"]);
 
+// Creator enums
+export const creatorTierEnum = pgEnum("creator_tier", ["diamond", "gold", "silver", "bronze", "unranked"]);
+export const creatorClaimStatusEnum = pgEnum("creator_claim_status", [
+  "pending", "verified_true", "verified_false", "partially_true", "expired", "unverifiable"
+]);
+export const creatorClaimCategoryEnum = pgEnum("creator_claim_category", [
+  "price_prediction", "regulatory", "partnership", "technology",
+  "market_prediction", "technical_analysis", "etf_approval",
+  "partnership_adoption", "market_analysis"
+]);
+export const creatorClaimStrengthEnum = pgEnum("creator_claim_strength", ["strong", "medium", "weak"]);
+export const disputeTypeEnum = pgEnum("dispute_type", ["never_said", "misquoted", "out_of_context", "wrong_creator"]);
+export const disputeStatusEnum = pgEnum("dispute_status", ["pending", "upheld", "rejected", "under_investigation"]);
+
 // Tables
 export const sources = pgTable("source", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -153,6 +167,110 @@ export const users = pgTable("user", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// ─── Creator Tables ──────────────────────────────────────────────────
+
+export const creators = pgTable("creator", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  youtubeChannelId: text("youtube_channel_id").notNull().unique(),
+  channelHandle: text("channel_handle"),
+  channelName: text("channel_name").notNull(),
+  channelUrl: text("channel_url").notNull(),
+  avatarUrl: text("avatar_url"),
+  bannerUrl: text("banner_url"),
+  subscriberCount: integer("subscriber_count").default(0),
+  description: text("description"),
+  primaryNiche: text("primary_niche").notNull().default("crypto"),
+  trackingSince: timestamp("tracking_since").defaultNow(),
+  isActive: boolean("is_active").default(true),
+  overallAccuracy: real("overall_accuracy").default(0),
+  totalClaims: integer("total_claims").default(0),
+  verifiedTrue: integer("verified_true").default(0),
+  verifiedFalse: integer("verified_false").default(0),
+  pendingClaims: integer("pending_claims").default(0),
+  tier: creatorTierEnum("tier").notNull().default("unranked"),
+  rankOverall: integer("rank_overall"),
+  rankChange: integer("rank_change").default(0),
+  currentSentiment: text("current_sentiment").notNull().default("neutral"),
+  // Radar chart scores (0-100)
+  priceAccuracy: real("price_accuracy").default(0),
+  timelineAccuracy: real("timeline_accuracy").default(0),
+  regulatoryAccuracy: real("regulatory_accuracy").default(0),
+  partnershipAccuracy: real("partnership_accuracy").default(0),
+  technologyAccuracy: real("technology_accuracy").default(0),
+  marketAccuracy: real("market_accuracy").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const creatorVideos = pgTable("creator_video", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  creatorId: uuid("creator_id").notNull().references(() => creators.id),
+  youtubeVideoId: text("youtube_video_id").notNull().unique(),
+  title: text("title").notNull(),
+  description: text("description"),
+  publishedAt: timestamp("published_at"),
+  durationSeconds: integer("duration_seconds").default(0),
+  viewCount: integer("view_count").default(0),
+  thumbnailUrl: text("thumbnail_url"),
+  transcriptStatus: text("transcript_status").notNull().default("pending"),
+  transcriptText: text("transcript_text"),
+  transcriptSource: text("transcript_source"),
+  claimsExtracted: boolean("claims_extracted").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const creatorClaims = pgTable("creator_claim", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  creatorId: uuid("creator_id").notNull().references(() => creators.id),
+  videoId: uuid("video_id").notNull().references(() => creatorVideos.id),
+  claimText: text("claim_text").notNull(),
+  category: creatorClaimCategoryEnum("category").notNull(),
+  specificityScore: real("specificity_score").default(5),
+  confidenceLanguage: creatorClaimStrengthEnum("confidence_language").notNull().default("medium"),
+  statedTimeframe: text("stated_timeframe"),
+  timeframeDeadline: timestamp("timeframe_deadline"),
+  isVerifiable: boolean("is_verifiable").default(true),
+  videoTimestampSeconds: integer("video_timestamp_seconds").default(0),
+  status: creatorClaimStatusEnum("status").notNull().default("pending"),
+  verificationDate: timestamp("verification_date"),
+  verificationEvidence: text("verification_evidence"),
+  verificationNotes: text("verification_notes"),
+  aiExtractionConfidence: real("ai_extraction_confidence").default(0.8),
+  assetSymbols: text("asset_symbols").array().default([]),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const creatorScores = pgTable("creator_score", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  creatorId: uuid("creator_id").notNull().references(() => creators.id),
+  calculatedAt: timestamp("calculated_at").defaultNow(),
+  overallAccuracy: real("overall_accuracy").notNull(),
+  priceAccuracy: real("price_accuracy").default(0),
+  timelineAccuracy: real("timeline_accuracy").default(0),
+  regulatoryAccuracy: real("regulatory_accuracy").default(0),
+  partnershipAccuracy: real("partnership_accuracy").default(0),
+  technologyAccuracy: real("technology_accuracy").default(0),
+  marketAccuracy: real("market_accuracy").default(0),
+  totalClaimsScored: integer("total_claims_scored").notNull(),
+  claimsPending: integer("claims_pending").default(0),
+  rankOverall: integer("rank_overall").notNull(),
+  rankChange: integer("rank_change").default(0),
+});
+
+export const disputes = pgTable("dispute", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  claimId: uuid("claim_id").notNull().references(() => creatorClaims.id),
+  disputeType: disputeTypeEnum("dispute_type").notNull(),
+  evidence: text("evidence"),
+  submitterNote: text("submitter_note"),
+  status: disputeStatusEnum("status").notNull().default("pending"),
+  aiAnalysis: text("ai_analysis"),
+  aiConfidence: real("ai_confidence"),
+  resolvedAt: timestamp("resolved_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 // Insert schemas
 export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true });
 export const insertSourceSchema = createInsertSchema(sources).omit({ id: true, createdAt: true, updatedAt: true });
@@ -162,6 +280,11 @@ export const insertEvidenceSchema = createInsertSchema(evidenceItems).omit({ id:
 export const insertVerdictSchema = createInsertSchema(verdicts).omit({ id: true, createdAt: true });
 export const insertStorySchema = createInsertSchema(stories).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertStoryItemSchema = createInsertSchema(storyItems).omit({ id: true });
+export const insertCreatorSchema = createInsertSchema(creators).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertCreatorVideoSchema = createInsertSchema(creatorVideos).omit({ id: true, createdAt: true });
+export const insertCreatorClaimSchema = createInsertSchema(creatorClaims).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertCreatorScoreSchema = createInsertSchema(creatorScores).omit({ id: true });
+export const insertDisputeSchema = createInsertSchema(disputes).omit({ id: true, createdAt: true });
 
 // Types
 export type Source = typeof sources.$inferSelect;
@@ -182,3 +305,13 @@ export type StoryItem = typeof storyItems.$inferSelect;
 export type InsertStoryItem = z.infer<typeof insertStoryItemSchema>;
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
+export type Creator = typeof creators.$inferSelect;
+export type InsertCreator = z.infer<typeof insertCreatorSchema>;
+export type CreatorVideo = typeof creatorVideos.$inferSelect;
+export type InsertCreatorVideo = z.infer<typeof insertCreatorVideoSchema>;
+export type CreatorClaim = typeof creatorClaims.$inferSelect;
+export type InsertCreatorClaim = z.infer<typeof insertCreatorClaimSchema>;
+export type CreatorScore = typeof creatorScores.$inferSelect;
+export type InsertCreatorScore = z.infer<typeof insertCreatorScoreSchema>;
+export type Dispute = typeof disputes.$inferSelect;
+export type InsertDispute = z.infer<typeof insertDisputeSchema>;

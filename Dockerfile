@@ -18,6 +18,11 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 
+# Install python3 and yt-dlp for YouTube transcript extraction
+RUN apk add --no-cache python3 && \
+    wget -qO /usr/local/bin/yt-dlp https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp && \
+    chmod +x /usr/local/bin/yt-dlp
+
 # Copy built output, dependencies, and package manifest
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/node_modules ./node_modules

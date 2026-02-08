@@ -3,7 +3,8 @@ import bcrypt from "bcryptjs";
 import { storage } from "./storage.js";
 import { validateCommunityEvidence } from "./pipeline.js";
 import { pipeline } from "./pipeline-instance.js";
-import type { Claim, Verdict, EvidenceItem, Resolution, Source, SourceScore } from "../shared/schema.js";
+import { runCreatorPipeline, evaluateDispute } from "./creator-pipeline.js";
+import type { Claim, Verdict, EvidenceItem, Resolution, Source, SourceScore, Creator, CreatorVideo, CreatorClaim, CreatorScore, Dispute } from "../shared/schema.js";
 
 declare module "express-session" {
   interface SessionData {
@@ -874,6 +875,169 @@ router.get("/auth/me", async (req: Request, res: Response) => {
   } catch (err) {
     console.error("GET /auth/me error:", err);
     res.status(500).json({ error: "Failed to fetch user" });
+  }
+});
+
+// ─── GET /creators ──────────────────────────────────────────────────
+
+router.get("/creators", requireTier("tribune"), async (req: Request, res: Response) => {
+  try {
+    const activeOnly = req.query.active === "true";
+    const niche = req.query.niche as string | undefined;
+    const sort = req.query.sort as string | undefined;
+
+    let creators = await storage.getCreators(activeOnly || undefined);
+
+    if (niche) {
+      creators = creators.filter((c) => c.primaryNiche === niche);
+    }
+
+    if (sort === "accuracy") {
+      creators.sort((a, b) => (b.overallAccuracy ?? 0) - (a.overallAccuracy ?? 0));
+    } else if (sort === "claims") {
+      creators.sort((a, b) => (b.totalClaims ?? 0) - (a.totalClaims ?? 0));
+    } else if (sort === "newest") {
+      creators.sort(
+        (a, b) =>
+          new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime()
+      );
+    }
+
+    res.json({ data: creators });
+  } catch (err) {
+    console.error("GET /creators error:", err);
+    res.status(500).json({ error: "Failed to fetch creators" });
+  }
+});
+
+// ─── GET /creators/leaderboard ──────────────────────────────────────
+
+router.get("/creators/leaderboard", requireTier("tribune"), async (_req: Request, res: Response) => {
+  try {
+    const creators = await storage.getCreators();
+
+    const ranked = creators
+      .filter((c) => (c.totalClaims ?? 0) >= 5)
+      .sort((a, b) => (b.overallAccuracy ?? 0) - (a.overallAccuracy ?? 0))
+      .map((c, i) => ({
+        ...c,
+        rank: i + 1,
+        rankChange: c.rankChange ?? 0,
+      }));
+
+    res.json({ data: ranked });
+  } catch (err) {
+    console.error("GET /creators/leaderboard error:", err);
+    res.status(500).json({ error: "Failed to fetch leaderboard" });
+  }
+});
+
+// ─── GET /creators/:id ──────────────────────────────────────────────
+
+router.get("/creators/:id", requireTier("tribune"), async (req: Request, res: Response) => {
+  try {
+    const creatorId = param(req, "id");
+    const creator = await storage.getCreator(creatorId);
+    if (!creator) {
+      res.status(404).json({ error: "Creator not found" });
+      return;
+    }
+
+    const [videos, claims, scoreHistory] = await Promise.all([
+      storage.getCreatorVideos(creatorId, 10),
+      storage.getCreatorClaims({ creatorId, limit: 20 }),
+      storage.getCreatorScoreHistory(creatorId),
+    ]);
+
+    res.json({ creator, videos, claims, scoreHistory });
+  } catch (err) {
+    console.error("GET /creators/:id error:", err);
+    res.status(500).json({ error: "Failed to fetch creator" });
+  }
+});
+
+// ─── GET /creators/:id/claims ───────────────────────────────────────
+
+router.get("/creators/:id/claims", requireTier("tribune"), async (req: Request, res: Response) => {
+  try {
+    const creatorId = param(req, "id");
+    const status = req.query.status as string | undefined;
+    const category = req.query.category as string | undefined;
+    const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 50;
+    const offset = req.query.offset ? parseInt(req.query.offset as string, 10) : 0;
+
+    const claims = await storage.getCreatorClaims({ creatorId, status, category, limit, offset });
+
+    res.json({ data: claims });
+  } catch (err) {
+    console.error("GET /creators/:id/claims error:", err);
+    res.status(500).json({ error: "Failed to fetch creator claims" });
+  }
+});
+
+// ─── POST /creators/pipeline/run ────────────────────────────────────
+
+router.post("/creators/pipeline/run", async (_req: Request, res: Response) => {
+  try {
+    // Fire and forget
+    runCreatorPipeline(storage).catch((err) => {
+      console.error("[CreatorPipeline] Run failed:", err);
+    });
+
+    res.status(202).json({ message: "Creator pipeline started" });
+  } catch (err) {
+    console.error("POST /creators/pipeline/run error:", err);
+    res.status(500).json({ error: "Failed to trigger creator pipeline" });
+  }
+});
+
+// ─── POST /disputes ─────────────────────────────────────────────────
+
+router.post("/disputes", requireTier("tribune"), async (req: Request, res: Response) => {
+  try {
+    const { claimId, disputeType, evidence, submitterNote } = req.body || {};
+
+    if (!claimId || !disputeType) {
+      res.status(400).json({ error: "claimId and disputeType are required" });
+      return;
+    }
+
+    const claim = await storage.getCreatorClaim(claimId);
+    if (!claim) {
+      res.status(404).json({ error: "Creator claim not found" });
+      return;
+    }
+
+    const dispute = await storage.createDispute({
+      claimId,
+      disputeType,
+      evidence: evidence ?? null,
+      submitterNote: submitterNote ?? null,
+    });
+
+    // Trigger AI evaluation in background
+    evaluateDispute(storage, dispute.id).catch((err) => {
+      console.error("[CreatorPipeline] Dispute evaluation failed:", err);
+    });
+
+    res.status(201).json({ data: dispute });
+  } catch (err) {
+    console.error("POST /disputes error:", err);
+    res.status(500).json({ error: "Failed to create dispute" });
+  }
+});
+
+// ─── GET /disputes/:claimId ─────────────────────────────────────────
+
+router.get("/disputes/:claimId", requireTier("tribune"), async (req: Request, res: Response) => {
+  try {
+    const claimId = param(req, "claimId");
+    const disputes = await storage.getDisputesByClaimId(claimId);
+
+    res.json({ data: disputes });
+  } catch (err) {
+    console.error("GET /disputes/:claimId error:", err);
+    res.status(500).json({ error: "Failed to fetch disputes" });
   }
 });
 

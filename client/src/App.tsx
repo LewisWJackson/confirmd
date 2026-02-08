@@ -16,6 +16,9 @@ import BlindspotPage from "./pages/BlindspotPage";
 import SignalsPage from "./pages/SignalsPage";
 import LoginPage from "./pages/LoginPage";
 import SignupPage from "./pages/SignupPage";
+import CreatorsPage from "./pages/CreatorsPage";
+import CreatorDetailPage from "./pages/CreatorDetailPage";
+import LeaderboardPage from "./pages/LeaderboardPage";
 
 const App: React.FC = () => {
   const [location, setLocation] = useLocation();
@@ -27,6 +30,9 @@ const App: React.FC = () => {
     if (location.startsWith("/sources")) return "sources";
     if (location.startsWith("/stories/")) return "story";
     if (location.startsWith("/blindspot")) return "blindspot";
+    if (location.startsWith("/creators/")) return "creators";
+    if (location.startsWith("/creators")) return "creators";
+    if (location.startsWith("/leaderboard")) return "leaderboard";
     if (location.startsWith("/signals")) return "signals";
     if (location.startsWith("/about")) return "about";
     if (location.startsWith("/faq")) return "faq";
@@ -43,6 +49,8 @@ const App: React.FC = () => {
       claims: "/claims",
       sources: "/sources",
       blindspot: "/blindspot",
+      creators: "/creators",
+      leaderboard: "/leaderboard",
       signals: "/signals",
       about: "/about",
       faq: "/faq",
@@ -66,6 +74,9 @@ const App: React.FC = () => {
             <Route path="/sources/:id" component={SourceDetailPage} />
             <Route path="/sources" component={SourcesPage} />
             <Route path="/stories/:id" component={StoryDetailPage} />
+            <Route path="/creators/:id" component={CreatorDetailPage} />
+            <Route path="/creators" component={CreatorsPage} />
+            <Route path="/leaderboard" component={LeaderboardPage} />
             <Route path="/blindspot" component={BlindspotPage} />
             <Route path="/signals" component={SignalsPage} />
             <Route path="/about" component={AboutPage} />

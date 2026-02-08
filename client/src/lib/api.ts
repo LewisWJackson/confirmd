@@ -152,6 +152,52 @@ export async function logout(): Promise<void> {
   await postJson("/auth/logout");
 }
 
+// Creators
+export function fetchCreators(params?: {
+  search?: string;
+  tier?: string;
+  sort?: string;
+  limit?: number;
+  offset?: number;
+}) {
+  const qs = new URLSearchParams();
+  if (params?.search) qs.set("search", params.search);
+  if (params?.tier) qs.set("tier", params.tier);
+  if (params?.sort) qs.set("sort", params.sort);
+  if (params?.limit) qs.set("limit", String(params.limit));
+  if (params?.offset) qs.set("offset", String(params.offset));
+  const query = qs.toString();
+  return fetchJson<{ data: any[] }>(`/creators${query ? `?${query}` : ""}`).then(r => r.data);
+}
+
+export function fetchCreatorLeaderboard() {
+  return fetchJson<{ data: any[] }>("/creators/leaderboard").then(r => r.data);
+}
+
+export function fetchCreatorDetail(id: string) {
+  return fetchJson<any>(`/creators/${id}`);
+}
+
+export function fetchCreatorClaims(id: string, params?: {
+  status?: string;
+  category?: string;
+  limit?: number;
+  offset?: number;
+}) {
+  const qs = new URLSearchParams();
+  if (params?.status) qs.set("status", params.status);
+  if (params?.category) qs.set("category", params.category);
+  if (params?.limit) qs.set("limit", String(params.limit));
+  if (params?.offset) qs.set("offset", String(params.offset));
+  const query = qs.toString();
+  return fetchJson<{ data: any[] }>(`/creators/${id}/claims${query ? `?${query}` : ""}`).then(r => r.data);
+}
+
+// Disputes
+export function submitDispute(data: { claimId: string; reason: string; evidenceUrl?: string }) {
+  return postJson<any>("/disputes", data);
+}
+
 // Stripe
 export function createCheckoutSession(tier: string) {
   return postJson<{ url: string }>("/stripe/create-checkout", { tier });
