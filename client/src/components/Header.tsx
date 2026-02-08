@@ -20,7 +20,7 @@ const topicPills = [
 
 const navItems = [
   { path: "/", label: "Home" },
-  { path: "/blindspot", label: "Blindspot" },
+  { path: "/creator-claims", label: "Creator Claims" },
 ];
 
 export const Header: React.FC = () => {

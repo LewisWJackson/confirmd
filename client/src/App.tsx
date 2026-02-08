@@ -33,6 +33,7 @@ import TrialPage from "./pages/TrialPage";
 import CareersPage from "./pages/CareersPage";
 import ContactPage from "./pages/ContactPage";
 import TermsPage from "./pages/TermsPage";
+import CreatorClaimsPage from "./pages/CreatorClaimsPage";
 
 const App: React.FC = () => {
   return (
@@ -72,6 +73,7 @@ const App: React.FC = () => {
           <Route path="/plus" component={PlusPage} />
           <Route path="/login" component={LoginPage} />
           <Route path="/signup" component={SignupPage} />
+          <Route path="/creator-claims" component={CreatorClaimsPage} />
           <Route>
             <div className="max-w-7xl mx-auto px-6 py-32 text-center">
               <h1 className="text-5xl font-black text-content-primary tracking-tighter">404</h1>
