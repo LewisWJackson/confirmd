@@ -23,7 +23,46 @@ function timeAgo(dateStr: string): string {
   return `${Math.floor(diffDay / 7)}w ago`;
 }
 
-/* ─── Labeled Credibility Bar (Ground-News style) ────── */
+/* ─── Factuality helpers ─────────────────────────────── */
+
+function getFactualityLabel(trackRecord: number): { label: string; color: string; bg: string; border: string } {
+  if (trackRecord >= 70) return { label: "High Factuality", color: "text-emerald-700", bg: "bg-emerald-50", border: "border-emerald-200" };
+  if (trackRecord >= 50) return { label: "Mixed Factuality", color: "text-amber-700", bg: "bg-amber-50", border: "border-amber-200" };
+  return { label: "Low Factuality", color: "text-red-700", bg: "bg-red-50", border: "border-red-200" };
+}
+
+/* ─── Source Factuality Line (for single-source stories) ─ */
+
+function SourceFactualityLine({ source, variant = "dark" }: { source: any; variant?: "dark" | "light" }) {
+  const tr = source?.trackRecord ?? 0;
+  const fact = getFactualityLabel(tr);
+  const isLight = variant === "light";
+
+  return (
+    <div className="flex items-center gap-2">
+      {source?.logoUrl ? (
+        <img
+          src={source.logoUrl}
+          alt=""
+          className="w-4 h-4 rounded object-cover"
+          onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+        />
+      ) : (
+        <div className={`w-4 h-4 rounded ${isLight ? "bg-white/20" : "bg-stone-200"} flex items-center justify-center`}>
+          <span className={`text-[7px] font-bold ${isLight ? "text-white" : "text-stone-500"}`}>{(source?.displayName || "?").charAt(0)}</span>
+        </div>
+      )}
+      <span className={`text-[11px] font-bold ${isLight ? "text-white/90" : "text-stone-600"}`}>
+        {source?.displayName || "Unknown"}
+      </span>
+      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${fact.bg} ${fact.color} ${fact.border} border`}>
+        {fact.label}
+      </span>
+    </div>
+  );
+}
+
+/* ─── Labeled Credibility Bar (for multi-source stories) ─ */
 
 function LabeledCredibilityBar({
   distribution,
@@ -36,7 +75,7 @@ function LabeledCredibilityBar({
   if (total === 0) return null;
   const highPct = Math.round((distribution.high / total) * 100);
   const medPct = Math.round((distribution.medium / total) * 100);
-  const lowPct = 100 - highPct - medPct; // ensure they sum to 100
+  const lowPct = 100 - highPct - medPct;
 
   const h = size === "lg" ? "h-6" : size === "md" ? "h-5" : "h-4";
   const textSize = size === "lg" ? "text-[10px]" : "text-[8px]";
@@ -50,7 +89,7 @@ function LabeledCredibilityBar({
         >
           {highPct >= 15 && (
             <span className={`${textSize} font-bold text-white leading-none`}>
-              High {highPct}%
+              Factual {highPct}%
             </span>
           )}
         </div>
@@ -62,7 +101,7 @@ function LabeledCredibilityBar({
         >
           {medPct >= 15 && (
             <span className={`${textSize} font-bold text-white leading-none`}>
-              Med {medPct}%
+              Mixed {medPct}%
             </span>
           )}
         </div>
@@ -105,6 +144,8 @@ function ConfidenceBadge({ confidence }: { confidence: string }) {
 
 function HeroStory({ story, onClick }: { story: any; onClick: () => void }) {
   const dist = story.credibilityDistribution || { high: 0, medium: 0, low: 0 };
+  const topSources = story.topSources || [];
+  const isSingleSource = (story.sourceCount || 0) <= 1;
 
   return (
     <div
@@ -135,17 +176,21 @@ function HeroStory({ story, onClick }: { story: any; onClick: () => void }) {
             </span>
           )}
           <span className="text-[9px] font-bold tracking-widest uppercase px-2.5 py-1 rounded-md bg-white/20 text-white backdrop-blur-sm">
-            {story.sourceCount || 0} sources
+            {story.sourceCount || 0} {(story.sourceCount || 0) === 1 ? "source" : "sources"}
           </span>
         </div>
 
         {/* Headline overlay at bottom */}
-        <div className="absolute bottom-0 left-0 right-0 p-5 pb-3">
+        <div className="absolute bottom-0 left-0 right-0 p-5 pb-4">
           <h2 className="text-xl md:text-2xl font-black text-white tracking-tight leading-tight mb-3 group-hover:text-cyan-200 transition-colors">
             {story.title}
           </h2>
-          {/* Credibility bar inside image area */}
-          <LabeledCredibilityBar distribution={dist} size="md" />
+          {/* Single source: show source name + factuality badge. Multi: show bar */}
+          {isSingleSource && topSources[0] ? (
+            <SourceFactualityLine source={topSources[0]} variant="light" />
+          ) : (
+            <LabeledCredibilityBar distribution={dist} size="md" />
+          )}
         </div>
       </div>
     </div>
@@ -156,6 +201,8 @@ function HeroStory({ story, onClick }: { story: any; onClick: () => void }) {
 
 function StoryListRow({ story, onClick }: { story: any; onClick: () => void }) {
   const dist = story.credibilityDistribution || { high: 0, medium: 0, low: 0 };
+  const topSources = story.topSources || [];
+  const isSingleSource = (story.sourceCount || 0) <= 1;
 
   return (
     <div
@@ -180,11 +227,17 @@ function StoryListRow({ story, onClick }: { story: any; onClick: () => void }) {
           <h3 className="text-[15px] font-bold text-stone-900 leading-snug mb-2 group-hover:text-cyan-700 transition-colors line-clamp-2">
             {story.title}
           </h3>
-          {/* Credibility bar */}
-          <LabeledCredibilityBar distribution={dist} size="sm" />
-          <div className="mt-1.5 text-[10px] font-medium text-stone-400">
-            {story.sourceCount || 0} sources
-          </div>
+          {/* Single source: show source + factuality. Multi: show bar + count */}
+          {isSingleSource && topSources[0] ? (
+            <SourceFactualityLine source={topSources[0]} />
+          ) : (
+            <>
+              <LabeledCredibilityBar distribution={dist} size="sm" />
+              <div className="mt-1.5 text-[10px] font-medium text-stone-400">
+                {story.sourceCount || 0} sources
+              </div>
+            </>
+          )}
         </div>
         {story.imageUrl && (
           <div className="w-20 h-20 rounded-lg overflow-hidden flex-shrink-0 bg-stone-200">
@@ -245,11 +298,17 @@ function TopNewsSidebar({
                   {story.title}
                 </p>
                 <div className="mt-1">
-                  <LabeledCredibilityBar distribution={dist} size="sm" />
+                  {(story.sourceCount || 0) <= 1 && (story.topSources || [])[0] ? (
+                    <SourceFactualityLine source={story.topSources[0]} />
+                  ) : (
+                    <>
+                      <LabeledCredibilityBar distribution={dist} size="sm" />
+                      <span className="text-[9px] text-stone-400 mt-0.5 block">
+                        {story.sourceCount || 0} sources
+                      </span>
+                    </>
+                  )}
                 </div>
-                <span className="text-[9px] text-stone-400 mt-0.5 block">
-                  {story.sourceCount || 0} sources
-                </span>
               </div>
             </div>
           );
