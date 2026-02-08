@@ -47,55 +47,60 @@ const plusFaqs: PlusFaqItem[] = [
 
 const tiers = [
   {
-    name: "Scholar",
-    price: "Free",
-    priceNote: "forever",
-    description: "The essentials for staying informed.",
-    ctaText: "Get Started",
+    name: "Vantage",
+    monthlyPrice: "$5.99",
+    annualPrice: "$3.99",
+    annualTotal: "$47.88",
+    description: "See the full picture.",
+    ctaText: "Start Free Trial",
+    recommended: true,
+    tagline: "Most Popular",
+    features: [
+      { text: "Main news feed", included: true },
+      { text: "Verdict labels & confidence", included: true },
+      { text: "Creator prediction tracking", included: true },
+      { text: "25 watchlist items", included: true },
+      { text: "Full evidence ladders", included: true },
+      { text: "Source credibility history", included: true },
+      { text: "90-day claim history", included: true },
+      { text: "Blindspot reports", included: true },
+      { text: "API access", included: false },
+      { text: "Data export", included: false },
+    ],
+  },
+  {
+    name: "Premium",
+    monthlyPrice: "$3.99",
+    annualPrice: "$2.49",
+    annualTotal: "$29.88",
+    description: "Rise above the noise.",
+    ctaText: "Start Free Trial",
     recommended: false,
-    image: "scholar",
+    tagline: "Best Value",
     features: [
       { text: "Main news feed", included: true },
       { text: "Basic verdict labels", included: true },
-      { text: "3 watchlist items", included: true },
-      { text: "2 evidence previews per claim", included: true },
-      { text: "7-day claim history", included: true },
-      { text: "Full evidence ladders", included: false },
-      { text: "Real-time alerts", included: false },
-      { text: "API access", included: false },
-      { text: "Data export", included: false },
-    ],
-  },
-  {
-    name: "Tribune",
-    price: "$9.99",
-    priceNote: "/month",
-    description: "Full verification power for serious researchers.",
-    ctaText: "Start Free Trial",
-    recommended: true,
-    image: "tribune",
-    features: [
-      { text: "Everything in Scholar", included: true },
+      { text: "10 watchlist items", included: true },
       { text: "Full evidence ladders", included: true },
-      { text: "25 watchlist items", included: true },
       { text: "Real-time alerts", included: true },
-      { text: "Source credibility history", included: true },
-      { text: "90-day claim history", included: true },
+      { text: "30-day claim history", included: true },
       { text: "Priority support", included: true },
+      { text: "Blindspot reports", included: false },
       { text: "API access", included: false },
       { text: "Data export", included: false },
     ],
   },
   {
-    name: "Oracle",
-    price: "$29.99",
-    priceNote: "/month",
-    description: "Institutional-grade intelligence and data access.",
+    name: "Pro",
+    monthlyPrice: "$14.99",
+    annualPrice: "$9.99",
+    annualTotal: "$119.88",
+    description: "Get clarity.",
     ctaText: "Contact Us",
     recommended: false,
-    image: "oracle",
+    tagline: "For Teams",
     features: [
-      { text: "Everything in Tribune", included: true },
+      { text: "Everything in Vantage", included: true },
       { text: "API access (REST & WebSocket)", included: true },
       { text: "Data export (CSV, JSON)", included: true },
       { text: "100 watchlist items", included: true },
@@ -109,47 +114,49 @@ const tiers = [
 ];
 
 const comparisonFeatures = [
-  { feature: "News Feed", scholar: true, tribune: true, oracle: true },
-  { feature: "Verdict Labels", scholar: true, tribune: true, oracle: true },
+  { feature: "News Feed", premium: true, vantage: true, pro: true },
+  { feature: "Verdict Labels", premium: "Basic", vantage: "Full + Confidence", pro: "Full + Confidence" },
+  { feature: "Creator Predictions", premium: false, vantage: true, pro: true },
   {
     feature: "Evidence Preview",
-    scholar: "2 per claim",
-    tribune: "Full ladder",
-    oracle: "Full ladder",
+    premium: "Full ladder",
+    vantage: "Full ladder",
+    pro: "Full ladder",
   },
   {
     feature: "Watchlist Items",
-    scholar: "3",
-    tribune: "25",
-    oracle: "100",
+    premium: "10",
+    vantage: "25",
+    pro: "100",
   },
-  { feature: "Real-Time Alerts", scholar: false, tribune: true, oracle: true },
+  { feature: "Real-Time Alerts", premium: true, vantage: true, pro: true },
+  { feature: "Blindspot Reports", premium: false, vantage: true, pro: true },
   {
     feature: "Source History",
-    scholar: false,
-    tribune: "90 days",
-    oracle: "Unlimited",
+    premium: "30 days",
+    vantage: "90 days",
+    pro: "Unlimited",
   },
   {
     feature: "Claim History",
-    scholar: "7 days",
-    tribune: "90 days",
-    oracle: "Unlimited",
+    premium: "30 days",
+    vantage: "90 days",
+    pro: "Unlimited",
   },
-  { feature: "Priority Support", scholar: false, tribune: true, oracle: true },
-  { feature: "API Access", scholar: false, tribune: false, oracle: true },
-  { feature: "Data Export", scholar: false, tribune: false, oracle: true },
+  { feature: "Priority Support", premium: true, vantage: true, pro: true },
+  { feature: "API Access", premium: false, vantage: false, pro: true },
+  { feature: "Data Export", premium: false, vantage: false, pro: true },
   {
     feature: "Custom Alert Rules",
-    scholar: false,
-    tribune: false,
-    oracle: true,
+    premium: false,
+    vantage: false,
+    pro: true,
   },
   {
     feature: "Early Access Features",
-    scholar: false,
-    tribune: false,
-    oracle: true,
+    premium: false,
+    vantage: false,
+    pro: true,
   },
 ];
 
@@ -159,6 +166,7 @@ const PlusPage: React.FC = () => {
   const [loadingTier, setLoadingTier] = useState<string | null>(null);
   const [showSuccess, setShowSuccess] = useState(false);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
+  const [billingPeriod, setBillingPeriod] = useState<"monthly" | "annual">("annual");
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -171,12 +179,8 @@ const PlusPage: React.FC = () => {
   const handleSubscribe = async (tierName: string) => {
     const key = tierName.toLowerCase();
     setCheckoutError(null);
-    if (key === "scholar") {
-      setLocation("/signup");
-      return;
-    }
-    if (key === "oracle") {
-      window.location.href = "mailto:hello@confirmd.io?subject=Oracle%20Tier%20Inquiry";
+    if (key === "pro") {
+      window.location.href = "mailto:hello@confirmd.io?subject=Pro%20Tier%20Inquiry";
       return;
     }
     setLoadingTier(key);
@@ -218,14 +222,39 @@ const PlusPage: React.FC = () => {
       )}
 
       {/* Hero */}
-      <section className="pt-16 pb-12 text-center">
+      <section className="pt-16 pb-8 text-center">
         <div className="max-w-5xl mx-auto px-6 md:px-12">
           <h1 className="text-4xl md:text-5xl font-bold text-content-primary tracking-tight mb-4">
             Subscription Options
           </h1>
-          <p className="text-content-secondary text-lg max-w-2xl mx-auto">
+          <p className="text-content-secondary text-lg max-w-2xl mx-auto mb-8">
             Choose the plan that fits your verification needs. Upgrade or downgrade at any time.
           </p>
+
+          {/* Billing toggle */}
+          <div className="inline-flex items-center bg-surface-card border border-border rounded-full p-1">
+            <button
+              onClick={() => setBillingPeriod("monthly")}
+              className={`px-5 py-2 rounded-full text-sm font-bold transition-all ${
+                billingPeriod === "monthly"
+                  ? "bg-accent text-accent-text"
+                  : "text-content-secondary hover:text-content-primary"
+              }`}
+            >
+              Monthly
+            </button>
+            <button
+              onClick={() => setBillingPeriod("annual")}
+              className={`px-5 py-2 rounded-full text-sm font-bold transition-all ${
+                billingPeriod === "annual"
+                  ? "bg-accent text-accent-text"
+                  : "text-content-secondary hover:text-content-primary"
+              }`}
+            >
+              Annual
+              <span className="ml-1.5 text-[10px] font-black uppercase tracking-wider opacity-80">Save 33%</span>
+            </button>
+          </div>
         </div>
       </section>
 
@@ -251,95 +280,111 @@ const PlusPage: React.FC = () => {
       {/* Pricing Cards */}
       <section className="max-w-6xl mx-auto px-6 md:px-12 pb-20">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {tiers.map((tier) => (
-            <div
-              key={tier.name}
-              className={`rounded-xl border border-border bg-surface-card overflow-hidden flex flex-col transition-all hover:bg-surface-card-hover ${
-                tier.recommended ? "ring-2 ring-accent" : ""
-              }`}
-            >
-              {/* Tier Badge */}
-              <div className="px-6 pt-6 pb-2 flex items-center justify-between">
-                <span className={`text-xs font-bold uppercase tracking-wider px-3 py-1 rounded-full ${
-                  tier.recommended
-                    ? "bg-accent text-accent-text"
-                    : "bg-surface-secondary text-content-secondary"
-                }`}>
-                  {tier.name}
-                </span>
-                {tier.recommended && (
-                  <span className="text-xs font-semibold text-accent">Recommended</span>
-                )}
-              </div>
-
-              {/* Image placeholder */}
-              <div className="px-6 py-4">
-                <div className="w-full h-40 bg-surface-secondary rounded-lg flex items-center justify-center">
-                  <span className="text-content-muted text-sm italic">
-                    {tier.image === "scholar" && "See the full picture."}
-                    {tier.image === "tribune" && "Rise above the noise."}
-                    {tier.image === "oracle" && "Get clarity."}
-                  </span>
-                </div>
-              </div>
-
-              {/* Price */}
-              <div className="px-6 pb-4">
-                <div className="flex items-baseline">
-                  <span className="text-3xl font-bold text-content-primary">{tier.price}</span>
-                  <span className="text-content-muted text-sm ml-1">{tier.priceNote}</span>
-                </div>
-                <p className="text-content-secondary text-sm mt-2">{tier.description}</p>
-              </div>
-
-              {/* Features */}
-              <div className="px-6 pb-6 flex-1">
-                <ul className="space-y-3">
-                  {tier.features.map((f) => (
-                    <li key={f.text} className="flex items-start space-x-2">
-                      {f.included ? (
-                        <svg className="w-4 h-4 text-accent flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                        </svg>
-                      ) : (
-                        <svg className="w-4 h-4 text-content-muted flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 12H6" />
-                        </svg>
-                      )}
-                      <span className={`text-sm ${f.included ? "text-content-primary" : "text-content-muted"}`}>
-                        {f.text}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              {/* CTA */}
-              <div className="px-6 pb-6">
-                <button
-                  onClick={() => handleSubscribe(tier.name)}
-                  disabled={loadingTier === tier.name.toLowerCase()}
-                  className={`w-full py-3 rounded-lg text-sm font-bold transition-all disabled:opacity-60 disabled:cursor-wait ${
+          {tiers.map((tier) => {
+            const price = billingPeriod === "annual" ? tier.annualPrice : tier.monthlyPrice;
+            const period = billingPeriod === "annual" ? "/mo" : "/mo";
+            return (
+              <div
+                key={tier.name}
+                className={`rounded-xl border bg-surface-card overflow-hidden flex flex-col transition-all hover:bg-surface-card-hover ${
+                  tier.recommended ? "ring-2 ring-accent border-accent" : "border-border"
+                }`}
+              >
+                {/* Tier Badge + tagline */}
+                <div className="px-6 pt-6 pb-2 flex items-center justify-between">
+                  <span className={`text-xs font-bold uppercase tracking-wider px-3 py-1 rounded-full ${
                     tier.recommended
-                      ? "bg-accent text-accent-text hover:bg-accent-hover"
-                      : "border border-border text-content-primary hover:bg-surface-secondary"
-                  }`}
-                >
-                  {loadingTier === tier.name.toLowerCase() ? (
-                    <span className="flex items-center justify-center space-x-2">
-                      <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                      </svg>
-                      <span>Redirecting...</span>
+                      ? "bg-accent text-accent-text"
+                      : "bg-surface-secondary text-content-secondary"
+                  }`}>
+                    {tier.name}
+                  </span>
+                  {tier.tagline && (
+                    <span className={`text-[10px] font-bold uppercase tracking-wider ${
+                      tier.recommended ? "text-accent" : "text-content-muted"
+                    }`}>
+                      {tier.tagline}
                     </span>
-                  ) : (
-                    tier.ctaText
                   )}
-                </button>
+                </div>
+
+                {/* Image area with tagline */}
+                <div className="px-6 py-4">
+                  <div className="w-full h-36 bg-surface-secondary rounded-lg flex items-center justify-center relative overflow-hidden">
+                    <div className="absolute inset-0 bg-gradient-to-br from-accent/5 to-transparent" />
+                    <span className="text-content-muted text-sm italic relative z-10">
+                      {tier.description}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Price */}
+                <div className="px-6 pb-4">
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-3xl font-bold text-content-primary">{price}</span>
+                    <span className="text-content-muted text-sm">{period}</span>
+                  </div>
+                  {billingPeriod === "annual" && (
+                    <p className="text-[11px] text-content-muted mt-1">
+                      {tier.annualTotal} billed annually
+                    </p>
+                  )}
+                  {billingPeriod === "annual" && (
+                    <p className="text-[11px] text-accent font-bold mt-0.5">
+                      Save vs. monthly
+                    </p>
+                  )}
+                </div>
+
+                {/* Features */}
+                <div className="px-6 pb-6 flex-1">
+                  <ul className="space-y-3">
+                    {tier.features.map((f) => (
+                      <li key={f.text} className="flex items-start space-x-2">
+                        {f.included ? (
+                          <svg className="w-4 h-4 text-accent flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                          </svg>
+                        ) : (
+                          <svg className="w-4 h-4 text-content-muted flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 12H6" />
+                          </svg>
+                        )}
+                        <span className={`text-sm ${f.included ? "text-content-primary" : "text-content-muted"}`}>
+                          {f.text}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                {/* CTA */}
+                <div className="px-6 pb-6">
+                  <button
+                    onClick={() => handleSubscribe(tier.name)}
+                    disabled={loadingTier === tier.name.toLowerCase()}
+                    className={`w-full py-3 rounded-lg text-sm font-bold transition-all disabled:opacity-60 disabled:cursor-wait ${
+                      tier.recommended
+                        ? "bg-accent text-accent-text hover:bg-accent-hover"
+                        : "border border-border text-content-primary hover:bg-surface-secondary"
+                    }`}
+                  >
+                    {loadingTier === tier.name.toLowerCase() ? (
+                      <span className="flex items-center justify-center space-x-2">
+                        <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                        </svg>
+                        <span>Redirecting...</span>
+                      </span>
+                    ) : (
+                      tier.ctaText
+                    )}
+                  </button>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         {/* Trusted by logos placeholder */}
@@ -409,14 +454,25 @@ const PlusPage: React.FC = () => {
                     Feature
                   </th>
                   <th className="p-4 md:p-6 text-xs font-bold uppercase tracking-wider text-content-muted text-center">
-                    Scholar
+                    Premium
                   </th>
                   <th className="p-4 md:p-6 text-xs font-bold uppercase tracking-wider text-accent text-center">
-                    Tribune
+                    Vantage
                   </th>
                   <th className="p-4 md:p-6 text-xs font-bold uppercase tracking-wider text-content-muted text-center">
-                    Oracle
+                    Pro
                   </th>
+                </tr>
+                <tr className="border-b border-border bg-surface-secondary/50">
+                  <td className="p-4 md:p-6" />
+                  {tiers.map((t) => (
+                    <td key={t.name} className="p-4 md:p-6 text-center">
+                      <span className="text-sm font-bold text-content-primary">
+                        {billingPeriod === "annual" ? t.annualPrice : t.monthlyPrice}
+                      </span>
+                      <span className="text-content-muted text-xs">/mo</span>
+                    </td>
+                  ))}
                 </tr>
               </thead>
               <tbody>
@@ -428,7 +484,7 @@ const PlusPage: React.FC = () => {
                     <td className="p-4 md:p-6 text-sm font-semibold text-content-primary">
                       {row.feature}
                     </td>
-                    {(["scholar", "tribune", "oracle"] as const).map((t) => {
+                    {(["premium", "vantage", "pro"] as const).map((t) => {
                       const val = row[t];
                       return (
                         <td key={t} className="p-4 md:p-6 text-center">
@@ -486,7 +542,7 @@ const PlusPage: React.FC = () => {
             </p>
           </div>
           <button
-            onClick={() => setLocation("/group-subscriptions")}
+            onClick={() => setLocation("/groups")}
             className="border border-accent text-accent px-6 py-3 rounded-lg text-sm font-bold hover:bg-accent hover:text-accent-text transition-all whitespace-nowrap"
           >
             Learn More
@@ -570,11 +626,11 @@ const PlusPage: React.FC = () => {
             Every subscription helps us remain independent, unbiased, and committed to factual reporting.
           </p>
           <button
-            onClick={() => handleSubscribe("Tribune")}
-            disabled={loadingTier === "tribune"}
+            onClick={() => handleSubscribe("Vantage")}
+            disabled={loadingTier === "vantage"}
             className="bg-accent text-accent-text px-8 py-4 rounded-lg text-sm font-bold hover:bg-accent-hover transition-all disabled:opacity-60 disabled:cursor-wait"
           >
-            {loadingTier === "tribune" ? (
+            {loadingTier === "vantage" ? (
               <span className="flex items-center justify-center space-x-2">
                 <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />

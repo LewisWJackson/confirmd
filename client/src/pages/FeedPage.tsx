@@ -308,90 +308,148 @@ function BlindspotSection({
   );
 }
 
-/* --- Right Sidebar: Creator Predictions ----------------------- */
+/* --- Creator Predictions (prominent center section) ---------- */
 
 function CreatorPredictionsSection({
   predictions,
   isFree,
   onPredictionClick,
+  onViewAll,
 }: {
   predictions: any[];
   isFree: boolean;
   onPredictionClick: (prediction: any) => void;
+  onViewAll: () => void;
 }) {
-  const items = predictions.slice(0, 5);
+  const items = predictions.slice(0, 6);
   if (items.length === 0) return null;
 
   return (
-    <div className="bg-surface-card rounded-xl p-4 border border-border">
-      <div className="flex items-center gap-2 mb-3">
-        <svg className="w-4 h-4 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M9.663 17h4.674M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
-          />
-        </svg>
-        <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-accent">
-          Creator Predictions
-        </h3>
+    <div className="my-8">
+      {/* Section header */}
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <svg className="w-5 h-5 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M9.663 17h4.674M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
+            />
+          </svg>
+          <h2 className="text-sm font-black uppercase tracking-[0.15em] text-accent">
+            Creator Predictions
+          </h2>
+        </div>
+        <button
+          onClick={onViewAll}
+          className="text-[11px] font-bold text-accent hover:text-accent-hover transition-colors"
+        >
+          View All &rarr;
+        </button>
       </div>
-      <div className="space-y-0">
+
+      {/* Horizontal scrolling cards */}
+      <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1 snap-x snap-mandatory scrollbar-hide" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}>
         {items.map((prediction: any, idx: number) => {
           const creatorName = prediction.creator?.channelName || "Unknown";
           const avatarUrl = prediction.creator?.avatarUrl;
+          const thumbnailUrl = prediction.video?.thumbnailUrl;
           const creatorTier = prediction.creator?.tier;
           const claimText = prediction.claimText || "";
           const confidence = prediction.confidenceLanguage || "";
           const accuracy = prediction.creator?.overallAccuracy;
-          const totalClaims = prediction.creator?.totalClaims;
 
           return (
             <div
               key={prediction.id || idx}
               onClick={() => onPredictionClick(prediction)}
-              className="cursor-pointer py-3 border-b border-border last:border-b-0 hover:bg-surface-card-hover transition-colors rounded px-1 -mx-1"
+              className="cursor-pointer flex-shrink-0 w-[260px] snap-start bg-surface-card rounded-xl border border-border overflow-hidden hover:bg-surface-card-hover transition-all group"
             >
-              {/* Avatar + name row */}
-              <div className="flex items-center gap-2 mb-1.5">
-                <div className="w-6 h-6 rounded-full bg-accent/20 flex items-center justify-center overflow-hidden flex-shrink-0">
-                  {avatarUrl ? (
-                    <img
-                      src={avatarUrl}
-                      alt={creatorName}
-                      className="w-full h-full object-cover"
-                      onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-                    />
-                  ) : (
-                    <span className="text-[9px] font-bold text-accent">
-                      {creatorName.charAt(0)}
-                    </span>
-                  )}
+              {/* Thumbnail / video preview */}
+              <div className="relative aspect-video bg-surface-secondary overflow-hidden">
+                {thumbnailUrl ? (
+                  <img
+                    src={thumbnailUrl}
+                    alt=""
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                    onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                  />
+                ) : (
+                  <div className="w-full h-full bg-gradient-to-br from-accent/10 to-surface-card flex items-center justify-center">
+                    <svg className="w-8 h-8 text-accent/30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                )}
+                {/* Confidence overlay */}
+                {confidence && (
+                  <div className="absolute top-2 right-2">
+                    <ConfidenceBadge confidence={confidence} />
+                  </div>
+                )}
+              </div>
+
+              {/* Card body */}
+              <div className="p-3">
+                {/* Creator row */}
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-7 h-7 rounded-full bg-accent/20 flex items-center justify-center overflow-hidden flex-shrink-0 ring-1 ring-border">
+                    {avatarUrl ? (
+                      <img
+                        src={avatarUrl}
+                        alt={creatorName}
+                        className="w-full h-full object-cover"
+                        onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                      />
+                    ) : (
+                      <span className="text-[10px] font-bold text-accent">
+                        {creatorName.charAt(0)}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[12px] font-bold text-content-primary truncate">
+                        {creatorName}
+                      </span>
+                      {creatorTier && <TierBadge tier={creatorTier} size="sm" />}
+                    </div>
+                    {accuracy != null && (
+                      <span className="text-[9px] text-content-muted">
+                        {Math.round(accuracy)}% accuracy
+                      </span>
+                    )}
+                  </div>
                 </div>
-                <span className="text-[11px] font-bold text-content-primary truncate">
-                  {creatorName}
-                </span>
-                {creatorTier && <TierBadge tier={creatorTier} size="sm" />}
-              </div>
-              {/* Claim text */}
-              <p className="text-[11px] text-content-secondary leading-snug line-clamp-2 mb-1.5">
-                {claimText}
-              </p>
-              {/* Meta row */}
-              <div className="flex flex-wrap items-center gap-1.5">
-                {confidence && <ConfidenceBadge confidence={confidence} />}
+
+                {/* Claim text */}
+                <p className="text-[12px] text-content-secondary leading-snug line-clamp-2">
+                  {claimText}
+                </p>
+
+                {/* Category pill */}
                 {prediction.category && (
-                  <span className="px-1.5 py-0.5 bg-accent/10 text-accent rounded text-[8px] font-bold uppercase tracking-wider">
-                    {prediction.category}
-                  </span>
-                )}
-                {accuracy != null && (
-                  <span className="text-[8px] font-bold text-content-muted">
-                    {Math.round(accuracy)}% acc / {totalClaims || 0} claims
-                  </span>
+                  <div className="mt-2">
+                    <span className="px-2 py-0.5 bg-accent/10 text-accent rounded text-[9px] font-bold uppercase tracking-wider">
+                      {prediction.category}
+                    </span>
+                  </div>
                 )}
               </div>
+
+              {/* Premium lock for free users */}
+              {isFree && (
+                <div className="px-3 pb-3">
+                  <div className="flex items-center gap-1 text-[9px] text-accent font-bold">
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                    </svg>
+                    Upgrade for full details
+                  </div>
+                </div>
+              )}
             </div>
           );
         })}
@@ -631,6 +689,15 @@ export default function FeedPage() {
                   onClick={() => handleStoryClick(heroStory.id)}
                 />
               )}
+
+              {/* Creator Predictions - prominent placement */}
+              <CreatorPredictionsSection
+                predictions={creatorPredictions}
+                isFree={isFree}
+                onPredictionClick={handlePredictionClick}
+                onViewAll={() => setLocation("/creators")}
+              />
+
               <div>
                 {centerStories.map((story: any) => (
                   <StoryListRow
@@ -652,11 +719,6 @@ export default function FeedPage() {
                 <DailyLocalNews
                   stories={sidebarStories}
                   onStoryClick={handleStoryClick}
-                />
-                <CreatorPredictionsSection
-                  predictions={creatorPredictions}
-                  isFree={isFree}
-                  onPredictionClick={handlePredictionClick}
                 />
                 <TrendingAssetsSection stories={sidebarStories} />
               </div>
