@@ -298,6 +298,20 @@ export class DrizzleStorage implements IStorage {
     return { story, claims: claimResults };
   }
 
+  async getStoryByClaimId(claimId: string): Promise<Story | null> {
+    const [link] = await this.db
+      .select()
+      .from(storyClaims)
+      .where(eq(storyClaims.claimId, claimId))
+      .limit(1);
+    if (!link) return null;
+    const [story] = await this.db
+      .select()
+      .from(stories)
+      .where(eq(stories.id, link.storyId));
+    return story ?? null;
+  }
+
   async getStoriesForFeed(limit: number = 50, offset: number = 0): Promise<StoryFeedItem[]> {
     const allStories = await this.db
       .select()

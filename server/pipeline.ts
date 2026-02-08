@@ -1065,92 +1065,15 @@ function delay(ms: number): Promise<void> {
 // ============================================
 
 /**
- * Generate a curated news-photography image URL for a story.
- * Uses a large pool of high-quality Unsplash photos mapped by keyword,
- * with consistent selection based on title hash for determinism.
+ * Generate a unique AI-generated image URL for a story via Pollinations.ai.
+ * Each story gets a truly unique image based on its title and category.
  */
 function getStoryImageUrl(title: string, category: string): string {
-  const text = `${title} ${category}`.toLowerCase();
-
-  // Curated pools of real Unsplash photos by topic
-  const pools: Record<string, string[]> = {
-    bitcoin: [
-      "photo-1518546305927-5a555bb7020d", "photo-1622630998477-20aa696ecb05",
-      "photo-1625806335347-9cd73e37e76a", "photo-1516245834210-c4c142787335",
-      "photo-1621761191319-c6fb62004040", "photo-1639762681485-074b7f938ba0",
-    ],
-    ethereum: [
-      "photo-1622630998477-20aa696ecb05", "photo-1639762681057-408e52192e55",
-      "photo-1642790106117-e829e14a795f", "photo-1622020457014-aed71cc0b9c4",
-    ],
-    regulation: [
-      "photo-1589829545856-d10d557cf95f", "photo-1450101499163-c8848e968838",
-      "photo-1505663912202-ac22d4cb3707", "photo-1436450412740-6b988f486c6b",
-      "photo-1521791136064-7986c2920216",
-    ],
-    defi: [
-      "photo-1620321023374-d1a68fbc720d", "photo-1551288049-bebda4e38f71",
-      "photo-1639322537228-f710d846310a", "photo-1642104704074-907c0698cbd9",
-    ],
-    nft: [
-      "photo-1620712943543-bcc4688e7485", "photo-1637858868799-7f26a0640eb6",
-      "photo-1561070791-2526d30994b5",
-    ],
-    security: [
-      "photo-1563013544-824ae1b704d3", "photo-1526374965328-7f61d4dc18c5",
-      "photo-1510511459019-5dda7724fd87", "photo-1555949963-ff9fe0c870eb",
-    ],
-    markets: [
-      "photo-1611974789855-9c2a0a7236a3", "photo-1535320903710-d993d3d77d29",
-      "photo-1590283603385-17ffb3a7f29f", "photo-1642790551116-18e150f248e3",
-      "photo-1468254095679-bbcba94a7066",
-    ],
-    trading: [
-      "photo-1611974789855-9c2a0a7236a3", "photo-1518546305927-5a555bb7020d",
-      "photo-1642104704074-907c0698cbd9", "photo-1460925895917-afdab827c52f",
-    ],
-    technology: [
-      "photo-1518770660439-4636190af475", "photo-1488590528505-98d2b5aba04b",
-      "photo-1461749280684-dccba630e2f6", "photo-1550751827-4bd374c3f58b",
-    ],
-    general: [
-      "photo-1523475496153-3d6cc0f0bf19", "photo-1504711434969-e33886168d3c",
-      "photo-1504639725590-34d0984388bd", "photo-1526628953301-3e589a6a8b74",
-      "photo-1559526324-4b87b5e36e44", "photo-1551288049-bebda4e38f71",
-    ],
-  };
-
-  // Match keywords to find the best pool
-  const keywords: [string, string[]][] = [
-    ["bitcoin", ["bitcoin", "btc", "satoshi", "mining", "halving"]],
-    ["ethereum", ["ethereum", "eth", "vitalik", "solidity", "layer 2", "l2"]],
-    ["regulation", ["sec", "regulation", "filing", "lawsuit", "compliance", "senator", "congress", "ban", "tax", "legal"]],
-    ["defi", ["defi", "liquidity", "yield", "staking", "swap", "aave", "uniswap", "stablecoin", "tether"]],
-    ["nft", ["nft", "opensea", "collectible", "metaverse", "token", "art"]],
-    ["security", ["hack", "exploit", "security", "breach", "scam", "fraud", "steal", "seize"]],
-    ["markets", ["price", "rally", "crash", "sentiment", "market", "bearish", "bullish", "etf", "fund"]],
-    ["trading", ["trading", "exchange", "coinbase", "binance", "volume", "futures", "options"]],
-    ["technology", ["upgrade", "launch", "protocol", "blockchain", "network", "ai", "platform"]],
-  ];
-
-  let poolKey = "general";
-  for (const [key, terms] of keywords) {
-    if (terms.some((t) => text.includes(t))) {
-      poolKey = key;
-      break;
-    }
-  }
-
-  const pool = pools[poolKey] || pools.general;
-
-  // Deterministic selection based on title hash
-  let hash = 0;
-  for (let i = 0; i < title.length; i++) {
-    hash = ((hash << 5) - hash + title.charCodeAt(i)) | 0;
-  }
-  const index = Math.abs(hash) % pool.length;
-
-  return `https://images.unsplash.com/${pool[index]}?auto=format&fit=crop&w=1200&q=80`;
+  // Build a descriptive prompt for AI image generation
+  const cleanTitle = title.replace(/[^a-zA-Z0-9 ]/g, '').slice(0, 80);
+  const prompt = `professional editorial news photograph about ${cleanTitle}, ${category}, photojournalism style, high quality, detailed`;
+  const encoded = encodeURIComponent(prompt);
+  return `https://image.pollinations.ai/prompt/${encoded}?width=1200&height=675&nologo=true`;
 }
 
 // ============================================
@@ -1568,11 +1491,11 @@ function groupClaimsIntoStories(
       // Time proximity: within 24 hours
       const timeDiffHours =
         Math.abs(timeI - timeJ) / (1000 * 60 * 60);
-      if (timeDiffHours > 24) continue;
+      if (timeDiffHours > 72) continue;
 
       // Shared significant words
       const sharedWords = wordsI.filter((w) => wordsJ.includes(w));
-      const hasWordOverlap = sharedWords.length >= 3;
+      const hasWordOverlap = sharedWords.length >= 2;
 
       // Shared assets
       const hasAssetOverlap =
@@ -2027,6 +1950,44 @@ export class VerificationPipeline {
             } catch {
               // Skip on error
             }
+          }
+        }
+
+        // If no existing story found by claim ID, try matching by title similarity
+        if (!existingStoryId) {
+          try {
+            const existingStories = await this.storage.getStories();
+            const groupWords = getSignificantWords(group.title);
+
+            let bestMatch: { id: string; score: number } | null = null;
+
+            for (const existing of existingStories) {
+              const existingWords = getSignificantWords(existing.title);
+              const sharedWords = groupWords.filter(w => existingWords.includes(w));
+              const score = sharedWords.length;
+
+              // Also check asset overlap
+              const existingAssets = new Set((existing.assetSymbols || []).map(a => a.toUpperCase()));
+              const groupAssets = group.claimIds
+                .map(cid => claims.find(c => c.claimId === cid))
+                .flatMap(c => c?.assetSymbols || [])
+                .map(a => a.toUpperCase());
+              const hasAssetOverlap = groupAssets.some(a => existingAssets.has(a));
+
+              // Need 2+ shared words OR asset overlap with 1+ shared word
+              if (score >= 2 || (hasAssetOverlap && score >= 1)) {
+                if (!bestMatch || score > bestMatch.score) {
+                  bestMatch = { id: existing.id, score };
+                }
+              }
+            }
+
+            if (bestMatch) {
+              existingStoryId = bestMatch.id;
+              console.log(`[Pipeline]   Matched to existing story by title similarity (score=${bestMatch.score})`);
+            }
+          } catch {
+            // Non-critical: fall through to create new story
           }
         }
 

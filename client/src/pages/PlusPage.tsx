@@ -14,14 +14,9 @@ const plusFaqs: PlusFaqItem[] = [
       "No. Confirmd is an independent verification platform. We use transparent, algorithmic methodology to assess claims. Our team spans a range of perspectives, and our scoring is based purely on evidence quality and source track records.",
   },
   {
-    question: "Can I switch between tiers?",
+    question: "Is there a free trial?",
     answer:
-      "Yes. You can upgrade or downgrade at any time. Upgrades take effect immediately and you will be charged a prorated amount. Downgrades take effect at the end of your current billing period.",
-  },
-  {
-    question: "Is there a free trial for Tribune or Oracle?",
-    answer:
-      "New users get a 7-day free trial of Tribune when they create an account. No credit card required. Oracle trials are available upon request for institutional users.",
+      "Yes. New users get a 7-day free trial when they subscribe. You can cancel anytime during the trial and you won't be charged.",
   },
   {
     question: "What payment methods do you accept?",
@@ -31,7 +26,7 @@ const plusFaqs: PlusFaqItem[] = [
   {
     question: "What happens if I cancel?",
     answer:
-      "You retain access to your paid features through the end of your billing period. After that, your account reverts to the Scholar (free) tier. Your watchlist and data are preserved.",
+      "You retain access to all Plus features through the end of your billing period. After that, your account reverts to the free tier. Your watchlist and data are preserved.",
   },
   {
     question: "Do you offer team or enterprise plans?",
@@ -45,128 +40,23 @@ const plusFaqs: PlusFaqItem[] = [
   },
 ];
 
-const tiers = [
-  {
-    name: "Vantage",
-    monthlyPrice: "$5.99",
-    annualPrice: "$3.99",
-    annualTotal: "$47.88",
-    description: "See the full picture.",
-    ctaText: "Start Free Trial",
-    recommended: true,
-    tagline: "Most Popular",
-    features: [
-      { text: "Main news feed", included: true },
-      { text: "Verdict labels & confidence", included: true },
-      { text: "Creator prediction tracking", included: true },
-      { text: "25 watchlist items", included: true },
-      { text: "Full evidence ladders", included: true },
-      { text: "Source credibility history", included: true },
-      { text: "90-day claim history", included: true },
-      { text: "Blindspot reports", included: true },
-      { text: "API access", included: false },
-      { text: "Data export", included: false },
-    ],
-  },
-  {
-    name: "Premium",
-    monthlyPrice: "$3.99",
-    annualPrice: "$2.49",
-    annualTotal: "$29.88",
-    description: "Rise above the noise.",
-    ctaText: "Start Free Trial",
-    recommended: false,
-    tagline: "Best Value",
-    features: [
-      { text: "Main news feed", included: true },
-      { text: "Basic verdict labels", included: true },
-      { text: "10 watchlist items", included: true },
-      { text: "Full evidence ladders", included: true },
-      { text: "Real-time alerts", included: true },
-      { text: "30-day claim history", included: true },
-      { text: "Priority support", included: true },
-      { text: "Blindspot reports", included: false },
-      { text: "API access", included: false },
-      { text: "Data export", included: false },
-    ],
-  },
-  {
-    name: "Pro",
-    monthlyPrice: "$14.99",
-    annualPrice: "$9.99",
-    annualTotal: "$119.88",
-    description: "Get clarity.",
-    ctaText: "Contact Us",
-    recommended: false,
-    tagline: "For Teams",
-    features: [
-      { text: "Everything in Vantage", included: true },
-      { text: "API access (REST & WebSocket)", included: true },
-      { text: "Data export (CSV, JSON)", included: true },
-      { text: "100 watchlist items", included: true },
-      { text: "Custom alert rules", included: true },
-      { text: "Unlimited claim history", included: true },
-      { text: "Early access features", included: true },
-      { text: "Dedicated account manager", included: true },
-      { text: "SLA guarantees", included: true },
-    ],
-  },
-];
-
-const comparisonFeatures = [
-  { feature: "News Feed", premium: true, vantage: true, pro: true },
-  { feature: "Verdict Labels", premium: "Basic", vantage: "Full + Confidence", pro: "Full + Confidence" },
-  { feature: "Creator Predictions", premium: false, vantage: true, pro: true },
-  {
-    feature: "Evidence Preview",
-    premium: "Full ladder",
-    vantage: "Full ladder",
-    pro: "Full ladder",
-  },
-  {
-    feature: "Watchlist Items",
-    premium: "10",
-    vantage: "25",
-    pro: "100",
-  },
-  { feature: "Real-Time Alerts", premium: true, vantage: true, pro: true },
-  { feature: "Blindspot Reports", premium: false, vantage: true, pro: true },
-  {
-    feature: "Source History",
-    premium: "30 days",
-    vantage: "90 days",
-    pro: "Unlimited",
-  },
-  {
-    feature: "Claim History",
-    premium: "30 days",
-    vantage: "90 days",
-    pro: "Unlimited",
-  },
-  { feature: "Priority Support", premium: true, vantage: true, pro: true },
-  { feature: "API Access", premium: false, vantage: false, pro: true },
-  { feature: "Data Export", premium: false, vantage: false, pro: true },
-  {
-    feature: "Custom Alert Rules",
-    premium: false,
-    vantage: false,
-    pro: true,
-  },
-  {
-    feature: "Early Access Features",
-    premium: false,
-    vantage: false,
-    pro: true,
-  },
+const features = [
+  "Full creator claims & predictions",
+  "Creator profile pages & accuracy tracking",
+  "Real-time alerts",
+  "Full evidence ladders",
+  "Source credibility history",
+  "Priority support",
+  "90-day claim history",
+  "Blindspot reports",
 ];
 
 const PlusPage: React.FC = () => {
   const [, setLocation] = useLocation();
   const [openFaqs, setOpenFaqs] = useState<Record<number, boolean>>({});
-  const [loadingTier, setLoadingTier] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
-  const [billingPeriod, setBillingPeriod] = useState<"monthly" | "annual">("annual");
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -176,21 +66,16 @@ const PlusPage: React.FC = () => {
     }
   }, []);
 
-  const handleSubscribe = async (tierName: string) => {
-    const key = tierName.toLowerCase();
+  const handleSubscribe = async () => {
     setCheckoutError(null);
-    if (key === "pro") {
-      window.location.href = "mailto:hello@confirmd.io?subject=Pro%20Tier%20Inquiry";
-      return;
-    }
-    setLoadingTier(key);
+    setLoading(true);
     try {
-      const { url } = await createCheckoutSession(key);
+      const { url } = await createCheckoutSession("plus");
       if (url) window.location.href = url;
     } catch (err) {
       console.error("Checkout error:", err);
       setCheckoutError("Unable to start checkout. Please sign in first or try again.");
-      setLoadingTier(null);
+      setLoading(false);
     }
   };
 
@@ -222,45 +107,20 @@ const PlusPage: React.FC = () => {
       )}
 
       {/* Hero */}
-      <section className="pt-16 pb-8 text-center">
+      <section className="pt-16 pb-4 text-center">
         <div className="max-w-5xl mx-auto px-6 md:px-12">
           <h1 className="text-4xl md:text-5xl font-bold text-content-primary tracking-tight mb-4">
-            Subscription Options
+            Confirmd Plus
           </h1>
-          <p className="text-content-secondary text-lg max-w-2xl mx-auto mb-8">
-            Choose the plan that fits your verification needs. Upgrade or downgrade at any time.
+          <p className="text-content-secondary text-lg max-w-2xl mx-auto">
+            Get the full picture. Evidence-based clarity on the claims that matter most.
           </p>
-
-          {/* Billing toggle */}
-          <div className="inline-flex items-center bg-surface-card border border-border rounded-full p-1">
-            <button
-              onClick={() => setBillingPeriod("monthly")}
-              className={`px-5 py-2 rounded-full text-sm font-bold transition-all ${
-                billingPeriod === "monthly"
-                  ? "bg-accent text-accent-text"
-                  : "text-content-secondary hover:text-content-primary"
-              }`}
-            >
-              Monthly
-            </button>
-            <button
-              onClick={() => setBillingPeriod("annual")}
-              className={`px-5 py-2 rounded-full text-sm font-bold transition-all ${
-                billingPeriod === "annual"
-                  ? "bg-accent text-accent-text"
-                  : "text-content-secondary hover:text-content-primary"
-              }`}
-            >
-              Annual
-              <span className="ml-1.5 text-[10px] font-black uppercase tracking-wider opacity-80">Save 33%</span>
-            </button>
-          </div>
         </div>
       </section>
 
       {/* Checkout Error */}
       {checkoutError && (
-        <section className="max-w-5xl mx-auto px-6 md:px-12 pb-6">
+        <section className="max-w-lg mx-auto px-6 md:px-12 pb-4">
           <div className="bg-red-900/30 border border-red-700 rounded-lg px-6 py-4 flex items-center justify-between">
             <div className="flex items-center space-x-3">
               <svg className="w-5 h-5 text-red-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -277,130 +137,61 @@ const PlusPage: React.FC = () => {
         </section>
       )}
 
-      {/* Pricing Cards */}
-      <section className="max-w-6xl mx-auto px-6 md:px-12 pb-20">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {tiers.map((tier) => {
-            const price = billingPeriod === "annual" ? tier.annualPrice : tier.monthlyPrice;
-            const period = billingPeriod === "annual" ? "/mo" : "/mo";
-            return (
-              <div
-                key={tier.name}
-                className={`rounded-xl border bg-surface-card overflow-hidden flex flex-col transition-all hover:bg-surface-card-hover ${
-                  tier.recommended ? "ring-2 ring-accent border-accent" : "border-border"
-                }`}
-              >
-                {/* Tier Badge + tagline */}
-                <div className="px-6 pt-6 pb-2 flex items-center justify-between">
-                  <span className={`text-xs font-bold uppercase tracking-wider px-3 py-1 rounded-full ${
-                    tier.recommended
-                      ? "bg-accent text-accent-text"
-                      : "bg-surface-secondary text-content-secondary"
-                  }`}>
-                    {tier.name}
-                  </span>
-                  {tier.tagline && (
-                    <span className={`text-[10px] font-bold uppercase tracking-wider ${
-                      tier.recommended ? "text-accent" : "text-content-muted"
-                    }`}>
-                      {tier.tagline}
-                    </span>
-                  )}
-                </div>
+      {/* Single Pricing Card */}
+      <section className="max-w-lg mx-auto px-6 md:px-12 py-12">
+        <div className="rounded-xl border border-accent ring-2 ring-accent bg-surface-card overflow-hidden">
+          {/* Price */}
+          <div className="px-8 pt-8 pb-6 text-center border-b border-border">
+            <div className="flex items-baseline justify-center gap-1">
+              <span className="text-5xl font-bold text-content-primary">$9.99</span>
+              <span className="text-content-muted text-lg">/month</span>
+            </div>
+            <p className="text-content-secondary text-sm mt-3">
+              Cancel anytime. 7-day free trial included.
+            </p>
+          </div>
 
-                {/* Image area with tagline */}
-                <div className="px-6 py-4">
-                  <div className="w-full h-36 bg-surface-secondary rounded-lg flex items-center justify-center relative overflow-hidden">
-                    <div className="absolute inset-0 bg-gradient-to-br from-accent/5 to-transparent" />
-                    <span className="text-content-muted text-sm italic relative z-10">
-                      {tier.description}
-                    </span>
-                  </div>
-                </div>
+          {/* Features */}
+          <div className="px-8 py-8">
+            <p className="text-xs font-bold uppercase tracking-wider text-content-muted mb-5">
+              Everything included
+            </p>
+            <ul className="space-y-4">
+              {features.map((feature) => (
+                <li key={feature} className="flex items-start space-x-3">
+                  <svg className="w-5 h-5 text-accent flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                  </svg>
+                  <span className="text-sm text-content-primary">{feature}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
 
-                {/* Price */}
-                <div className="px-6 pb-4">
-                  <div className="flex items-baseline gap-1">
-                    <span className="text-3xl font-bold text-content-primary">{price}</span>
-                    <span className="text-content-muted text-sm">{period}</span>
-                  </div>
-                  {billingPeriod === "annual" && (
-                    <p className="text-[11px] text-content-muted mt-1">
-                      {tier.annualTotal} billed annually
-                    </p>
-                  )}
-                  {billingPeriod === "annual" && (
-                    <p className="text-[11px] text-accent font-bold mt-0.5">
-                      Save vs. monthly
-                    </p>
-                  )}
-                </div>
-
-                {/* Features */}
-                <div className="px-6 pb-6 flex-1">
-                  <ul className="space-y-3">
-                    {tier.features.map((f) => (
-                      <li key={f.text} className="flex items-start space-x-2">
-                        {f.included ? (
-                          <svg className="w-4 h-4 text-accent flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                          </svg>
-                        ) : (
-                          <svg className="w-4 h-4 text-content-muted flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 12H6" />
-                          </svg>
-                        )}
-                        <span className={`text-sm ${f.included ? "text-content-primary" : "text-content-muted"}`}>
-                          {f.text}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-
-                {/* CTA */}
-                <div className="px-6 pb-6">
-                  <button
-                    onClick={() => handleSubscribe(tier.name)}
-                    disabled={loadingTier === tier.name.toLowerCase()}
-                    className={`w-full py-3 rounded-lg text-sm font-bold transition-all disabled:opacity-60 disabled:cursor-wait ${
-                      tier.recommended
-                        ? "bg-accent text-accent-text hover:bg-accent-hover"
-                        : "border border-border text-content-primary hover:bg-surface-secondary"
-                    }`}
-                  >
-                    {loadingTier === tier.name.toLowerCase() ? (
-                      <span className="flex items-center justify-center space-x-2">
-                        <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                        </svg>
-                        <span>Redirecting...</span>
-                      </span>
-                    ) : (
-                      tier.ctaText
-                    )}
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Trusted by logos placeholder */}
-        <div className="mt-12 text-center">
-          <p className="text-content-muted text-xs uppercase tracking-wider mb-4">Trusted by readers of</p>
-          <div className="flex items-center justify-center space-x-8 text-content-muted">
-            <span className="text-sm font-semibold opacity-50">Forbes</span>
-            <span className="text-sm font-semibold opacity-50">CoinDesk</span>
-            <span className="text-sm font-semibold opacity-50">The Block</span>
-            <span className="text-sm font-semibold opacity-50">Decrypt</span>
-            <span className="text-sm font-semibold opacity-50">Messari</span>
+          {/* CTA */}
+          <div className="px-8 pb-8">
+            <button
+              onClick={handleSubscribe}
+              disabled={loading}
+              className="w-full py-4 rounded-lg text-sm font-bold transition-all disabled:opacity-60 disabled:cursor-wait bg-accent text-accent-text hover:bg-accent-hover"
+            >
+              {loading ? (
+                <span className="flex items-center justify-center space-x-2">
+                  <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                  <span>Redirecting...</span>
+                </span>
+              ) : (
+                "Start Free Trial"
+              )}
+            </button>
           </div>
         </div>
       </section>
 
-      {/* See News Differently / Testimonial */}
+      {/* Testimonial */}
       <section className="bg-surface-secondary py-20">
         <div className="max-w-4xl mx-auto px-6 md:px-12 text-center">
           <h2 className="text-3xl md:text-4xl font-bold text-content-primary mb-12">
@@ -434,124 +225,8 @@ const PlusPage: React.FC = () => {
         </div>
       </section>
 
-      {/* Feature Comparison Table */}
-      <section className="max-w-5xl mx-auto px-6 md:px-12 py-20">
-        <div className="text-center mb-12">
-          <h2 className="text-3xl md:text-4xl font-bold text-content-primary">
-            Compare Plans
-          </h2>
-          <p className="text-content-secondary mt-3">
-            A detailed breakdown of what each tier includes.
-          </p>
-        </div>
-
-        <div className="rounded-xl border border-border overflow-hidden bg-surface-card">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-border">
-                  <th className="text-left p-4 md:p-6 text-xs font-bold uppercase tracking-wider text-content-muted">
-                    Feature
-                  </th>
-                  <th className="p-4 md:p-6 text-xs font-bold uppercase tracking-wider text-content-muted text-center">
-                    Premium
-                  </th>
-                  <th className="p-4 md:p-6 text-xs font-bold uppercase tracking-wider text-accent text-center">
-                    Vantage
-                  </th>
-                  <th className="p-4 md:p-6 text-xs font-bold uppercase tracking-wider text-content-muted text-center">
-                    Pro
-                  </th>
-                </tr>
-                <tr className="border-b border-border bg-surface-secondary/50">
-                  <td className="p-4 md:p-6" />
-                  {tiers.map((t) => (
-                    <td key={t.name} className="p-4 md:p-6 text-center">
-                      <span className="text-sm font-bold text-content-primary">
-                        {billingPeriod === "annual" ? t.annualPrice : t.monthlyPrice}
-                      </span>
-                      <span className="text-content-muted text-xs">/mo</span>
-                    </td>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {comparisonFeatures.map((row, idx) => (
-                  <tr
-                    key={row.feature}
-                    className={idx < comparisonFeatures.length - 1 ? "border-b border-border" : ""}
-                  >
-                    <td className="p-4 md:p-6 text-sm font-semibold text-content-primary">
-                      {row.feature}
-                    </td>
-                    {(["premium", "vantage", "pro"] as const).map((t) => {
-                      const val = row[t];
-                      return (
-                        <td key={t} className="p-4 md:p-6 text-center">
-                          {val === true ? (
-                            <svg className="w-5 h-5 text-accent mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                            </svg>
-                          ) : val === false ? (
-                            <svg className="w-5 h-5 text-content-muted mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                            </svg>
-                          ) : (
-                            <span className="text-sm font-medium text-content-secondary">{val}</span>
-                          )}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Table CTA buttons */}
-          <div className="border-t border-border">
-            <div className="grid grid-cols-4">
-              <div className="p-4 md:p-6" />
-              {tiers.map((tier) => (
-                <div key={tier.name} className="p-4 md:p-6 text-center">
-                  <button
-                    onClick={() => handleSubscribe(tier.name)}
-                    disabled={loadingTier === tier.name.toLowerCase()}
-                    className={`text-xs font-bold px-4 py-2 rounded-lg transition-all disabled:opacity-60 ${
-                      tier.recommended
-                        ? "bg-accent text-accent-text hover:bg-accent-hover"
-                        : "border border-border text-content-primary hover:bg-surface-secondary"
-                    }`}
-                  >
-                    {tier.ctaText}
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Group Subscriptions Callout */}
-      <section className="max-w-5xl mx-auto px-6 md:px-12 pb-20">
-        <div className="bg-surface-card border border-border rounded-xl p-8 md:p-12 flex flex-col md:flex-row items-center justify-between gap-6">
-          <div>
-            <h3 className="text-2xl font-bold text-content-primary mb-2">Group Subscriptions</h3>
-            <p className="text-content-secondary text-sm max-w-md">
-              Save up to 40% with group subscription packages for classrooms, organizations, newsrooms, or institutions. Teams of up to 50 users.
-            </p>
-          </div>
-          <button
-            onClick={() => setLocation("/groups")}
-            className="border border-accent text-accent px-6 py-3 rounded-lg text-sm font-bold hover:bg-accent hover:text-accent-text transition-all whitespace-nowrap"
-          >
-            Learn More
-          </button>
-        </div>
-      </section>
-
       {/* FAQ */}
-      <section className="bg-surface-secondary py-20">
+      <section className="py-20">
         <div className="max-w-4xl mx-auto px-6 md:px-12">
           <h2 className="text-3xl md:text-4xl font-bold text-content-primary text-center mb-12">
             Frequently Asked Questions
@@ -600,7 +275,7 @@ const PlusPage: React.FC = () => {
       </section>
 
       {/* Gift Subscriptions Callout */}
-      <section className="max-w-5xl mx-auto px-6 md:px-12 py-20">
+      <section className="max-w-5xl mx-auto px-6 md:px-12 pb-20">
         <div className="bg-surface-card border border-border rounded-xl p-8 md:p-12 text-center">
           <h3 className="text-2xl font-bold text-content-primary mb-2">Gift Subscriptions</h3>
           <p className="text-content-secondary text-sm max-w-lg mx-auto mb-6">
@@ -615,7 +290,7 @@ const PlusPage: React.FC = () => {
         </div>
       </section>
 
-      {/* Bottom CTA - Supported by subscribers */}
+      {/* Bottom CTA */}
       <section className="bg-surface-secondary py-20">
         <div className="max-w-4xl mx-auto px-6 md:px-12 text-center">
           <h2 className="text-3xl md:text-4xl font-bold text-content-primary mb-4">
@@ -626,11 +301,11 @@ const PlusPage: React.FC = () => {
             Every subscription helps us remain independent, unbiased, and committed to factual reporting.
           </p>
           <button
-            onClick={() => handleSubscribe("Vantage")}
-            disabled={loadingTier === "vantage"}
+            onClick={handleSubscribe}
+            disabled={loading}
             className="bg-accent text-accent-text px-8 py-4 rounded-lg text-sm font-bold hover:bg-accent-hover transition-all disabled:opacity-60 disabled:cursor-wait"
           >
-            {loadingTier === "vantage" ? (
+            {loading ? (
               <span className="flex items-center justify-center space-x-2">
                 <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />

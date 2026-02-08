@@ -74,6 +74,7 @@ export interface IStorage {
   addClaimToStory(storyId: string, claimId: string): Promise<void>;
   addItemToStory(storyId: string, itemId: string): Promise<void>;
   getStoryWithClaims(storyId: string): Promise<{ story: Story; claims: Claim[] } | undefined>;
+  getStoryByClaimId(claimId: string): Promise<Story | null>;
   getStoriesForFeed(limit?: number, offset?: number): Promise<StoryFeedItem[]>;
 
   // Source Scores
@@ -513,6 +514,12 @@ export class MemStorage implements IStorage {
     return { story, claims };
   }
 
+  async getStoryByClaimId(claimId: string): Promise<Story | null> {
+    const link = Array.from(this.storyClaims.values()).find(sc => sc.claimId === claimId);
+    if (!link) return null;
+    return this.stories.get(link.storyId) ?? null;
+  }
+
   async getStoriesForFeed(limit: number = 50, offset: number = 0): Promise<StoryFeedItem[]> {
     const allStories = Array.from(this.stories.values())
       .sort((a, b) => ((b.updatedAt?.getTime() || 0) - (a.updatedAt?.getTime() || 0)));
@@ -925,7 +932,7 @@ export async function seedInitialData(storage: MemStorage): Promise<void> {
     type: "regulator",
     handleOrDomain: "sec.gov",
     displayName: "SEC",
-    logoUrl: "https://logo.clearbit.com/sec.gov",
+    logoUrl: "https://www.google.com/s2/favicons?domain=sec.gov&sz=128",
     metadata: { description: "U.S. Securities and Exchange Commission" },
   });
 
@@ -933,7 +940,7 @@ export async function seedInitialData(storage: MemStorage): Promise<void> {
     type: "publisher",
     handleOrDomain: "reuters.com",
     displayName: "Reuters",
-    logoUrl: "https://logo.clearbit.com/reuters.com",
+    logoUrl: "https://www.google.com/s2/favicons?domain=reuters.com&sz=128",
     metadata: { description: "Global news wire service" },
   });
 
@@ -941,7 +948,7 @@ export async function seedInitialData(storage: MemStorage): Promise<void> {
     type: "publisher",
     handleOrDomain: "bloomberg.com",
     displayName: "Bloomberg Crypto",
-    logoUrl: "https://logo.clearbit.com/bloomberg.com",
+    logoUrl: "https://www.google.com/s2/favicons?domain=bloomberg.com&sz=128",
     metadata: { description: "Bloomberg digital asset coverage" },
   });
 
@@ -949,7 +956,7 @@ export async function seedInitialData(storage: MemStorage): Promise<void> {
     type: "publisher",
     handleOrDomain: "theblock.co",
     displayName: "The Block",
-    logoUrl: "https://logo.clearbit.com/theblock.co",
+    logoUrl: "https://www.google.com/s2/favicons?domain=theblock.co&sz=128",
     metadata: { description: "Crypto research and journalism" },
   });
 
@@ -957,7 +964,7 @@ export async function seedInitialData(storage: MemStorage): Promise<void> {
     type: "publisher",
     handleOrDomain: "coindesk.com",
     displayName: "CoinDesk",
-    logoUrl: "https://logo.clearbit.com/coindesk.com",
+    logoUrl: "https://www.google.com/s2/favicons?domain=coindesk.com&sz=128",
     metadata: { description: "Crypto news and media" },
   });
 
@@ -965,7 +972,7 @@ export async function seedInitialData(storage: MemStorage): Promise<void> {
     type: "publisher",
     handleOrDomain: "cointelegraph.com",
     displayName: "Cointelegraph",
-    logoUrl: "https://logo.clearbit.com/cointelegraph.com",
+    logoUrl: "https://www.google.com/s2/favicons?domain=cointelegraph.com&sz=128",
     metadata: { description: "Crypto and blockchain media" },
   });
 
@@ -973,7 +980,7 @@ export async function seedInitialData(storage: MemStorage): Promise<void> {
     type: "x_handle",
     handleOrDomain: "@CryptoWhale",
     displayName: "Crypto Whale",
-    logoUrl: "https://logo.clearbit.com/x.com",
+    logoUrl: "https://www.google.com/s2/favicons?domain=x.com&sz=128",
     metadata: { description: "Anonymous crypto Twitter personality" },
   });
 
@@ -981,7 +988,7 @@ export async function seedInitialData(storage: MemStorage): Promise<void> {
     type: "telegram",
     handleOrDomain: "t.me/defialpha",
     displayName: "DeFi Alpha Leaks",
-    logoUrl: "https://logo.clearbit.com/telegram.org",
+    logoUrl: "https://www.google.com/s2/favicons?domain=telegram.org&sz=128",
     metadata: { description: "Anonymous DeFi alpha Telegram channel" },
   });
 
@@ -989,7 +996,7 @@ export async function seedInitialData(storage: MemStorage): Promise<void> {
     type: "publisher",
     handleOrDomain: "cryptoslate.com",
     displayName: "CryptoSlate",
-    logoUrl: "https://logo.clearbit.com/cryptoslate.com",
+    logoUrl: "https://www.google.com/s2/favicons?domain=cryptoslate.com&sz=128",
     metadata: { description: "Crypto news and data" },
   });
 
@@ -997,7 +1004,7 @@ export async function seedInitialData(storage: MemStorage): Promise<void> {
     type: "publisher",
     handleOrDomain: "thedefiant.io",
     displayName: "The Defiant",
-    logoUrl: "https://logo.clearbit.com/thedefiant.io",
+    logoUrl: "https://www.google.com/s2/favicons?domain=thedefiant.io&sz=128",
     metadata: { description: "DeFi news and analysis" },
   });
 
@@ -1005,7 +1012,7 @@ export async function seedInitialData(storage: MemStorage): Promise<void> {
     type: "publisher",
     handleOrDomain: "blockworks.co",
     displayName: "Blockworks",
-    logoUrl: "https://logo.clearbit.com/blockworks.co",
+    logoUrl: "https://www.google.com/s2/favicons?domain=blockworks.co&sz=128",
     metadata: { description: "Crypto and blockchain news" },
   });
 
@@ -1013,7 +1020,7 @@ export async function seedInitialData(storage: MemStorage): Promise<void> {
     type: "publisher",
     handleOrDomain: "dlnews.com",
     displayName: "DL News",
-    logoUrl: "https://logo.clearbit.com/dlnews.com",
+    logoUrl: "https://www.google.com/s2/favicons?domain=dlnews.com&sz=128",
     metadata: { description: "Digital asset news" },
   });
 
@@ -1021,7 +1028,7 @@ export async function seedInitialData(storage: MemStorage): Promise<void> {
     type: "publisher",
     handleOrDomain: "unchainedcrypto.com",
     displayName: "Unchained",
-    logoUrl: "https://logo.clearbit.com/unchainedcrypto.com",
+    logoUrl: "https://www.google.com/s2/favicons?domain=unchainedcrypto.com&sz=128",
     metadata: { description: "Crypto news and podcasts" },
   });
 
@@ -1606,7 +1613,7 @@ export async function seedInitialData(storage: MemStorage): Promise<void> {
   const story1 = await storage.createStory({
     title: "Ethereum ETF: Regulatory Progress vs. Speculation",
     summary: "Tracking verified SEC activity alongside speculative claims about Ethereum ETF approval timelines. Official SEC calendar confirms February meeting while anonymous sources push unsubstantiated acceleration narratives.",
-    imageUrl: "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?auto=format&fit=crop&w=1200&q=80",
+    imageUrl: `https://image.pollinations.ai/prompt/${encodeURIComponent("professional editorial news photograph about Ethereum ETF Regulatory Progress vs Speculation, Regulation, photojournalism style, high quality, detailed")}?width=1200&height=675&nologo=true`,
     category: "Regulation",
     metadata: {},
   });
@@ -1617,7 +1624,7 @@ export async function seedInitialData(storage: MemStorage): Promise<void> {
   const story2 = await storage.createStory({
     title: "DeFi Security: The Nexus Protocol Exploit",
     summary: "A verified smart contract exploit drained $45M from Nexus Protocol via a reentrancy vulnerability. On-chain evidence and independent security audits confirm the attack vector and fund movement.",
-    imageUrl: "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&w=1200&q=80",
+    imageUrl: `https://image.pollinations.ai/prompt/${encodeURIComponent("professional editorial news photograph about DeFi Security The Nexus Protocol Exploit, Security, photojournalism style, high quality, detailed")}?width=1200&height=675&nologo=true`,
     category: "Security",
     metadata: {},
   });

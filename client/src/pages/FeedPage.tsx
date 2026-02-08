@@ -246,68 +246,6 @@ function TopNewsSidebar({
   );
 }
 
-/* --- Right Sidebar: Blindspot --------------------------------- */
-
-function BlindspotSection({
-  stories,
-  onStoryClick,
-}: {
-  stories: any[];
-  onStoryClick: (id: string) => void;
-}) {
-  const blindspotStories = useMemo(() => {
-    return stories
-      .filter((s: any) => {
-        const dist = s.credibilityDistribution || { high: 0, medium: 0, low: 0 };
-        const total = dist.high + dist.medium + dist.low;
-        if (total === 0) return false;
-        return dist.low / total > 0.5;
-      })
-      .slice(0, 4);
-  }, [stories]);
-
-  if (blindspotStories.length === 0) return null;
-
-  return (
-    <div className="bg-surface-card rounded-xl p-4 border border-border">
-      <div className="flex items-center gap-2 mb-3">
-        <svg className="w-4 h-4 text-factuality-low" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M13.875 18.825A10.05 10.05 0 0112 19c-5 0-9.27-3.11-11-7.5a11.72 11.72 0 013.168-4.477M6.343 6.343A9.97 9.97 0 0112 5c5 0 9.27 3.11 11 7.5a11.7 11.7 0 01-4.373 5.157M6.343 6.343L17.657 17.657M6.343 6.343l11.314 11.314"
-          />
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M1 1l22 22" />
-        </svg>
-        <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-factuality-low">
-          Blindspot
-        </h3>
-      </div>
-      <p className="text-[10px] text-content-muted mb-3 leading-relaxed">
-        Stories covered mostly by low-credibility sources. Read with caution.
-      </p>
-      <div className="space-y-0">
-        {blindspotStories.map((story: any) => {
-          const dist = story.credibilityDistribution || { high: 0, medium: 0, low: 0 };
-          return (
-            <div
-              key={story.id}
-              onClick={() => onStoryClick(story.id)}
-              className="cursor-pointer py-2 border-b border-border last:border-b-0 hover:bg-surface-card-hover transition-colors rounded px-1 -mx-1"
-            >
-              <p className="text-[12px] font-bold text-content-primary leading-tight line-clamp-2 mb-1">
-                {story.title}
-              </p>
-              <FactualityBar distribution={dist} size="sm" />
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
 /* --- Creator Predictions (prominent center section) ---------- */
 
 function CreatorPredictionsSection({
@@ -712,10 +650,6 @@ export default function FeedPage() {
             {/* RIGHT SIDEBAR */}
             <aside className="hidden lg:block">
               <div className="sticky top-24 space-y-5">
-                <BlindspotSection
-                  stories={sidebarStories}
-                  onStoryClick={handleStoryClick}
-                />
                 <DailyLocalNews
                   stories={sidebarStories}
                   onStoryClick={handleStoryClick}

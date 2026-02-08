@@ -57,7 +57,7 @@ export default function StoryDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [, setLocation] = useLocation();
   const [showClaims, setShowClaims] = useState(false);
-  const [activeTab, setActiveTab] = useState<"articles" | "predictions" | "timelines">("articles");
+  const [activeTab, setActiveTab] = useState<"articles" | "predictions" | "timelines">("timelines");
   const { tier } = useAuth();
 
   const { data: story, isLoading } = useQuery({
@@ -184,7 +184,7 @@ export default function StoryDetailPage() {
                 {story.title}
               </h1>
 
-              {story.summary && (
+              {story.summary && !story.summary.startsWith("Story covering") && (
                 <p className="text-lg text-content-secondary leading-relaxed font-medium max-w-3xl">
                   {story.summary}
                 </p>
@@ -201,6 +201,86 @@ export default function StoryDetailPage() {
                   onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent" />
+              </div>
+            )}
+
+            {/* Claims & Verdicts - Always visible */}
+            {claims.length > 0 && (
+              <div className="mb-8">
+                <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-content-muted mb-4">
+                  Claims & Verification
+                </h3>
+                <div className="space-y-3">
+                  {claims.map((claim: any) => {
+                    const verdictLabel = claim.verdict?.verdictLabel || "unreviewed";
+                    const probability = claim.verdict?.probabilityTrue;
+                    const reasoning = claim.verdict?.reasoningSummary;
+                    const verdictStyles: Record<string, string> = {
+                      verified: "border-l-factuality-high bg-factuality-high/5",
+                      speculative: "border-l-factuality-mixed bg-factuality-mixed/5",
+                      misleading: "border-l-factuality-low bg-factuality-low/5",
+                      unreviewed: "border-l-border bg-surface-card",
+                    };
+                    const badgeStyles: Record<string, string> = {
+                      verified: "bg-factuality-high/10 text-factuality-high border-factuality-high/30",
+                      speculative: "bg-factuality-mixed/10 text-factuality-mixed border-factuality-mixed/30",
+                      misleading: "bg-factuality-low/10 text-factuality-low border-factuality-low/30",
+                      unreviewed: "bg-surface-card-hover text-content-muted border-border",
+                    };
+                    return (
+                      <div
+                        key={claim.id}
+                        className={`rounded-xl border border-border p-5 border-l-4 ${verdictStyles[verdictLabel] || verdictStyles.unreviewed}`}
+                      >
+                        <div className="flex items-start justify-between gap-4 mb-2">
+                          <p className="text-[15px] font-bold text-content-primary leading-relaxed flex-1">
+                            {claim.claimText}
+                          </p>
+                          <span className={`px-3 py-1 text-[10px] font-black uppercase tracking-widest rounded-lg border flex-shrink-0 ${badgeStyles[verdictLabel] || badgeStyles.unreviewed}`}>
+                            {verdictLabel}
+                          </span>
+                        </div>
+                        {/* Probability + reasoning */}
+                        <div className="space-y-2 mt-3">
+                          {probability != null && (
+                            <div className="flex items-center gap-2">
+                              <div className="flex-1 h-2 bg-surface-secondary rounded-full overflow-hidden">
+                                <div
+                                  className={`h-full rounded-full ${
+                                    probability >= 0.7 ? "bg-factuality-high" :
+                                    probability >= 0.4 ? "bg-factuality-mixed" : "bg-factuality-low"
+                                  }`}
+                                  style={{ width: `${Math.round(probability * 100)}%` }}
+                                />
+                              </div>
+                              <span className="text-[11px] font-bold text-content-secondary">
+                                {Math.round(probability * 100)}% likely true
+                              </span>
+                            </div>
+                          )}
+                          {reasoning && (
+                            <p className="text-[12px] text-content-secondary leading-relaxed">
+                              {reasoning}
+                            </p>
+                          )}
+                        </div>
+                        {/* Source + meta */}
+                        <div className="flex items-center gap-3 mt-3">
+                          {claim.source && (
+                            <span className="text-[10px] font-bold text-content-muted">
+                              Source: {claim.source.displayName}
+                            </span>
+                          )}
+                          {claim.claimType && (
+                            <span className="px-2 py-0.5 bg-surface-card-hover text-content-muted rounded text-[9px] font-bold uppercase tracking-wider border border-border">
+                              {claim.claimType}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             )}
 
@@ -236,7 +316,7 @@ export default function StoryDetailPage() {
               {[
                 { key: "articles" as const, label: `${sortedCoverage.length} Articles` },
                 ...(story.creatorPredictions?.length ? [{ key: "predictions" as const, label: "Predictions" }] : []),
-                ...(claims.length ? [{ key: "timelines" as const, label: "Timelines" }] : []),
+                ...(claims.length ? [{ key: "timelines" as const, label: "Claims" }] : []),
               ].map((tab) => (
                 <button
                   key={tab.key}
