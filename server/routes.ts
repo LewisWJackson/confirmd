@@ -13,6 +13,28 @@ declare module "express-session" {
 
 const router = Router();
 
+// ─── Tier gating middleware (permissive for now) ────────────────────
+const TIER_RANK: Record<string, number> = { free: 0, tribune: 1, oracle: 2 };
+
+function requireTier(minTier: string) {
+  return async (req: Request, res: Response, next: Function) => {
+    const userId = req.session?.userId;
+    if (!userId) {
+      return res.status(401).json({ error: "Authentication required" });
+    }
+    try {
+      const user = await storage.getUserById(userId);
+      const userTier = user?.subscriptionTier || "free";
+      if ((TIER_RANK[userTier] ?? 0) < (TIER_RANK[minTier] ?? 0)) {
+        return res.status(403).json({ error: `Requires ${minTier} subscription` });
+      }
+      next();
+    } catch {
+      next();
+    }
+  };
+}
+
 // Helper to safely extract a single route param
 function param(req: Request, name: string): string {
   const val = req.params[name];
@@ -35,13 +57,20 @@ interface EnrichedClaim {
   createdAt: Date | null;
   source: {
     id: string;
-    name: string;
+    displayName: string;
+    handleOrDomain: string;
     logo: string;
+    logoUrl: string | null;
     type: string;
-    trackRecord: number | null;
+    score: {
+      trackRecord: number;
+      methodDiscipline: number;
+      sampleSize: number;
+      confidenceInterval: { lower: number; upper: number };
+    } | null;
   } | null;
   verdict: {
-    label: string;
+    verdictLabel: string;
     probabilityTrue: number | null;
     evidenceStrength: number | null;
     reasoningSummary: string | null;
@@ -382,6 +411,9 @@ router.get("/stories", async (req: Request, res: Response) => {
 
     let feedItems = await storage.getStoriesForFeed(limit, offset);
 
+    // Require at least 2 sources covering a story
+    feedItems = feedItems.filter(s => s.sourceCount >= 2);
+
     // Filter by category if provided
     if (category) {
       feedItems = feedItems.filter(s => s.category?.toLowerCase() === category.toLowerCase());
@@ -412,6 +444,13 @@ router.get("/stories/:id", async (req: Request, res: Response) => {
     }
 
     const { story, claims } = storyWithClaims;
+
+    // Require at least 2 sources covering a story
+    if ((story.sourceCount ?? 0) < 2) {
+      res.status(404).json({ error: "Story not found" });
+      return;
+    }
+
     const enrichedClaims = await Promise.all(claims.map(enrichClaim));
 
     // ── Build source-grouped coverage view ──────────────────────────

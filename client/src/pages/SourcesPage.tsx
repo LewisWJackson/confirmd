@@ -1,7 +1,45 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { fetchSources } from "../lib/api";
+
+// Google favicon service as fallback for source logos
+function getGoogleFaviconUrl(domain: string): string {
+  // Strip @ prefix for social handles, extract domain from URLs
+  const clean = domain.replace(/^@/, "").replace(/^https?:\/\//, "").split("/")[0];
+  return `https://www.google.com/s2/favicons?domain=${clean}&sz=128`;
+}
+
+function SourceLogo({ src, alt, domain, fallbackLetter, className }: {
+  src: string | null | undefined;
+  alt: string;
+  domain: string;
+  fallbackLetter: string;
+  className: string;
+}) {
+  const [imgState, setImgState] = useState<"primary" | "google" | "letter">(src ? "primary" : "letter");
+
+  const handleError = useCallback(() => {
+    setImgState((prev) => {
+      if (prev === "primary") return "google";
+      return "letter";
+    });
+  }, []);
+
+  if (imgState === "letter") {
+    return <span className="text-white font-black text-sm">{fallbackLetter}</span>;
+  }
+
+  const imgSrc = imgState === "primary" ? src! : getGoogleFaviconUrl(domain);
+  return (
+    <img
+      src={imgSrc}
+      alt={alt}
+      className={className}
+      onError={handleError}
+    />
+  );
+}
 
 type SortField = "trackRecord" | "methodDiscipline" | "sampleSize";
 
@@ -118,11 +156,13 @@ export default function SourcesPage() {
                       tier === "high" ? "bg-emerald-500 text-white"
                       : tier === "medium" ? "bg-amber-400 text-white" : "bg-red-500 text-white"
                     }`}>
-                      {source.logoUrl ? (
-                        <img src={source.logoUrl} alt={source.displayName} className="w-full h-full object-contain rounded-lg" />
-                      ) : (
-                        <span className="text-white font-black text-sm">{source.logo || source.displayName?.charAt(0) || "?"}</span>
-                      )}
+                      <SourceLogo
+                        src={source.logoUrl}
+                        alt={source.displayName}
+                        domain={source.handleOrDomain || ""}
+                        fallbackLetter={source.logo || source.displayName?.charAt(0) || "?"}
+                        className="w-full h-full object-contain rounded-lg"
+                      />
                     </div>
                     <div>
                       <div className="font-black text-lg text-slate-900 group-hover:text-cyan-600 transition-colors tracking-tight">{source.displayName}</div>

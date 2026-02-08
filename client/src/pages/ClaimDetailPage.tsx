@@ -2,6 +2,8 @@ import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams, useLocation } from "wouter";
 import { fetchClaim, submitEvidence, fetchVerdictHistory } from "../lib/api";
+import { useAuth } from "../lib/auth-context";
+import UpgradePrompt from "../components/UpgradePrompt";
 
 const getVerdictStyle = (label: string) => {
   const styles: Record<string, { bg: string; text: string; light: string; border: string; glow: string }> = {
@@ -125,10 +127,14 @@ export default function ClaimDetailPage() {
     );
   }
 
+  const { canAccess, tier } = useAuth();
   const verdict = claim.verdict;
   const style = verdict ? getVerdictStyle(verdict.verdictLabel) : null;
   const evidence = claim.evidence || [];
   const source = claim.source;
+  const canSeeFullEvidence = canAccess("full_evidence");
+  const visibleEvidence = canSeeFullEvidence ? evidence : evidence.slice(0, 2);
+  const hiddenCount = evidence.length - visibleEvidence.length;
 
   return (
     <div className="max-w-7xl mx-auto py-12 px-6 md:px-12 relative z-10 animate-in fade-in duration-700">
@@ -142,16 +148,18 @@ export default function ClaimDetailPage() {
         Return to Claims Feed
       </button>
 
-      {/* Account CTA Banner */}
-      <div className="glass rounded-2xl p-6 mb-10 border border-cyan-100 bg-cyan-50/30 flex items-center justify-between">
-        <div>
-          <span className="text-[10px] font-black text-cyan-600 uppercase tracking-widest">Confirmd Plus</span>
-          <p className="text-sm text-slate-600 mt-1 font-medium">Get full evidence ladders, real-time alerts, and source history with a Plus membership.</p>
+      {/* Account CTA Banner - only for free tier */}
+      {tier === "free" && (
+        <div className="glass rounded-2xl p-6 mb-10 border border-cyan-100 bg-cyan-50/30 flex items-center justify-between">
+          <div>
+            <span className="text-[10px] font-black text-cyan-600 uppercase tracking-widest">Confirmd Plus</span>
+            <p className="text-sm text-slate-600 mt-1 font-medium">Get full evidence ladders, real-time alerts, and source history with a Plus membership.</p>
+          </div>
+          <button onClick={() => setLocation("/plus")} className="px-6 py-3 bg-cyan-600 text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-cyan-700 transition-all shadow-lg whitespace-nowrap">
+            Learn More
+          </button>
         </div>
-        <button onClick={() => setLocation("/plus")} className="px-6 py-3 bg-cyan-600 text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-cyan-700 transition-all shadow-lg whitespace-nowrap">
-          Learn More
-        </button>
-      </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-16">
         <div className="lg:col-span-8 space-y-10">
@@ -281,7 +289,7 @@ export default function ClaimDetailPage() {
               <span className="text-xs font-black text-cyan-600">{evidence.length} Sources</span>
             </div>
             <div className="space-y-4">
-              {evidence.map((ev: any) => {
+              {visibleEvidence.map((ev: any) => {
                 const gradeStyle = getGradeStyle(ev.evidenceGrade || ev.grade);
                 const stanceStyle = getStanceStyle(ev.stance);
                 return (
@@ -306,6 +314,13 @@ export default function ClaimDetailPage() {
                   </div>
                 );
               })}
+              {hiddenCount > 0 && (
+                <UpgradePrompt
+                  requiredTier="tribune"
+                  featureName="full evidence ladders"
+                  description={`${hiddenCount} more evidence source${hiddenCount !== 1 ? "s" : ""} available. Upgrade to Tribune to see the complete evidence ladder.`}
+                />
+              )}
               {evidence.length === 0 && (
                 <p className="text-slate-400 text-center py-8">No evidence items available</p>
               )}

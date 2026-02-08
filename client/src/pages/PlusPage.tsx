@@ -226,22 +226,24 @@ const PlusPage: React.FC = () => {
       )}
 
       {/* Hero */}
-      <section className="max-w-7xl mx-auto px-6 md:px-12 pt-20 pb-16">
-        <div className="text-center max-w-4xl mx-auto">
-          <div className="inline-block px-5 py-2 bg-cyan-50 border border-cyan-100 rounded-full mb-8">
-            <span className="text-[10px] font-black uppercase tracking-[0.3em] text-cyan-600">
-              Confirmd Plus
-            </span>
+      <section className="hero-statue-bg bg-newspaper">
+        <div className="relative z-10 max-w-7xl mx-auto px-6 md:px-12 pt-20 pb-16">
+          <div className="text-center max-w-4xl mx-auto">
+            <div className="inline-block px-5 py-2 bg-cyan-50 border border-cyan-100 rounded-full mb-8">
+              <span className="text-[10px] font-black uppercase tracking-[0.3em] text-cyan-600">
+                Confirmd Plus
+              </span>
+            </div>
+            <h1 className="text-5xl md:text-7xl font-black text-slate-900 tracking-tighter uppercase leading-[0.9] mb-8">
+              Unlock the<br />
+              <span className="text-cyan-600">Full Signal</span>
+            </h1>
+            <p className="text-lg md:text-xl text-slate-500 font-medium leading-relaxed max-w-2xl mx-auto">
+              Go beyond headlines. Get full evidence ladders, real-time alerts,
+              and the verified intelligence that serious crypto participants
+              demand.
+            </p>
           </div>
-          <h1 className="text-5xl md:text-7xl font-black text-slate-900 tracking-tighter uppercase leading-[0.9] mb-8">
-            Unlock the<br />
-            <span className="text-cyan-600">Full Signal</span>
-          </h1>
-          <p className="text-lg md:text-xl text-slate-500 font-medium leading-relaxed max-w-2xl mx-auto">
-            Go beyond headlines. Get full evidence ladders, real-time alerts,
-            and the verified intelligence that serious crypto participants
-            demand.
-          </p>
         </div>
       </section>
 
@@ -268,7 +270,7 @@ const PlusPage: React.FC = () => {
               </div>
               <div>
                 <div className="font-black text-slate-900">
-                  Louis Jackson
+                  Lewis Jackson
                 </div>
                 <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
                   Content Creator & Researcher

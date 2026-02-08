@@ -2083,12 +2083,17 @@ export class VerificationPipeline {
             }
           }
 
-          // Update sourceCount and assetSymbols on the story
+          // Update sourceCount, assetSymbols, and backfill imageUrl if missing
           try {
-            await this.storage.updateStory(existingStoryId, {
+            const existingStory = await this.storage.getStory(existingStoryId);
+            const updateData: Partial<Pick<Story, "sourceCount" | "assetSymbols" | "imageUrl">> = {
               sourceCount,
               assetSymbols: [...groupAssetSymbols],
-            });
+            };
+            if (!existingStory?.imageUrl) {
+              updateData.imageUrl = getStoryImageUrl(group.title, "crypto");
+            }
+            await this.storage.updateStory(existingStoryId, updateData);
           } catch {
             // Non-critical
           }

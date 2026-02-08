@@ -253,15 +253,17 @@ export default function FeedPage() {
   return (
     <div className="animate-in fade-in duration-1000 relative z-10">
       {/* Hero Section */}
-      <section className="max-w-7xl mx-auto px-6 md:px-12 pt-16 pb-8">
-        <div className="max-w-3xl">
-          <span className="text-[10px] font-black tracking-[0.5em] text-cyan-600 uppercase">Crypto News Intelligence</span>
-          <h1 className="text-4xl md:text-6xl font-black tracking-tighter text-slate-900 mt-2 leading-[0.95]">
-            See the full picture<br />of crypto news
-          </h1>
-          <p className="text-lg text-slate-500 mt-4 font-medium max-w-xl">
-            Compare how multiple sources cover the same story. Spot credibility gaps, detect blindspots, and read with clarity.
-          </p>
+      <section className="hero-statue-bg">
+        <div className="relative z-10 max-w-7xl mx-auto px-6 md:px-12 pt-16 pb-8">
+          <div className="max-w-3xl">
+            <span className="text-[10px] font-black tracking-[0.5em] text-cyan-600 uppercase">Crypto News Intelligence</span>
+            <h1 className="text-4xl md:text-6xl font-black tracking-tighter text-slate-900 mt-2 leading-[0.95]">
+              See the full picture<br />of crypto news
+            </h1>
+            <p className="text-lg text-slate-500 mt-4 font-medium max-w-xl">
+              Compare how multiple sources cover the same story. Spot credibility gaps, detect blindspots, and read with clarity.
+            </p>
+          </div>
         </div>
       </section>
 

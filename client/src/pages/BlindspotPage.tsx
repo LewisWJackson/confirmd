@@ -57,23 +57,25 @@ const BlindspotPage: React.FC = () => {
   return (
     <div className="relative z-10 animate-in fade-in duration-1000">
       {/* Hero */}
-      <section className="max-w-7xl mx-auto px-6 md:px-12 pt-20 pb-12">
-        <div className="max-w-4xl">
-          <div className="inline-block px-5 py-2 bg-orange-50 border border-orange-100 rounded-full mb-8">
-            <span className="text-[10px] font-black uppercase tracking-[0.3em] text-orange-600">
-              Credibility Gap Detector
-            </span>
+      <section className="bg-newspaper relative">
+        <div className="relative z-10 max-w-7xl mx-auto px-6 md:px-12 pt-20 pb-12">
+          <div className="max-w-4xl">
+            <div className="inline-block px-5 py-2 bg-orange-50 border border-orange-100 rounded-full mb-8">
+              <span className="text-[10px] font-black uppercase tracking-[0.3em] text-orange-600">
+                Credibility Gap Detector
+              </span>
+            </div>
+            <h1 className="text-5xl md:text-7xl font-black text-slate-900 tracking-tighter uppercase leading-[0.9] mb-6">
+              BLINDSP
+              <span className="inline-block w-[0.65em] h-[0.65em] bg-orange-500 rounded-full relative -top-[0.05em] mx-[0.02em] shadow-[0_0_20px_rgba(249,115,22,0.4)]" />
+              T
+            </h1>
+            <p className="text-lg text-slate-500 font-medium leading-relaxed max-w-2xl">
+              Stories only covered by low-credibility sources. These narratives have no
+              high-credibility source backing -- approach with extra scrutiny and look
+              for independent verification before sharing.
+            </p>
           </div>
-          <h1 className="text-5xl md:text-7xl font-black text-slate-900 tracking-tighter uppercase leading-[0.9] mb-6">
-            BLINDSP
-            <span className="inline-block w-[0.65em] h-[0.65em] bg-orange-500 rounded-full relative -top-[0.05em] mx-[0.02em] shadow-[0_0_20px_rgba(249,115,22,0.4)]" />
-            T
-          </h1>
-          <p className="text-lg text-slate-500 font-medium leading-relaxed max-w-2xl">
-            Stories only covered by low-credibility sources. These narratives have no
-            high-credibility source backing -- approach with extra scrutiny and look
-            for independent verification before sharing.
-          </p>
         </div>
       </section>
 

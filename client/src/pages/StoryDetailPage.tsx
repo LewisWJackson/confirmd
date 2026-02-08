@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useParams, useLocation } from "wouter";
 import { fetchStoryDetail } from "../lib/api";
+import { useAuth } from "../lib/auth-context";
 
 function timeAgo(dateStr: string): string {
   const now = Date.now();
@@ -115,6 +116,7 @@ export default function StoryDetailPage() {
     );
   }
 
+  const { tier } = useAuth();
   const dist = story.credibilityDistribution || { high: 0, medium: 0, low: 0 };
   const coverage = story.coverage || [];
   const claims = story.claims || [];
@@ -172,6 +174,28 @@ export default function StoryDetailPage() {
         <div className="relative rounded-2xl overflow-hidden aspect-[21/9] mb-10 shadow-lg">
           <img src={story.imageUrl} alt={story.title} className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
           <div className="absolute inset-0 bg-gradient-to-t from-slate-900/40 to-transparent" />
+        </div>
+      )}
+
+      {/* Upgrade banner for free users */}
+      {tier === "free" && (
+        <div className="rounded-2xl border border-cyan-100 bg-cyan-50/30 p-5 mb-10 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-cyan-100 flex items-center justify-center flex-shrink-0">
+              <svg className="w-4 h-4 text-cyan-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+            </div>
+            <span className="text-sm text-slate-600 font-medium">
+              Get real-time alerts and full source history with <strong className="text-cyan-600">Confirmd Tribune</strong>
+            </span>
+          </div>
+          <button
+            onClick={() => setLocation("/plus")}
+            className="text-[10px] font-black uppercase tracking-widest text-cyan-600 hover:text-cyan-700 px-5 py-2.5 rounded-xl border border-cyan-200 hover:bg-cyan-50 transition-all whitespace-nowrap"
+          >
+            Upgrade
+          </button>
         </div>
       )}
 

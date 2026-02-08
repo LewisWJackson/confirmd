@@ -5,6 +5,44 @@ import { Claim, VerdictLabel } from "../types";
 
 type FilterTab = "all" | "verified" | "emerging";
 
+// Crypto logo URLs (CoinGecko CDN)
+const CRYPTO_LOGOS: Record<string, string> = {
+  BTC: "https://assets.coingecko.com/coins/images/1/small/bitcoin.png",
+  ETH: "https://assets.coingecko.com/coins/images/279/small/ethereum.png",
+  XRP: "https://assets.coingecko.com/coins/images/44/small/xrp-symbol-white-128.png",
+  SOL: "https://assets.coingecko.com/coins/images/4128/small/solana.png",
+  ADA: "https://assets.coingecko.com/coins/images/975/small/cardano.png",
+  DOGE: "https://assets.coingecko.com/coins/images/5/small/dogecoin.png",
+  DOT: "https://assets.coingecko.com/coins/images/12171/small/polkadot.png",
+  AVAX: "https://assets.coingecko.com/coins/images/12559/small/Avalanche_Circle_RedWhite_Trans.png",
+  MATIC: "https://assets.coingecko.com/coins/images/4713/small/polygon.png",
+  LINK: "https://assets.coingecko.com/coins/images/877/small/chainlink-new-logo.png",
+  UNI: "https://assets.coingecko.com/coins/images/12504/small/uni.jpg",
+  AAVE: "https://assets.coingecko.com/coins/images/12645/small/aave-token-round.png",
+  BNB: "https://assets.coingecko.com/coins/images/825/small/bnb-icon2_2x.png",
+  USDT: "https://assets.coingecko.com/coins/images/325/small/Tether.png",
+  USDC: "https://assets.coingecko.com/coins/images/6319/small/usdc.png",
+};
+
+// Full names for common symbols
+const CRYPTO_NAMES: Record<string, string> = {
+  BTC: "Bitcoin",
+  ETH: "Ethereum",
+  XRP: "XRP",
+  SOL: "Solana",
+  ADA: "Cardano",
+  DOGE: "Dogecoin",
+  DOT: "Polkadot",
+  AVAX: "Avalanche",
+  MATIC: "Polygon",
+  LINK: "Chainlink",
+  UNI: "Uniswap",
+  AAVE: "Aave",
+  BNB: "BNB Chain",
+  USDT: "Tether",
+  USDC: "USD Coin",
+};
+
 const getVerdictStyle = (label: VerdictLabel) =>
   ({
     verified: {
@@ -66,16 +104,10 @@ const SignalsPage: React.FC = () => {
 
     (allClaims as Claim[]).forEach((claim) => {
       const symbols = claim.assetSymbols ?? [];
-      if (symbols.length === 0) {
-        const key = "OTHER";
-        if (!symbolMap[key]) symbolMap[key] = [];
-        symbolMap[key].push(claim);
-      } else {
-        symbols.forEach((s) => {
-          if (!symbolMap[s]) symbolMap[s] = [];
-          symbolMap[s].push(claim);
-        });
-      }
+      symbols.forEach((s) => {
+        if (!symbolMap[s]) symbolMap[s] = [];
+        symbolMap[s].push(claim);
+      });
     });
 
     return Object.entries(symbolMap)
@@ -161,17 +193,25 @@ const SignalsPage: React.FC = () => {
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center space-x-4">
-            <div className="w-14 h-14 rounded-2xl bg-slate-900 flex items-center justify-center shadow-lg group-hover:scale-105 transition-transform">
-              <span className="text-sm font-black text-white tracking-tight">
-                {signal.symbol === "OTHER" ? "..." : `$${signal.symbol}`}
-              </span>
+            <div className="w-14 h-14 rounded-2xl bg-slate-900 flex items-center justify-center shadow-lg group-hover:scale-105 transition-transform overflow-hidden">
+              {CRYPTO_LOGOS[signal.symbol] ? (
+                <img
+                  src={CRYPTO_LOGOS[signal.symbol]}
+                  alt={signal.symbol}
+                  className="w-9 h-9 rounded-full object-cover"
+                />
+              ) : (
+                <span className="text-lg font-black text-white">
+                  {signal.symbol.charAt(0)}
+                </span>
+              )}
             </div>
             <div>
               <h3 className="text-xl font-black text-slate-900 tracking-tight group-hover:text-cyan-600 transition-colors">
-                {signal.symbol === "OTHER" ? "Other Assets" : signal.symbol}
+                ${signal.symbol}
               </h3>
               <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                {signal.totalClaims} claim{signal.totalClaims !== 1 ? "s" : ""} tracked
+                {CRYPTO_NAMES[signal.symbol] || signal.symbol} · {signal.totalClaims} claim{signal.totalClaims !== 1 ? "s" : ""}
               </div>
             </div>
           </div>

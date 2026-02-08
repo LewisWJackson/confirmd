@@ -1,7 +1,43 @@
-import React from "react";
+import React, { useState, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useParams, useLocation } from "wouter";
 import { fetchSource } from "../lib/api";
+
+function getGoogleFaviconUrl(domain: string): string {
+  const clean = domain.replace(/^@/, "").replace(/^https?:\/\//, "").split("/")[0];
+  return `https://www.google.com/s2/favicons?domain=${clean}&sz=128`;
+}
+
+function SourceLogo({ src, alt, domain, fallbackLetter, className }: {
+  src: string | null | undefined;
+  alt: string;
+  domain: string;
+  fallbackLetter: string;
+  className: string;
+}) {
+  const [imgState, setImgState] = useState<"primary" | "google" | "letter">(src ? "primary" : "letter");
+
+  const handleError = useCallback(() => {
+    setImgState((prev) => {
+      if (prev === "primary") return "google";
+      return "letter";
+    });
+  }, []);
+
+  if (imgState === "letter") {
+    return <span className="text-white font-black text-3xl">{fallbackLetter}</span>;
+  }
+
+  const imgSrc = imgState === "primary" ? src! : getGoogleFaviconUrl(domain);
+  return (
+    <img
+      src={imgSrc}
+      alt={alt}
+      className={className}
+      onError={handleError}
+    />
+  );
+}
 
 const getVerdictStyle = (label: string) => {
   const styles: Record<string, { bg: string; text: string; light: string }> = {
@@ -111,17 +147,13 @@ export default function SourceDetailPage() {
                     : "bg-orange-500 text-white"
                 }`}
               >
-                {source.logoUrl ? (
-                  <img
-                    src={source.logoUrl}
-                    alt={source.displayName}
-                    className="w-full h-full object-contain rounded-2xl"
-                  />
-                ) : (
-                  <span className="text-white font-black text-3xl">
-                    {source.logo || source.displayName?.charAt(0) || "?"}
-                  </span>
-                )}
+                <SourceLogo
+                  src={source.logoUrl}
+                  alt={source.displayName}
+                  domain={source.handleOrDomain || ""}
+                  fallbackLetter={source.logo || source.displayName?.charAt(0) || "?"}
+                  className="w-full h-full object-contain rounded-2xl"
+                />
               </div>
               <div>
                 <h1 className="text-4xl font-black text-slate-900 tracking-tighter">

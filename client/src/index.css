@@ -51,3 +51,55 @@ body {
 .duration-1000 {
     animation-duration: 1000ms;
 }
+
+/* Neoclassical Editorial Textures */
+.bg-newspaper {
+    position: relative;
+}
+.bg-newspaper::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: radial-gradient(circle, rgba(100, 116, 139, 0.12) 1px, transparent 1px);
+    background-size: 4px 4px;
+    pointer-events: none;
+    z-index: 0;
+}
+
+.bg-editorial {
+    background: linear-gradient(135deg, #e2e8f0 0%, #cbd5e1 30%, #94a3b8 70%, #cbd5e1 100%);
+}
+
+.bg-halftone-subtle::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: radial-gradient(circle, rgba(100, 116, 139, 0.07) 1px, transparent 1px);
+    background-size: 6px 6px;
+    pointer-events: none;
+    z-index: 0;
+}
+
+.hero-statue-bg {
+    position: relative;
+    overflow: hidden;
+}
+.hero-statue-bg::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: url('/images/hero-statue.jpg');
+    background-size: cover;
+    background-position: center;
+    opacity: 0.08;
+    z-index: 0;
+    pointer-events: none;
+}
+.hero-statue-bg::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, rgba(248, 250, 252, 0.95) 0%, rgba(241, 245, 249, 0.98) 100%);
+    z-index: 0;
+    pointer-events: none;
+}

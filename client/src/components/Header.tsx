@@ -3,6 +3,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useLocation } from 'wouter';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { fetchMe, logout } from '../lib/api';
+import { useAuth } from '../lib/auth-context';
 
 export const Header: React.FC = () => {
   const [location, setLocation] = useLocation();
@@ -34,11 +35,13 @@ export const Header: React.FC = () => {
     setShowUserMenu(false);
   };
 
+  const { tier } = useAuth();
+
   const navItems = [
-    { path: '/', label: 'Stories' },
-    { path: '/blindspot', label: 'Blindspot' },
-    { path: '/sources', label: 'Sources' },
-    { path: '/signals', label: 'Signals' },
+    { path: '/', label: 'Stories', gated: false },
+    { path: '/blindspot', label: 'Blindspot', gated: false },
+    { path: '/sources', label: 'Sources', gated: false },
+    { path: '/signals', label: 'Signals', gated: true },
   ];
 
   const isActive = (path: string) => {
@@ -65,13 +68,20 @@ export const Header: React.FC = () => {
           </div>
 
           <nav className="hidden lg:flex items-center space-x-10 text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">
-            {navItems.map(({ path, label }) => (
+            {navItems.map(({ path, label, gated }) => (
               <button
                 key={path}
                 onClick={() => setLocation(path)}
                 className={`${isActive(path) ? 'text-cyan-600' : 'hover:text-slate-900'} transition-all flex flex-col items-center`}
               >
-                {label}
+                <span className="flex items-center gap-1.5">
+                  {label}
+                  {gated && tier === "free" && (
+                    <svg className="w-3 h-3 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                    </svg>
+                  )}
+                </span>
                 {isActive(path) && <div className="w-1 h-1 bg-cyan-600 rounded-full mt-1.5 shadow-[0_0_5px_cyan]"></div>}
               </button>
             ))}
