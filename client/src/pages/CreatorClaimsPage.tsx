@@ -314,9 +314,17 @@ export default function CreatorClaimsPage() {
     queryFn: fetchCreatorLeaderboard,
   });
 
-  // All predictions (no creator dedup on this page — show all claims)
+  // Deduplicate by creator — one claim per creator, interleaved for variety
   const allPredictions = useMemo(() => {
-    let items = predictions;
+    const seen = new Set<string>();
+    const unique: any[] = [];
+    for (const p of predictions) {
+      const cid = p.creator?.id || p.creator?.channelName || "";
+      if (seen.has(cid)) continue;
+      seen.add(cid);
+      unique.push(p);
+    }
+    let items = unique;
     if (activeCategory !== "All") {
       items = items.filter((p: any) => p.category === activeCategory);
     }

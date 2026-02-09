@@ -170,9 +170,9 @@ const CREATOR_DATA = [
     priceAccuracy: 78, timelineAccuracy: 72, regulatoryAccuracy: 80,
     partnershipAccuracy: 75, technologyAccuracy: 85, marketAccuracy: 90,
     videos: [
-      { youtubeVideoId: "bb_xrp_chart_01", title: "XRP Chart Breakout Analysis — February 2026", publishedAt: new Date("2026-01-28"), durationSeconds: 1845, viewCount: 89000, thumbnailUrl: "https://i.ytimg.com/vi/bb_xrp_chart_01/maxresdefault.jpg" },
-      { youtubeVideoId: "bb_cycle_top_02", title: "When Does the Crypto Cycle Top? My Updated Model", publishedAt: new Date("2026-01-15"), durationSeconds: 2100, viewCount: 142000, thumbnailUrl: "https://i.ytimg.com/vi/bb_cycle_top_02/maxresdefault.jpg" },
-      { youtubeVideoId: "bb_btc_dom_03", title: "Bitcoin Dominance Dropping — Altseason Signal?", publishedAt: new Date("2026-02-02"), durationSeconds: 1560, viewCount: 67000, thumbnailUrl: "https://i.ytimg.com/vi/bb_btc_dom_03/maxresdefault.jpg" },
+      { youtubeVideoId: "8Z07hyhuCjY", title: "XRP Chart Breakout Analysis — February 2026", publishedAt: new Date("2026-01-28"), durationSeconds: 1845, viewCount: 89000, thumbnailUrl: "https://i.ytimg.com/vi/8Z07hyhuCjY/maxresdefault.jpg" },
+      { youtubeVideoId: "tl8MuLBNRiE", title: "When Does the Crypto Cycle Top? My Updated Model", publishedAt: new Date("2026-01-15"), durationSeconds: 2100, viewCount: 142000, thumbnailUrl: "https://i.ytimg.com/vi/tl8MuLBNRiE/maxresdefault.jpg" },
+      { youtubeVideoId: "KIBfjpov-no", title: "Bitcoin Dominance Dropping — Altseason Signal?", publishedAt: new Date("2026-02-02"), durationSeconds: 1560, viewCount: 67000, thumbnailUrl: "https://i.ytimg.com/vi/KIBfjpov-no/maxresdefault.jpg" },
     ],
     claims: [
       { claimText: "XRP will reach $5 before the end of Q1 2026 based on historical cycle patterns", category: "price_prediction" as const, status: "pending" as const, confidenceLanguage: "strong" as const, statedTimeframe: "Q1 2026", assetSymbols: ["XRP"], specificityScore: 9, aiExtractionConfidence: 0.92 },
@@ -203,8 +203,8 @@ const CREATOR_DATA = [
     priceAccuracy: 60, timelineAccuracy: 55, regulatoryAccuracy: 88,
     partnershipAccuracy: 78, technologyAccuracy: 72, marketAccuracy: 68,
     videos: [
-      { youtubeVideoId: "dai_ripple_01", title: "Ripple IPO Rumors Are REAL — What It Means for XRP", publishedAt: new Date("2026-01-22"), durationSeconds: 1320, viewCount: 95000, thumbnailUrl: "https://i.ytimg.com/vi/dai_ripple_01/maxresdefault.jpg" },
-      { youtubeVideoId: "dai_sec_02", title: "SEC Settlement Final? XRP Legal Update", publishedAt: new Date("2026-02-01"), durationSeconds: 1680, viewCount: 112000, thumbnailUrl: "https://i.ytimg.com/vi/dai_sec_02/maxresdefault.jpg" },
+      { youtubeVideoId: "BEsnPzmL1Xc", title: "Ripple IPO Rumors Are REAL — What It Means for XRP", publishedAt: new Date("2026-01-22"), durationSeconds: 1320, viewCount: 95000, thumbnailUrl: "https://i.ytimg.com/vi/BEsnPzmL1Xc/maxresdefault.jpg" },
+      { youtubeVideoId: "nFofKnlm0rc", title: "SEC Settlement Final? XRP Legal Update", publishedAt: new Date("2026-02-01"), durationSeconds: 1680, viewCount: 112000, thumbnailUrl: "https://i.ytimg.com/vi/nFofKnlm0rc/maxresdefault.jpg" },
     ],
     claims: [
       { claimText: "Ripple will file for IPO in 2026 following SEC settlement", category: "partnership" as const, status: "pending" as const, confidenceLanguage: "medium" as const, statedTimeframe: "2026", assetSymbols: ["XRP"], specificityScore: 8, aiExtractionConfidence: 0.85 },
@@ -234,8 +234,8 @@ const CREATOR_DATA = [
     priceAccuracy: 62, timelineAccuracy: 60, regulatoryAccuracy: 90,
     partnershipAccuracy: 75, technologyAccuracy: 78, marketAccuracy: 70,
     videos: [
-      { youtubeVideoId: "tc_reg_01", title: "Crypto Regulation Update — What Congress Is Planning", publishedAt: new Date("2026-01-20"), durationSeconds: 2400, viewCount: 78000, thumbnailUrl: "https://i.ytimg.com/vi/tc_reg_01/maxresdefault.jpg" },
-      { youtubeVideoId: "tc_etf_02", title: "XRP ETF Filing Deep Dive with Industry Expert", publishedAt: new Date("2026-02-03"), durationSeconds: 3200, viewCount: 105000, thumbnailUrl: "https://i.ytimg.com/vi/tc_etf_02/maxresdefault.jpg" },
+      { youtubeVideoId: "E2j6hDks7Uw", title: "Crypto Regulation Update — What Congress Is Planning", publishedAt: new Date("2026-01-20"), durationSeconds: 2400, viewCount: 78000, thumbnailUrl: "https://i.ytimg.com/vi/E2j6hDks7Uw/maxresdefault.jpg" },
+      { youtubeVideoId: "AHl95jAVQXg", title: "XRP ETF Filing Deep Dive with Industry Expert", publishedAt: new Date("2026-02-03"), durationSeconds: 3200, viewCount: 105000, thumbnailUrl: "https://i.ytimg.com/vi/AHl95jAVQXg/maxresdefault.jpg" },
     ],
     claims: [
       { claimText: "XRP ETF will be approved by mid-2026 based on regulatory trajectory", category: "etf_approval" as const, status: "pending" as const, confidenceLanguage: "strong" as const, statedTimeframe: "mid-2026", assetSymbols: ["XRP"], specificityScore: 8, aiExtractionConfidence: 0.88 },
@@ -265,8 +265,8 @@ const CREATOR_DATA = [
     priceAccuracy: 58, timelineAccuracy: 55, regulatoryAccuracy: 88,
     partnershipAccuracy: 72, technologyAccuracy: 75, marketAccuracy: 68,
     videos: [
-      { youtubeVideoId: "ml_etf_01", title: "XRP ETF — When, Not If", publishedAt: new Date("2026-01-25"), durationSeconds: 1450, viewCount: 88000, thumbnailUrl: "https://i.ytimg.com/vi/ml_etf_01/maxresdefault.jpg" },
-      { youtubeVideoId: "ml_reg_02", title: "Regulatory Clarity Is Here — XRP's Next Chapter", publishedAt: new Date("2026-02-04"), durationSeconds: 1200, viewCount: 71000, thumbnailUrl: "https://i.ytimg.com/vi/ml_reg_02/maxresdefault.jpg" },
+      { youtubeVideoId: "4GKWlSkbYck", title: "XRP ETF — When, Not If", publishedAt: new Date("2026-01-25"), durationSeconds: 1450, viewCount: 88000, thumbnailUrl: "https://i.ytimg.com/vi/4GKWlSkbYck/maxresdefault.jpg" },
+      { youtubeVideoId: "K7P-jVI0EK8", title: "Regulatory Clarity Is Here — XRP's Next Chapter", publishedAt: new Date("2026-02-04"), durationSeconds: 1200, viewCount: 71000, thumbnailUrl: "https://i.ytimg.com/vi/K7P-jVI0EK8/maxresdefault.jpg" },
     ],
     claims: [
       { claimText: "XRP ETF approval is a matter of when not if, likely 2026", category: "etf_approval" as const, status: "pending" as const, confidenceLanguage: "strong" as const, statedTimeframe: "2026", assetSymbols: ["XRP"], specificityScore: 6, aiExtractionConfidence: 0.85 },
@@ -296,8 +296,8 @@ const CREATOR_DATA = [
     priceAccuracy: 55, timelineAccuracy: 45, regulatoryAccuracy: 82,
     partnershipAccuracy: 70, technologyAccuracy: 75, marketAccuracy: 60,
     videos: [
-      { youtubeVideoId: "ck_daily_01", title: "XRP Daily Update — Massive Volume Incoming", publishedAt: new Date("2026-02-05"), durationSeconds: 980, viewCount: 45000, thumbnailUrl: "https://i.ytimg.com/vi/ck_daily_01/maxresdefault.jpg" },
-      { youtubeVideoId: "ck_news_02", title: "XRP News: RLUSD Adoption Growing Fast", publishedAt: new Date("2026-01-30"), durationSeconds: 1100, viewCount: 62000, thumbnailUrl: "https://i.ytimg.com/vi/ck_news_02/maxresdefault.jpg" },
+      { youtubeVideoId: "jygKOJwxIzc", title: "XRP Daily Update — Massive Volume Incoming", publishedAt: new Date("2026-02-05"), durationSeconds: 980, viewCount: 45000, thumbnailUrl: "https://i.ytimg.com/vi/jygKOJwxIzc/maxresdefault.jpg" },
+      { youtubeVideoId: "kmuHh9KljvM", title: "XRP News: RLUSD Adoption Growing Fast", publishedAt: new Date("2026-01-30"), durationSeconds: 1100, viewCount: 62000, thumbnailUrl: "https://i.ytimg.com/vi/kmuHh9KljvM/maxresdefault.jpg" },
     ],
     claims: [
       { claimText: "XRP will see massive volume spike once ETF is approved", category: "market_prediction" as const, status: "pending" as const, confidenceLanguage: "strong" as const, statedTimeframe: null, assetSymbols: ["XRP"], specificityScore: 5, aiExtractionConfidence: 0.80 },
@@ -329,9 +329,9 @@ const CREATOR_DATA = [
     priceAccuracy: 70, timelineAccuracy: 68, regulatoryAccuracy: 85,
     partnershipAccuracy: 80, technologyAccuracy: 88, marketAccuracy: 75,
     videos: [
-      { youtubeVideoId: "cb_top10_01", title: "Top 10 Altcoins for 2026 — My Portfolio Picks", publishedAt: new Date("2026-01-10"), durationSeconds: 2800, viewCount: 1200000, thumbnailUrl: "https://i.ytimg.com/vi/cb_top10_01/maxresdefault.jpg" },
-      { youtubeVideoId: "cb_eth_02", title: "Ethereum's Pectra Upgrade — Everything You Need to Know", publishedAt: new Date("2026-01-25"), durationSeconds: 2200, viewCount: 680000, thumbnailUrl: "https://i.ytimg.com/vi/cb_eth_02/maxresdefault.jpg" },
-      { youtubeVideoId: "cb_btc_03", title: "Bitcoin to $200K? Analyzing the Bull Case", publishedAt: new Date("2026-02-01"), durationSeconds: 1950, viewCount: 890000, thumbnailUrl: "https://i.ytimg.com/vi/cb_btc_03/maxresdefault.jpg" },
+      { youtubeVideoId: "ULzi53fsSBI", title: "Top 10 Altcoins for 2026 — My Portfolio Picks", publishedAt: new Date("2026-01-10"), durationSeconds: 2800, viewCount: 1200000, thumbnailUrl: "https://i.ytimg.com/vi/ULzi53fsSBI/maxresdefault.jpg" },
+      { youtubeVideoId: "9fPp4-PeyXo", title: "Ethereum's Pectra Upgrade — Everything You Need to Know", publishedAt: new Date("2026-01-25"), durationSeconds: 2200, viewCount: 680000, thumbnailUrl: "https://i.ytimg.com/vi/9fPp4-PeyXo/maxresdefault.jpg" },
+      { youtubeVideoId: "IxpuU1MZbHg", title: "Bitcoin to $200K? Analyzing the Bull Case", publishedAt: new Date("2026-02-01"), durationSeconds: 1950, viewCount: 890000, thumbnailUrl: "https://i.ytimg.com/vi/IxpuU1MZbHg/maxresdefault.jpg" },
     ],
     claims: [
       { claimText: "Bitcoin will reach $200K in this cycle, likely by end of 2026", category: "price_prediction" as const, status: "pending" as const, confidenceLanguage: "medium" as const, statedTimeframe: "end of 2026", assetSymbols: ["BTC"], specificityScore: 9, aiExtractionConfidence: 0.90 },
@@ -363,9 +363,9 @@ const CREATOR_DATA = [
     priceAccuracy: 72, timelineAccuracy: 65, regulatoryAccuracy: 70,
     partnershipAccuracy: 60, technologyAccuracy: 80, marketAccuracy: 85,
     videos: [
-      { youtubeVideoId: "bc_risk_01", title: "Bitcoin Risk Metric Update — Where Are We in the Cycle?", publishedAt: new Date("2026-01-18"), durationSeconds: 1800, viewCount: 320000, thumbnailUrl: "https://i.ytimg.com/vi/bc_risk_01/maxresdefault.jpg" },
-      { youtubeVideoId: "bc_eth_02", title: "ETH/BTC Ratio — The Moment of Truth", publishedAt: new Date("2026-02-02"), durationSeconds: 1500, viewCount: 250000, thumbnailUrl: "https://i.ytimg.com/vi/bc_eth_02/maxresdefault.jpg" },
-      { youtubeVideoId: "bc_macro_03", title: "Fed Rate Cuts and Crypto — Macro Analysis", publishedAt: new Date("2026-01-28"), durationSeconds: 2100, viewCount: 410000, thumbnailUrl: "https://i.ytimg.com/vi/bc_macro_03/maxresdefault.jpg" },
+      { youtubeVideoId: "mUEsVBXxmUc", title: "Bitcoin Risk Metric Update — Where Are We in the Cycle?", publishedAt: new Date("2026-01-18"), durationSeconds: 1800, viewCount: 320000, thumbnailUrl: "https://i.ytimg.com/vi/mUEsVBXxmUc/maxresdefault.jpg" },
+      { youtubeVideoId: "eAzoXY1GfIo", title: "ETH/BTC Ratio — The Moment of Truth", publishedAt: new Date("2026-02-02"), durationSeconds: 1500, viewCount: 250000, thumbnailUrl: "https://i.ytimg.com/vi/eAzoXY1GfIo/maxresdefault.jpg" },
+      { youtubeVideoId: "FzatgJnEZoo", title: "Fed Rate Cuts and Crypto — Macro Analysis", publishedAt: new Date("2026-01-28"), durationSeconds: 2100, viewCount: 410000, thumbnailUrl: "https://i.ytimg.com/vi/FzatgJnEZoo/maxresdefault.jpg" },
     ],
     claims: [
       { claimText: "Bitcoin's risk metric suggests we are still in mid-cycle, not near a top", category: "market_analysis" as const, status: "pending" as const, confidenceLanguage: "strong" as const, statedTimeframe: "early 2026", assetSymbols: ["BTC"], specificityScore: 7, aiExtractionConfidence: 0.90 },
@@ -396,8 +396,8 @@ const CREATOR_DATA = [
     priceAccuracy: 48, timelineAccuracy: 42, regulatoryAccuracy: 72,
     partnershipAccuracy: 68, technologyAccuracy: 65, marketAccuracy: 58,
     videos: [
-      { youtubeVideoId: "ad_altseason_01", title: "ALTSEASON IS HERE! Top Picks for February 2026", publishedAt: new Date("2026-02-03"), durationSeconds: 1400, viewCount: 520000, thumbnailUrl: "https://i.ytimg.com/vi/ad_altseason_01/maxresdefault.jpg" },
-      { youtubeVideoId: "ad_sol_02", title: "Solana Update — Why SOL Could 5X", publishedAt: new Date("2026-01-22"), durationSeconds: 1200, viewCount: 380000, thumbnailUrl: "https://i.ytimg.com/vi/ad_sol_02/maxresdefault.jpg" },
+      { youtubeVideoId: "MkCyNO_nqUY", title: "ALTSEASON IS HERE! Top Picks for February 2026", publishedAt: new Date("2026-02-03"), durationSeconds: 1400, viewCount: 520000, thumbnailUrl: "https://i.ytimg.com/vi/MkCyNO_nqUY/maxresdefault.jpg" },
+      { youtubeVideoId: "dFVO8LD-h-M", title: "Solana Update — Why SOL Could 5X", publishedAt: new Date("2026-01-22"), durationSeconds: 1200, viewCount: 380000, thumbnailUrl: "https://i.ytimg.com/vi/dFVO8LD-h-M/maxresdefault.jpg" },
     ],
     claims: [
       { claimText: "Altseason will begin in February 2026 as Bitcoin dominance drops", category: "market_prediction" as const, status: "pending" as const, confidenceLanguage: "strong" as const, statedTimeframe: "February 2026", assetSymbols: ["BTC"], specificityScore: 7, aiExtractionConfidence: 0.82 },
@@ -428,8 +428,8 @@ const CREATOR_DATA = [
     priceAccuracy: 30, timelineAccuracy: 25, regulatoryAccuracy: 55,
     partnershipAccuracy: 45, technologyAccuracy: 50, marketAccuracy: 40,
     videos: [
-      { youtubeVideoId: "ba_100x_01", title: "This Altcoin Could 100X — Don't Miss It!", publishedAt: new Date("2026-01-28"), durationSeconds: 1100, viewCount: 650000, thumbnailUrl: "https://i.ytimg.com/vi/ba_100x_01/maxresdefault.jpg" },
-      { youtubeVideoId: "ba_btc_02", title: "Bitcoin $300K Is PROGRAMMED — Here's Why", publishedAt: new Date("2026-02-05"), durationSeconds: 1350, viewCount: 480000, thumbnailUrl: "https://i.ytimg.com/vi/ba_btc_02/maxresdefault.jpg" },
+      { youtubeVideoId: "9PAvppqOyOw", title: "This Altcoin Could 100X — Don't Miss It!", publishedAt: new Date("2026-01-28"), durationSeconds: 1100, viewCount: 650000, thumbnailUrl: "https://i.ytimg.com/vi/9PAvppqOyOw/maxresdefault.jpg" },
+      { youtubeVideoId: "zx2lj0sxg-A", title: "Bitcoin $300K Is PROGRAMMED — Here's Why", publishedAt: new Date("2026-02-05"), durationSeconds: 1350, viewCount: 480000, thumbnailUrl: "https://i.ytimg.com/vi/zx2lj0sxg-A/maxresdefault.jpg" },
     ],
     claims: [
       { claimText: "Bitcoin will reach $300K in this cycle", category: "price_prediction" as const, status: "pending" as const, confidenceLanguage: "strong" as const, statedTimeframe: "this cycle", assetSymbols: ["BTC"], specificityScore: 8, aiExtractionConfidence: 0.78 },
@@ -460,8 +460,8 @@ const CREATOR_DATA = [
     priceAccuracy: 55, timelineAccuracy: 50, regulatoryAccuracy: 65,
     partnershipAccuracy: 62, technologyAccuracy: 60, marketAccuracy: 70,
     videos: [
-      { youtubeVideoId: "cban_live_01", title: "LIVE: Bitcoin Breaking Out! Trading the Move", publishedAt: new Date("2026-02-04"), durationSeconds: 5400, viewCount: 180000, thumbnailUrl: "https://i.ytimg.com/vi/cban_live_01/maxresdefault.jpg" },
-      { youtubeVideoId: "cban_setup_02", title: "Best Trading Setups This Week — February 2026", publishedAt: new Date("2026-02-03"), durationSeconds: 2800, viewCount: 120000, thumbnailUrl: "https://i.ytimg.com/vi/cban_setup_02/maxresdefault.jpg" },
+      { youtubeVideoId: "sng_DKV_kQw", title: "LIVE: Bitcoin Breaking Out! Trading the Move", publishedAt: new Date("2026-02-04"), durationSeconds: 5400, viewCount: 180000, thumbnailUrl: "https://i.ytimg.com/vi/sng_DKV_kQw/maxresdefault.jpg" },
+      { youtubeVideoId: "KQWZC1gGbyg", title: "Best Trading Setups This Week — February 2026", publishedAt: new Date("2026-02-03"), durationSeconds: 2800, viewCount: 120000, thumbnailUrl: "https://i.ytimg.com/vi/KQWZC1gGbyg/maxresdefault.jpg" },
     ],
     claims: [
       { claimText: "Bitcoin will test $150K before any major pullback occurs", category: "price_prediction" as const, status: "pending" as const, confidenceLanguage: "medium" as const, statedTimeframe: "Q1 2026", assetSymbols: ["BTC"], specificityScore: 8, aiExtractionConfidence: 0.82 },
@@ -491,8 +491,8 @@ const CREATOR_DATA = [
     priceAccuracy: 68, timelineAccuracy: 62, regulatoryAccuracy: 72,
     partnershipAccuracy: 65, technologyAccuracy: 78, marketAccuracy: 80,
     videos: [
-      { youtubeVideoId: "dd_macro_01", title: "The Macro Picture for Crypto in 2026", publishedAt: new Date("2026-01-12"), durationSeconds: 2400, viewCount: 210000, thumbnailUrl: "https://i.ytimg.com/vi/dd_macro_01/maxresdefault.jpg" },
-      { youtubeVideoId: "dd_defi_02", title: "DeFi Renaissance — Why TVL Is Exploding", publishedAt: new Date("2026-01-30"), durationSeconds: 1800, viewCount: 165000, thumbnailUrl: "https://i.ytimg.com/vi/dd_defi_02/maxresdefault.jpg" },
+      { youtubeVideoId: "Lhwmpsmdoec", title: "The Macro Picture for Crypto in 2026", publishedAt: new Date("2026-01-12"), durationSeconds: 2400, viewCount: 210000, thumbnailUrl: "https://i.ytimg.com/vi/Lhwmpsmdoec/maxresdefault.jpg" },
+      { youtubeVideoId: "mEekXZ0y0MM", title: "DeFi Renaissance — Why TVL Is Exploding", publishedAt: new Date("2026-01-30"), durationSeconds: 1800, viewCount: 165000, thumbnailUrl: "https://i.ytimg.com/vi/mEekXZ0y0MM/maxresdefault.jpg" },
     ],
     claims: [
       { claimText: "DeFi TVL will surpass $300B in 2026, exceeding the 2021 peak", category: "market_prediction" as const, status: "pending" as const, confidenceLanguage: "medium" as const, statedTimeframe: "2026", assetSymbols: [], specificityScore: 8, aiExtractionConfidence: 0.85 },
@@ -522,8 +522,8 @@ const CREATOR_DATA = [
     priceAccuracy: 45, timelineAccuracy: 40, regulatoryAccuracy: 60,
     partnershipAccuracy: 58, technologyAccuracy: 68, marketAccuracy: 52,
     videos: [
-      { youtubeVideoId: "ld_gems_01", title: "5 Hidden Gem Altcoins for 2026 Bull Run", publishedAt: new Date("2026-01-15"), durationSeconds: 1600, viewCount: 290000, thumbnailUrl: "https://i.ytimg.com/vi/ld_gems_01/maxresdefault.jpg" },
-      { youtubeVideoId: "ld_defi_02", title: "Best DeFi Yield Strategies Right Now", publishedAt: new Date("2026-02-01"), durationSeconds: 1400, viewCount: 180000, thumbnailUrl: "https://i.ytimg.com/vi/ld_defi_02/maxresdefault.jpg" },
+      { youtubeVideoId: "CnL0ANTt2_8", title: "5 Hidden Gem Altcoins for 2026 Bull Run", publishedAt: new Date("2026-01-15"), durationSeconds: 1600, viewCount: 290000, thumbnailUrl: "https://i.ytimg.com/vi/CnL0ANTt2_8/maxresdefault.jpg" },
+      { youtubeVideoId: "GNIO5ippvRk", title: "Best DeFi Yield Strategies Right Now", publishedAt: new Date("2026-02-01"), durationSeconds: 1400, viewCount: 180000, thumbnailUrl: "https://i.ytimg.com/vi/GNIO5ippvRk/maxresdefault.jpg" },
     ],
     claims: [
       { claimText: "At least one small-cap altcoin from his 2026 picks will 50X", category: "price_prediction" as const, status: "pending" as const, confidenceLanguage: "medium" as const, statedTimeframe: "2026", assetSymbols: [], specificityScore: 4, aiExtractionConfidence: 0.70 },
@@ -553,8 +553,8 @@ const CREATOR_DATA = [
     priceAccuracy: 58, timelineAccuracy: 52, regulatoryAccuracy: 65,
     partnershipAccuracy: 62, technologyAccuracy: 70, marketAccuracy: 68,
     videos: [
-      { youtubeVideoId: "se_btc_01", title: "Bitcoin Price Target Update — My Realistic Prediction", publishedAt: new Date("2026-01-20"), durationSeconds: 1500, viewCount: 140000, thumbnailUrl: "https://i.ytimg.com/vi/se_btc_01/maxresdefault.jpg" },
-      { youtubeVideoId: "se_trade_02", title: "How I'm Trading This Crypto Market — My Strategy", publishedAt: new Date("2026-02-02"), durationSeconds: 1800, viewCount: 95000, thumbnailUrl: "https://i.ytimg.com/vi/se_trade_02/maxresdefault.jpg" },
+      { youtubeVideoId: "bV5X3v3TTP0", title: "Bitcoin Price Target Update — My Realistic Prediction", publishedAt: new Date("2026-01-20"), durationSeconds: 1500, viewCount: 140000, thumbnailUrl: "https://i.ytimg.com/vi/bV5X3v3TTP0/maxresdefault.jpg" },
+      { youtubeVideoId: "Dw603qzqHQ0", title: "How I'm Trading This Crypto Market — My Strategy", publishedAt: new Date("2026-02-02"), durationSeconds: 1800, viewCount: 95000, thumbnailUrl: "https://i.ytimg.com/vi/Dw603qzqHQ0/maxresdefault.jpg" },
     ],
     claims: [
       { claimText: "Bitcoin will reach between $150K-$180K at this cycle's peak", category: "price_prediction" as const, status: "pending" as const, confidenceLanguage: "medium" as const, statedTimeframe: "this cycle", assetSymbols: ["BTC"], specificityScore: 8, aiExtractionConfidence: 0.85 },
@@ -584,8 +584,8 @@ const CREATOR_DATA = [
     priceAccuracy: 58, timelineAccuracy: 48, regulatoryAccuracy: 55,
     partnershipAccuracy: 50, technologyAccuracy: 62, marketAccuracy: 72,
     videos: [
-      { youtubeVideoId: "cj_ta_01", title: "Bitcoin Technical Analysis — Key Levels to Watch", publishedAt: new Date("2026-02-01"), durationSeconds: 1600, viewCount: 150000, thumbnailUrl: "https://i.ytimg.com/vi/cj_ta_01/maxresdefault.jpg" },
-      { youtubeVideoId: "cj_alt_02", title: "This Altcoin Chart Looks INCREDIBLE Right Now", publishedAt: new Date("2026-01-25"), durationSeconds: 1300, viewCount: 120000, thumbnailUrl: "https://i.ytimg.com/vi/cj_alt_02/maxresdefault.jpg" },
+      { youtubeVideoId: "TSe-9O4nzyE", title: "Bitcoin Technical Analysis — Key Levels to Watch", publishedAt: new Date("2026-02-01"), durationSeconds: 1600, viewCount: 150000, thumbnailUrl: "https://i.ytimg.com/vi/TSe-9O4nzyE/maxresdefault.jpg" },
+      { youtubeVideoId: "uFyCDDmk9JE", title: "This Altcoin Chart Looks INCREDIBLE Right Now", publishedAt: new Date("2026-01-25"), durationSeconds: 1300, viewCount: 120000, thumbnailUrl: "https://i.ytimg.com/vi/uFyCDDmk9JE/maxresdefault.jpg" },
     ],
     claims: [
       { claimText: "Bitcoin will see a 30% correction before reaching new all-time highs", category: "technical_analysis" as const, status: "pending" as const, confidenceLanguage: "medium" as const, statedTimeframe: "2026", assetSymbols: ["BTC"], specificityScore: 7, aiExtractionConfidence: 0.80 },
@@ -616,8 +616,8 @@ const CREATOR_DATA = [
     priceAccuracy: 72, timelineAccuracy: 60, regulatoryAccuracy: 68,
     partnershipAccuracy: 55, technologyAccuracy: 75, marketAccuracy: 78,
     videos: [
-      { youtubeVideoId: "ia_model_01", title: "My Bitcoin Price Model Updated for 2026 — Spreadsheet Walkthrough", publishedAt: new Date("2026-01-18"), durationSeconds: 2600, viewCount: 280000, thumbnailUrl: "https://i.ytimg.com/vi/ia_model_01/maxresdefault.jpg" },
-      { youtubeVideoId: "ia_sol_02", title: "Solana vs Ethereum — Which Is the Better Investment?", publishedAt: new Date("2026-01-30"), durationSeconds: 2200, viewCount: 195000, thumbnailUrl: "https://i.ytimg.com/vi/ia_sol_02/maxresdefault.jpg" },
+      { youtubeVideoId: "ycHFEcaHC3I", title: "My Bitcoin Price Model Updated for 2026 — Spreadsheet Walkthrough", publishedAt: new Date("2026-01-18"), durationSeconds: 2600, viewCount: 280000, thumbnailUrl: "https://i.ytimg.com/vi/ycHFEcaHC3I/maxresdefault.jpg" },
+      { youtubeVideoId: "GNz5jO7K88Y", title: "Solana vs Ethereum — Which Is the Better Investment?", publishedAt: new Date("2026-01-30"), durationSeconds: 2200, viewCount: 195000, thumbnailUrl: "https://i.ytimg.com/vi/GNz5jO7K88Y/maxresdefault.jpg" },
     ],
     claims: [
       { claimText: "Bitcoin fair value model shows $175K-$220K range for cycle peak", category: "price_prediction" as const, status: "pending" as const, confidenceLanguage: "strong" as const, statedTimeframe: "cycle peak", assetSymbols: ["BTC"], specificityScore: 8, aiExtractionConfidence: 0.88 },
