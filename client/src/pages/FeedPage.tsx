@@ -333,19 +333,15 @@ function CreatorPredictionsSection({
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[12px] font-bold text-content-primary truncate">
-                      {creatorName}
-                    </span>
-                    {creatorTier && <TierBadge tier={creatorTier} size="sm" />}
-                  </div>
+                  <span className="text-[12px] font-bold text-content-primary">
+                    {creatorName}
+                  </span>
                   {accuracy != null && (
-                    <span className="text-[9px] text-content-muted">
+                    <span className="text-[9px] text-content-muted block">
                       {Math.round(accuracy)}% accuracy
                     </span>
                   )}
                 </div>
-                {confidence && <ConfidenceBadge confidence={confidence} />}
               </div>
 
               {/* Claim text */}
