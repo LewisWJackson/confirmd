@@ -1366,6 +1366,164 @@ router.get("/gifts/validate/:code", async (req: Request, res: Response) => {
   }
 });
 
+// ─── Admin Routes ───────────────────────────────────────────────────
+
+function requireAuth(req: Request, res: Response, next: Function) {
+  if (!req.session?.userId) {
+    res.status(401).json({ error: "Authentication required" });
+    return;
+  }
+  next();
+}
+
+// Stories
+router.put("/admin/stories/:id", requireAuth, async (req: Request, res: Response) => {
+  try {
+    const storyId = param(req, "id");
+    const story = await storage.getStory(storyId);
+    if (!story) {
+      res.status(404).json({ error: "Story not found" });
+      return;
+    }
+    const { title, summary, category, imageUrl, assetSymbols } = req.body || {};
+    const update: Record<string, any> = {};
+    if (title !== undefined) update.title = title;
+    if (summary !== undefined) update.summary = summary;
+    if (category !== undefined) update.category = category;
+    if (imageUrl !== undefined) update.imageUrl = imageUrl;
+    if (assetSymbols !== undefined) update.assetSymbols = assetSymbols;
+    await storage.updateStory(storyId, update);
+    const updated = await storage.getStory(storyId);
+    res.json(updated);
+  } catch (err) {
+    console.error("PUT /admin/stories/:id error:", err);
+    res.status(500).json({ error: "Failed to update story" });
+  }
+});
+
+router.delete("/admin/stories/:id", requireAuth, async (req: Request, res: Response) => {
+  try {
+    const storyId = param(req, "id");
+    const deleted = await storage.deleteStory(storyId);
+    if (!deleted) {
+      res.status(404).json({ error: "Story not found" });
+      return;
+    }
+    res.status(204).send();
+  } catch (err) {
+    console.error("DELETE /admin/stories/:id error:", err);
+    res.status(500).json({ error: "Failed to delete story" });
+  }
+});
+
+// Claims
+router.put("/admin/claims/:id", requireAuth, async (req: Request, res: Response) => {
+  try {
+    const claimId = param(req, "id");
+    const claim = await storage.getClaim(claimId);
+    if (!claim) {
+      res.status(404).json({ error: "Claim not found" });
+      return;
+    }
+    const { claimText, claimType, status, assetSymbols } = req.body || {};
+    const update: Record<string, any> = {};
+    if (claimText !== undefined) update.claimText = claimText;
+    if (claimType !== undefined) update.claimType = claimType;
+    if (status !== undefined) update.status = status;
+    if (assetSymbols !== undefined) update.assetSymbols = assetSymbols;
+    const updated = await storage.updateClaim(claimId, update);
+    res.json(updated);
+  } catch (err) {
+    console.error("PUT /admin/claims/:id error:", err);
+    res.status(500).json({ error: "Failed to update claim" });
+  }
+});
+
+router.delete("/admin/claims/:id", requireAuth, async (req: Request, res: Response) => {
+  try {
+    const claimId = param(req, "id");
+    const deleted = await storage.deleteClaim(claimId);
+    if (!deleted) {
+      res.status(404).json({ error: "Claim not found" });
+      return;
+    }
+    res.status(204).send();
+  } catch (err) {
+    console.error("DELETE /admin/claims/:id error:", err);
+    res.status(500).json({ error: "Failed to delete claim" });
+  }
+});
+
+// Verdicts (manual override — creates new record for audit trail)
+router.put("/admin/verdicts/:claimId", requireAuth, async (req: Request, res: Response) => {
+  try {
+    const claimId = param(req, "claimId");
+    const claim = await storage.getClaim(claimId);
+    if (!claim) {
+      res.status(404).json({ error: "Claim not found" });
+      return;
+    }
+    const { verdictLabel, reasoningSummary, probabilityTrue } = req.body || {};
+    if (!verdictLabel) {
+      res.status(400).json({ error: "verdictLabel is required" });
+      return;
+    }
+    const verdict = await storage.createVerdict({
+      claimId,
+      model: "manual_override",
+      promptVersion: "admin",
+      verdictLabel,
+      reasoningSummary: reasoningSummary ?? null,
+      probabilityTrue: probabilityTrue ?? null,
+    });
+    res.json(verdict);
+  } catch (err) {
+    console.error("PUT /admin/verdicts/:claimId error:", err);
+    res.status(500).json({ error: "Failed to update verdict" });
+  }
+});
+
+// Sources
+router.put("/admin/sources/:id", requireAuth, async (req: Request, res: Response) => {
+  try {
+    const sourceId = param(req, "id");
+    const source = await storage.getSource(sourceId);
+    if (!source) {
+      res.status(404).json({ error: "Source not found" });
+      return;
+    }
+    const { displayName, logoUrl, metadata } = req.body || {};
+    const update: Record<string, any> = {};
+    if (displayName !== undefined) update.displayName = displayName;
+    if (logoUrl !== undefined) update.logoUrl = logoUrl;
+    if (metadata !== undefined) update.metadata = metadata;
+    const updated = await storage.updateSource(sourceId, update);
+    res.json(updated);
+  } catch (err) {
+    console.error("PUT /admin/sources/:id error:", err);
+    res.status(500).json({ error: "Failed to update source" });
+  }
+});
+
+// Pipeline trigger
+router.post("/admin/pipeline/run", requireAuth, async (_req: Request, res: Response) => {
+  try {
+    const status = pipeline.getStatus();
+    if (status.isRunning) {
+      res.status(409).json({ error: "Pipeline is already running" });
+      return;
+    }
+    storage.setLastPipelineRun(new Date().toISOString());
+    pipeline.runDailyBatch().catch((err) => {
+      console.error("[Pipeline] Admin-triggered run failed:", err);
+    });
+    res.json({ status: "started" });
+  } catch (err) {
+    console.error("POST /admin/pipeline/run error:", err);
+    res.status(500).json({ error: "Failed to trigger pipeline" });
+  }
+});
+
 // ─── Firmy AI Support Agent ─────────────────────────────────────────
 
 const FIRMY_KNOWLEDGE: Record<string, { keywords: string[]; response: string; action?: string }> = {

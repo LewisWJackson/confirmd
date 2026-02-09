@@ -4,7 +4,9 @@ import { useParams, useLocation } from "wouter";
 import { fetchStoryDetail, fetchStories } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
 import { FactualityBar } from "../components/FactualityBar";
+import { VerdictBar } from "../components/VerdictBar";
 import TierBadge from "../components/TierBadge";
+import { FormattedReasoning } from "../components/FormattedReasoning";
 
 function timeAgo(dateStr: string): string {
   const now = Date.now();
@@ -88,10 +90,10 @@ function formatReasoning(raw: string, verdictLabel?: string): string {
 
 function VerdictBadge({ verdict }: { verdict: string }) {
   const styles: Record<string, string> = {
-    verified: "bg-factuality-high/10 text-factuality-high border-factuality-high/30",
-    speculative: "bg-factuality-mixed/10 text-factuality-mixed border-factuality-mixed/30",
-    misleading: "bg-factuality-low/10 text-factuality-low border-factuality-low/30",
-    plausible_unverified: "bg-factuality-mixed/10 text-factuality-mixed border-factuality-mixed/30",
+    verified: "bg-verdict-verified/10 text-verdict-verified border-verdict-verified/30",
+    speculative: "bg-verdict-speculative/10 text-verdict-speculative border-verdict-speculative/30",
+    misleading: "bg-verdict-misleading/10 text-verdict-misleading border-verdict-misleading/30",
+    plausible_unverified: "bg-verdict-plausible/10 text-verdict-plausible border-verdict-plausible/30",
   };
   const labels: Record<string, string> = {
     verified: "Verified",
@@ -330,17 +332,17 @@ export default function StoryDetailPage() {
                     const probability = claim.verdict?.probabilityTrue;
                     const reasoning = claim.verdict?.reasoningSummary;
                     const accentColors: Record<string, string> = {
-                      verified: "border-l-factuality-high",
-                      speculative: "border-l-factuality-mixed",
-                      misleading: "border-l-factuality-low",
-                      plausible_unverified: "border-l-factuality-mixed",
+                      verified: "border-l-verdict-verified",
+                      speculative: "border-l-verdict-speculative",
+                      misleading: "border-l-verdict-misleading",
+                      plausible_unverified: "border-l-verdict-plausible",
                       unreviewed: "border-l-border",
                     };
                     const badgeStyles: Record<string, string> = {
-                      verified: "bg-factuality-high text-white",
-                      speculative: "bg-factuality-mixed text-white",
-                      misleading: "bg-factuality-low text-white",
-                      plausible_unverified: "bg-factuality-mixed text-white",
+                      verified: "bg-verdict-verified text-white",
+                      speculative: "bg-verdict-speculative text-white",
+                      misleading: "bg-verdict-misleading text-white",
+                      plausible_unverified: "bg-verdict-plausible text-white",
                       unreviewed: "bg-surface-card-hover text-content-muted",
                     };
                     const badgeLabels: Record<string, string> = {
@@ -371,8 +373,8 @@ export default function StoryDetailPage() {
                                   <div className="flex-1 h-1.5 bg-surface-secondary rounded-full overflow-hidden max-w-[200px]">
                                     <div
                                       className={`h-full rounded-full ${
-                                        probability >= 0.7 ? "bg-factuality-high" :
-                                        probability >= 0.4 ? "bg-factuality-mixed" : "bg-factuality-low"
+                                        probability >= 0.7 ? "bg-verdict-verified" :
+                                        probability >= 0.4 ? "bg-verdict-speculative" : "bg-verdict-misleading"
                                       }`}
                                       style={{ width: `${Math.round(probability * 100)}%` }}
                                     />
@@ -384,9 +386,9 @@ export default function StoryDetailPage() {
                               )}
                               {/* Reasoning */}
                               {reasoning && (
-                                <p className="text-[12px] text-content-secondary leading-relaxed mt-2">
-                                  {formatReasoning(reasoning, verdictLabel)}
-                                </p>
+                                <div className="mt-2 text-[12px]">
+                                  <FormattedReasoning text={formatReasoning(reasoning, verdictLabel)} verdictLabel={verdictLabel} />
+                                </div>
                               )}
                               {/* Source + type */}
                               <div className="flex items-center gap-2 mt-2">
@@ -659,32 +661,8 @@ export default function StoryDetailPage() {
                       Verdict Summary
                     </h3>
                   </div>
-                  <div className="px-4 py-3 space-y-2">
-                    {Object.entries(verdictDist).map(([label, count]) => {
-                      const colors: Record<string, string> = {
-                        verified: "bg-factuality-high",
-                        speculative: "bg-factuality-mixed",
-                        misleading: "bg-factuality-low",
-                        plausible_unverified: "bg-factuality-mixed",
-                      };
-                      const labels: Record<string, string> = {
-                        verified: "Verified",
-                        speculative: "Speculative",
-                        misleading: "Misleading",
-                        plausible_unverified: "Plausible",
-                      };
-                      return (
-                        <div key={label} className="flex items-center gap-2">
-                          <span className={`w-2 h-2 rounded-full ${colors[label] || "bg-content-muted"}`} />
-                          <span className="text-[11px] font-bold text-content-primary flex-1">
-                            {labels[label] || label}
-                          </span>
-                          <span className="text-[11px] font-black text-content-secondary">
-                            {count as number}
-                          </span>
-                        </div>
-                      );
-                    })}
+                  <div className="px-4 py-3">
+                    <VerdictBar distribution={verdictDist} size="md" showLabels />
                   </div>
                 </div>
               )}

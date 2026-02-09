@@ -38,6 +38,7 @@ export interface IStorage {
   getSource(id: string): Promise<Source | undefined>;
   getSources(): Promise<Source[]>;
   getSourceByDomain(domain: string): Promise<Source | undefined>;
+  updateSource(id: string, data: Partial<Pick<Source, "displayName" | "logoUrl" | "metadata">>): Promise<Source | undefined>;
 
   // Items
   createItem(data: InsertItem): Promise<Item>;
@@ -52,6 +53,8 @@ export interface IStorage {
   getClaimsBySource(sourceId: string): Promise<Claim[]>;
   getClaimsByItem(itemId: string): Promise<Claim[]>;
   updateClaimMetadata(claimId: string, metadata: Record<string, any>): Promise<void>;
+  updateClaim(id: string, data: Partial<Pick<Claim, "claimText" | "claimType" | "status" | "assetSymbols">>): Promise<Claim | undefined>;
+  deleteClaim(id: string): Promise<boolean>;
 
   // Evidence
   createEvidence(data: InsertEvidence): Promise<EvidenceItem>;
@@ -72,6 +75,7 @@ export interface IStorage {
   getStory(id: string): Promise<Story | undefined>;
   getStories(): Promise<Story[]>;
   updateStory(id: string, data: Partial<Pick<Story, "title" | "summary" | "imageUrl" | "category" | "assetSymbols" | "sourceCount">>): Promise<void>;
+  deleteStory(id: string): Promise<boolean>;
   addClaimToStory(storyId: string, claimId: string): Promise<void>;
   addItemToStory(storyId: string, itemId: string): Promise<void>;
   getStoryWithClaims(storyId: string): Promise<{ story: Story; claims: Claim[] } | undefined>;
@@ -233,6 +237,13 @@ export class MemStorage implements IStorage {
     );
   }
 
+  async updateSource(id: string, data: Partial<Pick<Source, "displayName" | "logoUrl" | "metadata">>): Promise<Source | undefined> {
+    const source = this.sources.get(id);
+    if (!source) return undefined;
+    Object.assign(source, data, { updatedAt: new Date() });
+    return source;
+  }
+
   // ── Items ────────────────────────────────────────────────────────
 
   async createItem(data: InsertItem): Promise<Item> {
@@ -366,6 +377,31 @@ export class MemStorage implements IStorage {
     }
   }
 
+  async updateClaim(id: string, data: Partial<Pick<Claim, "claimText" | "claimType" | "status" | "assetSymbols">>): Promise<Claim | undefined> {
+    const claim = this.claims.get(id);
+    if (!claim) return undefined;
+    Object.assign(claim, data);
+    return claim;
+  }
+
+  async deleteClaim(id: string): Promise<boolean> {
+    if (!this.claims.has(id)) return false;
+    this.claims.delete(id);
+    // Delete related evidence
+    for (const [eid, ev] of this.evidence.entries()) {
+      if (ev.claimId === id) this.evidence.delete(eid);
+    }
+    // Delete related verdicts
+    for (const [vid, v] of this.verdicts.entries()) {
+      if (v.claimId === id) this.verdicts.delete(vid);
+    }
+    // Delete related storyClaims
+    for (const [scid, sc] of this.storyClaims.entries()) {
+      if (sc.claimId === id) this.storyClaims.delete(scid);
+    }
+    return true;
+  }
+
   // ── Evidence ─────────────────────────────────────────────────────
 
   async createEvidence(data: InsertEvidence): Promise<EvidenceItem> {
@@ -490,6 +526,20 @@ export class MemStorage implements IStorage {
     const story = this.stories.get(id);
     if (!story) return;
     Object.assign(story, data, { updatedAt: new Date() });
+  }
+
+  async deleteStory(id: string): Promise<boolean> {
+    if (!this.stories.has(id)) return false;
+    this.stories.delete(id);
+    // Delete related storyClaims
+    for (const [scid, sc] of this.storyClaims.entries()) {
+      if (sc.storyId === id) this.storyClaims.delete(scid);
+    }
+    // Delete related storyItemJoins
+    for (const [siid, si] of this.storyItemJoins.entries()) {
+      if (si.storyId === id) this.storyItemJoins.delete(siid);
+    }
+    return true;
   }
 
   async addClaimToStory(storyId: string, claimId: string): Promise<void> {
@@ -1594,7 +1644,7 @@ export async function seedInitialData(storage: MemStorage): Promise<void> {
     probabilityTrue: 0.91,
     evidenceStrength: 0.88,
     keyEvidenceIds: [ev1.id, ev2.id, ev3.id],
-    reasoningSummary: "SEC public calendar confirms the scheduled meeting. Multiple institutional sources corroborate the timeline. Primary evidence directly supports this claim.",
+    reasoningSummary: "**Evidence Summary**: 3 evidence items analyzed with strong primary and secondary source confirmation.\n\n**Key Findings**:\n1. SEC public calendar confirms the scheduled meeting date\n2. Multiple institutional sources corroborate the timeline\n\n**Conclusion**: Primary evidence directly supports this claim.",
     invalidationTriggers: "SEC announcement of postponement or cancellation would invalidate this verdict.",
   });
 
@@ -1606,7 +1656,7 @@ export async function seedInitialData(storage: MemStorage): Promise<void> {
     probabilityTrue: 0.18,
     evidenceStrength: 0.22,
     keyEvidenceIds: [ev5.id],
-    reasoningSummary: "No primary source evidence supports this accelerated timeline. SEC communications indicate no imminent decision. Anonymous claim with no corroborating evidence. Source track record is very poor.",
+    reasoningSummary: "**Evidence Summary**: 4 evidence items analyzed, predominantly contradicting the claim.\n\n**Key Findings**:\n1. SEC communications indicate no imminent decision\n2. Anonymous claim with no corroborating evidence\n\n**Critical Weaknesses**:\n1. Source has a 12% historical accuracy rate\n2. No primary source supports the accelerated timeline\n\n**Conclusion**: Insufficient evidence to support this claim — treat as speculative.",
     invalidationTriggers: "Official SEC announcement of approval within the claimed timeframe.",
   });
 
@@ -1618,7 +1668,7 @@ export async function seedInitialData(storage: MemStorage): Promise<void> {
     probabilityTrue: 0.97,
     evidenceStrength: 0.95,
     keyEvidenceIds: [ev6.id, ev7.id, ev8.id, ev8b.id],
-    reasoningSummary: "On-chain transaction data confirms fund movement from protocol contracts. Official team acknowledgment. Security researchers independently verified the reentrancy attack vector.",
+    reasoningSummary: "**Evidence Summary**: 5 evidence items analyzed with multiple primary source confirmations.\n\n**Key Findings**:\n1. On-chain transaction data confirms fund movement from protocol contracts\n2. Security researchers independently verified the reentrancy attack vector\n\n**Conclusion**: Strong evidence supports verification — official team acknowledgment corroborates findings.",
     invalidationTriggers: "Protocol clarification that funds are safe or evidence of transaction reversal.",
   });
 
@@ -1630,7 +1680,7 @@ export async function seedInitialData(storage: MemStorage): Promise<void> {
     probabilityTrue: 0.12,
     evidenceStrength: 0.15,
     keyEvidenceIds: [ev9b.id],
-    reasoningSummary: "No official announcement from Arbitrum Foundation. Anonymous source with poor track record. Arbitrum Foundation explicitly denied upcoming distributions. Previous similar claims from this channel have failed to materialize.",
+    reasoningSummary: "**Evidence Summary**: 3 evidence items analyzed, with primary source explicitly contradicting the claim.\n\n**Key Findings**:\n1. Arbitrum Foundation explicitly denied upcoming distributions\n2. Previous similar claims from this channel have failed to materialize\n\n**Critical Weaknesses**:\n1. Anonymous source with poor track record\n2. No official announcement supports the claim\n\n**Conclusion**: Contradicted by authoritative source — treat as speculative.",
     invalidationTriggers: "Official Arbitrum Foundation announcement confirming airdrop details.",
   });
 
@@ -1642,7 +1692,7 @@ export async function seedInitialData(storage: MemStorage): Promise<void> {
     probabilityTrue: 0.96,
     evidenceStrength: 0.94,
     keyEvidenceIds: [ev10.id, ev11.id],
-    reasoningSummary: "Official ECB press release confirms preparation phase advancement. Named ECB officials quoted on 2027 timeline. Multiple primary sources in agreement.",
+    reasoningSummary: "**Evidence Summary**: 4 evidence items analyzed with official ECB documentation as primary source.\n\n**Key Findings**:\n1. Official ECB press release confirms preparation phase advancement\n2. Named ECB officials quoted on 2027 timeline\n\n**Conclusion**: Multiple primary sources in agreement — strong evidence supports verification.",
     invalidationTriggers: "ECB retraction or policy reversal announcement.",
   });
 
@@ -1654,7 +1704,7 @@ export async function seedInitialData(storage: MemStorage): Promise<void> {
     probabilityTrue: 0.25,
     evidenceStrength: 0.2,
     keyEvidenceIds: [ev12.id],
-    reasoningSummary: "Price predictions are inherently speculative. Historical halving data shows varied outcomes. No methodology or evidence supports the specific $150K target. Market conditions differ substantially from previous cycles.",
+    reasoningSummary: "**Evidence Summary**: 3 evidence items analyzed, mostly weak secondary sources with no primary confirmation.\n\n**Key Findings**:\n1. Historical halving data shows varied outcomes across cycles\n2. No methodology supports the specific $150K target\n\n**Critical Weaknesses**:\n1. Price predictions are inherently speculative\n2. Market conditions differ substantially from previous cycles\n\n**Conclusion**: Insufficient evidence to assess — treat as speculative.",
     invalidationTriggers: "This prediction will be resolved by market price movement over time.",
   });
 

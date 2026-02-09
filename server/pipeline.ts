@@ -145,7 +145,7 @@ OUTPUT FORMAT (strict JSON):
   "verdict_label": "verified | plausible_unverified | speculative | misleading",
   "probability_true": 0.0-1.0,
   "evidence_strength": 0.0-1.0,
-  "reasoning_summary": "80-120 word explanation",
+  "reasoning_summary": "80-120 word structured explanation using this FORMAT:\n**Evidence Summary**: 1-2 sentence overview of evidence quality and quantity.\n**Key Findings**:\n1. First key finding\n2. Second key finding\n**Critical Weaknesses** (if any):\n1. Weakness description\n**Conclusion**: 1 sentence final assessment.",
   "invalidation_triggers": "What would flip this verdict"
 }
 
@@ -1393,7 +1393,7 @@ function generateVerdictSimulated(
     evidenceStrength = clamp(0.2 + evidenceQuality * 0.3, 0, 1);
   }
 
-  // Build grade distribution string for reasoning
+  // Build grade distribution for reasoning
   const gradeDistribution = {
     A: evidence.filter((e) => e.grade === "A").length,
     B: evidence.filter((e) => e.grade === "B").length,
@@ -1401,22 +1401,16 @@ function generateVerdictSimulated(
     D: evidence.filter((e) => e.grade === "D").length,
   };
 
-  let reasoning = `Analysis of ${evidence.length} evidence items: `;
-  reasoning += `${gradeDistribution.A} primary (A), ${gradeDistribution.B} strong secondary (B), `;
-  reasoning += `${gradeDistribution.C} weak secondary (C), ${gradeDistribution.D} speculative (D). `;
+  let reasoning: string;
 
   if (verdictLabel === "verified") {
-    reasoning +=
-      "Primary sources directly confirm this claim with consistent supporting evidence.";
+    reasoning = `**Evidence Summary**: ${evidence.length} evidence items analyzed — ${gradeDistribution.A} primary (A), ${gradeDistribution.B} strong secondary (B), ${gradeDistribution.C} weak secondary (C), ${gradeDistribution.D} speculative (D).\n\n**Key Findings**:\n1. Primary sources directly confirm this claim\n2. Supporting evidence is consistent across multiple sources\n\n**Conclusion**: Strong evidence supports verification.`;
   } else if (verdictLabel === "plausible_unverified") {
-    reasoning +=
-      "Credible indicators suggest the claim may be accurate, but primary confirmation is lacking.";
+    reasoning = `**Evidence Summary**: ${evidence.length} evidence items analyzed — ${gradeDistribution.A} primary (A), ${gradeDistribution.B} strong secondary (B), ${gradeDistribution.C} weak secondary (C), ${gradeDistribution.D} speculative (D).\n\n**Key Findings**:\n1. Credible indicators suggest the claim may be accurate\n2. No primary source confirmation is available\n\n**Critical Weaknesses**:\n1. Lacks authoritative primary evidence\n\n**Conclusion**: Plausible but unconfirmed — awaiting primary verification.`;
   } else if (verdictLabel === "misleading") {
-    reasoning +=
-      "Strong evidence contradicts this claim. Primary sources refute the assertion.";
+    reasoning = `**Evidence Summary**: ${evidence.length} evidence items analyzed — ${gradeDistribution.A} primary (A), ${gradeDistribution.B} strong secondary (B), ${gradeDistribution.C} weak secondary (C), ${gradeDistribution.D} speculative (D).\n\n**Key Findings**:\n1. Strong evidence contradicts this claim\n2. Primary sources refute the core assertion\n\n**Conclusion**: Available evidence does not support this claim.`;
   } else {
-    reasoning +=
-      "Insufficient high-quality evidence. Most sources are speculative or unverified.";
+    reasoning = `**Evidence Summary**: ${evidence.length} evidence items analyzed — ${gradeDistribution.A} primary (A), ${gradeDistribution.B} strong secondary (B), ${gradeDistribution.C} weak secondary (C), ${gradeDistribution.D} speculative (D).\n\n**Key Findings**:\n1. Insufficient high-quality evidence available\n2. Most sources are speculative or unverified\n\n**Critical Weaknesses**:\n1. No grade A/B evidence directly confirms or refutes the claim\n\n**Conclusion**: Insufficient evidence to assess — treat as speculative.`;
   }
 
   let invalidation: string;
@@ -1820,7 +1814,7 @@ export class VerificationPipeline {
       title: article.title,
       contentHash,
       itemType: "article",
-      metadata: article.itemMetadata ?? {
+      metadata: {
         feedName: article.feedName,
         feedDomain: article.feedDomain,
       },
@@ -1828,6 +1822,24 @@ export class VerificationPipeline {
 
     // Step 3: Extract claims
     const extractedClaims = await extractClaimsWithLLM(article);
+
+    // Fallback: ensure at least 1 claim per article
+    if (extractedClaims.length === 0) {
+      console.warn(
+        `[Pipeline]   Zero claims extracted for "${article.title}" — generating fallback claim`,
+      );
+      const text = `${article.title} ${article.content}`.toLowerCase();
+      extractedClaims.push({
+        claimText: article.title,
+        claimType: "misc_claim",
+        assetSymbols: extractAssetSymbols(text),
+        resolutionType: "indefinite",
+        resolveBy: null,
+        falsifiabilityScore: 0.3,
+        llmConfidence: 0.3,
+      });
+    }
+
     console.log(
       `[Pipeline]   Extracted ${extractedClaims.length} claims from "${article.title}"`,
     );
@@ -1925,6 +1937,13 @@ export class VerificationPipeline {
           claimError instanceof Error ? claimError.message : claimError,
         );
       }
+    }
+
+    // Warn if story has zero claims after processing
+    if (claimIds.length === 0) {
+      console.warn(
+        `[Pipeline]   Warning: article "${article.title}" produced 0 persisted claims after processing`,
+      );
     }
 
     return {

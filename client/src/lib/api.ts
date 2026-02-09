@@ -207,6 +207,56 @@ export function submitDispute(data: { claimId: string; reason: string; evidenceU
   return postJson<any>("/disputes", data);
 }
 
+// Admin
+async function putJson<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `API error: ${res.status}`);
+  }
+  return res.json();
+}
+
+async function deleteJson(path: string): Promise<void> {
+  const res = await fetch(`${BASE}${path}`, { method: "DELETE" });
+  if (!res.ok && res.status !== 204) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `API error: ${res.status}`);
+  }
+}
+
+export function adminUpdateStory(id: string, data: Record<string, any>) {
+  return putJson(`/admin/stories/${id}`, data);
+}
+
+export function adminDeleteStory(id: string) {
+  return deleteJson(`/admin/stories/${id}`);
+}
+
+export function adminUpdateClaim(id: string, data: Record<string, any>) {
+  return putJson(`/admin/claims/${id}`, data);
+}
+
+export function adminDeleteClaim(id: string) {
+  return deleteJson(`/admin/claims/${id}`);
+}
+
+export function adminUpdateVerdict(claimId: string, data: Record<string, any>) {
+  return putJson(`/admin/verdicts/${claimId}`, data);
+}
+
+export function adminUpdateSource(id: string, data: Record<string, any>) {
+  return putJson(`/admin/sources/${id}`, data);
+}
+
+export function adminTriggerPipeline() {
+  return postJson<{ status: string }>("/admin/pipeline/run");
+}
+
 // Stripe
 export function createCheckoutSession(tier: string) {
   return postJson<{ url: string }>("/stripe/create-checkout", { tier });

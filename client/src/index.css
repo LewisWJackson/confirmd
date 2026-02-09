@@ -18,6 +18,10 @@
   --factuality-high: #10b981;
   --factuality-mixed: #f59e0b;
   --factuality-low: #ef4444;
+  --verdict-verified: #10b981;
+  --verdict-plausible: #3b82f6;
+  --verdict-speculative: #f59e0b;
+  --verdict-misleading: #ef4444;
 }
 
 [data-theme="light"] {
@@ -35,6 +39,10 @@
   --factuality-high: #10b981;
   --factuality-mixed: #f59e0b;
   --factuality-low: #ef4444;
+  --verdict-verified: #10b981;
+  --verdict-plausible: #3b82f6;
+  --verdict-speculative: #f59e0b;
+  --verdict-misleading: #ef4444;
 }
 
 body {

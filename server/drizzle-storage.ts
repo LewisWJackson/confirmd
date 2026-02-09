@@ -79,6 +79,11 @@ export class DrizzleStorage implements IStorage {
     return source;
   }
 
+  async updateSource(id: string, data: Partial<Pick<Source, "displayName" | "logoUrl" | "metadata">>): Promise<Source | undefined> {
+    const [updated] = await this.db.update(sources).set({ ...data, updatedAt: new Date() }).where(eq(sources.id, id)).returning();
+    return updated;
+  }
+
   // ── Items ────────────────────────────────────────────────────────
 
   async createItem(data: InsertItem): Promise<Item> {
@@ -188,6 +193,25 @@ export class DrizzleStorage implements IStorage {
     }
   }
 
+  async updateClaim(id: string, data: Partial<Pick<Claim, "claimText" | "claimType" | "status" | "assetSymbols">>): Promise<Claim | undefined> {
+    const [updated] = await this.db.update(claims).set(data).where(eq(claims.id, id)).returning();
+    return updated;
+  }
+
+  async deleteClaim(id: string): Promise<boolean> {
+    const claim = await this.getClaim(id);
+    if (!claim) return false;
+    // Delete related evidence
+    await this.db.delete(evidenceItems).where(eq(evidenceItems.claimId, id));
+    // Delete related verdicts
+    await this.db.delete(verdicts).where(eq(verdicts.claimId, id));
+    // Delete related storyClaims
+    await this.db.delete(storyClaims).where(eq(storyClaims.claimId, id));
+    // Delete the claim
+    await this.db.delete(claims).where(eq(claims.id, id));
+    return true;
+  }
+
   // ── Evidence ─────────────────────────────────────────────────────
 
   async createEvidence(data: InsertEvidence): Promise<EvidenceItem> {
@@ -260,6 +284,15 @@ export class DrizzleStorage implements IStorage {
 
   async updateStory(id: string, data: Partial<Pick<Story, "title" | "summary" | "imageUrl" | "category" | "assetSymbols" | "sourceCount">>): Promise<void> {
     await this.db.update(stories).set({ ...data, updatedAt: new Date() }).where(eq(stories.id, id));
+  }
+
+  async deleteStory(id: string): Promise<boolean> {
+    const story = await this.getStory(id);
+    if (!story) return false;
+    await this.db.delete(storyClaims).where(eq(storyClaims.storyId, id));
+    await this.db.delete(storyItems).where(eq(storyItems.storyId, id));
+    await this.db.delete(stories).where(eq(stories.id, id));
+    return true;
   }
 
   async addClaimToStory(storyId: string, claimId: string): Promise<void> {

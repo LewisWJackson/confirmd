@@ -35,6 +35,7 @@ import CareersPage from "./pages/CareersPage";
 import ContactPage from "./pages/ContactPage";
 import TermsPage from "./pages/TermsPage";
 import CreatorClaimsPage from "./pages/CreatorClaimsPage";
+import AdminPage from "./pages/AdminPage";
 import FirmyChat from "./components/FirmyChat";
 
 const App: React.FC = () => {
@@ -77,6 +78,7 @@ const App: React.FC = () => {
           <Route path="/login" component={LoginPage} />
           <Route path="/signup" component={SignupPage} />
           <Route path="/creator-claims" component={CreatorClaimsPage} />
+          <Route path="/admin" component={AdminPage} />
           <Route>
             <div className="max-w-7xl mx-auto px-6 py-32 text-center">
               <h1 className="text-5xl font-black text-content-primary tracking-tighter">404</h1>

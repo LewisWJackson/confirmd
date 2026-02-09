@@ -34,6 +34,12 @@ export default {
           mixed: 'var(--factuality-mixed)',
           low: 'var(--factuality-low)',
         },
+        verdict: {
+          verified: 'var(--verdict-verified)',
+          plausible: 'var(--verdict-plausible)',
+          speculative: 'var(--verdict-speculative)',
+          misleading: 'var(--verdict-misleading)',
+        },
       },
     },
   },
