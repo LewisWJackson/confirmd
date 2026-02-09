@@ -1162,15 +1162,16 @@ router.get("/disputes/:claimId", requireTier("tribune"), async (req: Request, re
 
 let regenRunning = false;
 
-router.post("/admin/regenerate-images", async (_req: Request, res: Response) => {
+router.post("/admin/regenerate-images", async (req: Request, res: Response) => {
   try {
     if (regenRunning) {
       res.status(409).json({ error: "Regeneration already in progress" });
       return;
     }
 
+    const force = req.query.force === "true";
     const stories = await storage.getStories();
-    const toProcess = stories.filter(s => !s.imageUrl?.startsWith("/story-images/"));
+    const toProcess = force ? stories : stories.filter(s => !s.imageUrl?.startsWith("/story-images/"));
 
     // Clear all old URLs immediately so SVG fallbacks show
     for (const story of toProcess) {
@@ -1191,7 +1192,7 @@ router.post("/admin/regenerate-images", async (_req: Request, res: Response) => 
       let failed = 0;
       for (const story of toProcess) {
         try {
-          const aiUrl = await generateStoryImageAI(story.id, story.title, story.category);
+          const aiUrl = await generateStoryImageAI(story.id, story.title, story.category, force);
           if (aiUrl) {
             await storage.updateStory(story.id, { imageUrl: aiUrl });
             success++;

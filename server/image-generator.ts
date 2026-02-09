@@ -20,21 +20,7 @@ const IMAGES_DIR = path.resolve("dist", "public", "story-images");
 const GEMINI_MODEL = "gemini-2.5-flash-image";
 const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
-const STYLE_PROMPT = `Editorial collage artwork. Classical ancient Greek marble sculpture rendered with halftone newspaper print dot texture, grayscale. Cream off-white paper background. Bold geometric color block shapes in muted slate blue and terracotta burnt orange. Torn newspaper clippings and fragments scattered in the composition. Mixed media collage aesthetic with layered paper elements. Moody, editorial, intellectual atmosphere. No text, no words, no letters, no writing, no watermarks.`;
-
-// Category-specific visual cues
-const CATEGORY_VISUALS: Record<string, string> = {
-  bitcoin: "A marble bust surrounded by golden coins and financial newspaper fragments, warm amber geometric accents",
-  ethereum: "A classical Greek figure examining a glowing crystalline structure, purple and blue geometric accents",
-  defi: "A marble statue of Prometheus bringing fire, green organic shapes intertwined with newspaper columns",
-  regulation: "A marble figure of Lady Justice holding scales, bold navy blue geometric blocks, legal document fragments",
-  security: "A classical warrior statue with a cracked shield, dark red and black geometric shapes, scattered broken fragments",
-  markets: "A marble trader figure surrounded by rising columns like a bar chart, gold and warm geometric accents",
-  nfts: "A marble sculptor creating art on a canvas, vibrant pink and purple geometric shapes",
-  stablecoins: "A marble figure holding a perfectly balanced sphere, calm teal and grey geometric elements",
-  technology: "A marble figure of Daedalus building wings, indigo and electric blue geometric shapes, blueprint fragments",
-  crypto: "A marble philosopher bust emerging from scattered newspaper clippings about finance, bold geometric color blocks",
-};
+const STYLE_SUFFIX = `Style: mixed-media collage on cream paper, torn newspaper clippings layered behind the subject, muted slate blue and terracotta geometric accent shapes, halftone dot texture overlay, grainy editorial print aesthetic. No text, no words, no letters, no watermarks.`;
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -52,14 +38,10 @@ function imageExists(storyId: string): boolean {
   return fs.existsSync(getImagePath(storyId));
 }
 
-function buildPrompt(title: string, category?: string | null): string {
-  const catKey = (category || "crypto").toLowerCase().replace(/[^a-z]/g, "");
-  const categoryVisual = CATEGORY_VISUALS[catKey] || CATEGORY_VISUALS.crypto;
+function buildPrompt(title: string, _category?: string | null): string {
+  const cleanTitle = title.replace(/[^a-zA-Z0-9 ,'-]/g, "").slice(0, 120);
 
-  // Extract the core subject from the title
-  const cleanTitle = title.replace(/[^a-zA-Z0-9 ,'-]/g, "").slice(0, 100);
-
-  return `${STYLE_PROMPT} Subject theme: "${cleanTitle}". ${categoryVisual}.`;
+  return `Create an editorial illustration about: ${cleanTitle}. Show a scene that visually captures the specific subject matter — depict the key objects, actions, and setting described in the headline. ${STYLE_SUFFIX}`;
 }
 
 // ── Main generator ───────────────────────────────────────────────────
@@ -73,9 +55,10 @@ export async function generateStoryImageAI(
   storyId: string,
   title: string,
   category?: string | null,
+  force?: boolean,
 ): Promise<string | null> {
-  // Skip if already generated
-  if (imageExists(storyId)) {
+  // Skip if already generated (unless force)
+  if (!force && imageExists(storyId)) {
     return `/story-images/${storyId}.png`;
   }
 
