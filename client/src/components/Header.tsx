@@ -96,7 +96,19 @@ export const Header: React.FC = () => {
                   isActive(path) ? "text-white" : "text-gray-400 hover:text-white"
                 }`}
               >
-                {label}
+                {label === "Creator Claims" ? (
+                  <span className="inline-flex items-baseline">
+                    Creat
+                    <span className="inline-flex items-center justify-center w-[15px] h-[11px] bg-red-600 rounded-[2px] mx-[0.5px] relative" style={{ top: "-0.5px" }}>
+                      <svg className="w-[7px] h-[7px] text-white ml-[1px]" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M8 5v14l11-7z" />
+                      </svg>
+                    </span>
+                    r Claims
+                  </span>
+                ) : (
+                  label
+                )}
                 {isActive(path) && (
                   <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#c4a97d] rounded-full" />
                 )}
@@ -232,7 +244,19 @@ export const Header: React.FC = () => {
                     : "text-gray-400 hover:text-white hover:bg-white/5"
                 }`}
               >
-                {label}
+                {label === "Creator Claims" ? (
+                  <span className="inline-flex items-baseline">
+                    Creat
+                    <span className="inline-flex items-center justify-center w-[15px] h-[11px] bg-red-600 rounded-[2px] mx-[0.5px] relative" style={{ top: "-0.5px" }}>
+                      <svg className="w-[7px] h-[7px] text-white ml-[1px]" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M8 5v14l11-7z" />
+                      </svg>
+                    </span>
+                    r Claims
+                  </span>
+                ) : (
+                  label
+                )}
               </button>
             ))}
             <div className="pt-2 border-t border-gray-800">
