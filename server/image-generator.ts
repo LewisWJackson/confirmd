@@ -17,7 +17,7 @@ import { generateStoryImage, type StoryImageParams } from "./story-image.js";
 
 const IMAGES_DIR = path.resolve("dist", "public", "story-images");
 
-const GEMINI_MODEL = "gemini-3-pro-image-preview";
+const GEMINI_MODEL = "gemini-2.5-flash-image";
 const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
 const STYLE_PROMPT = `Editorial collage artwork. Classical ancient Greek marble sculpture rendered with halftone newspaper print dot texture, grayscale. Cream off-white paper background. Bold geometric color block shapes in muted slate blue and terracotta burnt orange. Torn newspaper clippings and fragments scattered in the composition. Mixed media collage aesthetic with layered paper elements. Moody, editorial, intellectual atmosphere. No text, no words, no letters, no writing, no watermarks.`;
@@ -97,14 +97,10 @@ export async function generateStoryImageAI(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         contents: [{
-          parts: [{ text: prompt }],
+          parts: [{ text: `Generate an image: ${prompt}` }],
         }],
         generationConfig: {
           responseModalities: ["TEXT", "IMAGE"],
-          imageConfig: {
-            aspectRatio: "16:9",
-            imageSize: "2K",
-          },
         },
       }),
     });
@@ -124,13 +120,13 @@ export async function generateStoryImageAI(
       return null;
     }
 
-    const imagePart = parts.find((p: any) => p.inline_data?.data);
+    const imagePart = parts.find((p: any) => p.inlineData?.data);
     if (!imagePart) {
       console.error("[ImageGen] No image data in Gemini response");
       return null;
     }
 
-    const b64 = imagePart.inline_data.data;
+    const b64 = imagePart.inlineData.data;
 
     // Save to file
     const buffer = Buffer.from(b64, "base64");
