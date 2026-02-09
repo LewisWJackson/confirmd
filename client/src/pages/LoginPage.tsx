@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { login } from "../lib/api";
@@ -9,6 +9,14 @@ const LoginPage: React.FC = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [infoMessage, setInfoMessage] = useState("");
+
+  // Auto-dismiss info message after 5 seconds
+  useEffect(() => {
+    if (!infoMessage) return;
+    const timer = setTimeout(() => setInfoMessage(""), 5000);
+    return () => clearTimeout(timer);
+  }, [infoMessage]);
 
   const loginMutation = useMutation({
     mutationFn: login,
@@ -50,6 +58,15 @@ const LoginPage: React.FC = () => {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
                 <span>{error}</span>
+              </div>
+            )}
+
+            {infoMessage && (
+              <div className="p-3 bg-amber-900/20 border border-amber-600/50 rounded-lg text-sm text-amber-300 font-medium flex items-start space-x-2">
+                <svg className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span>{infoMessage}</span>
               </div>
             )}
 
@@ -126,7 +143,7 @@ const LoginPage: React.FC = () => {
           <div className="space-y-3">
             <button
               type="button"
-              onClick={() => setError("Google sign-in coming soon. Please use email and password.")}
+              onClick={() => { setError(""); setInfoMessage("Google sign-in coming soon. Please use email and password."); }}
               className="w-full py-3 border border-border rounded-lg text-sm font-medium text-content-primary hover:bg-surface-card transition-all flex items-center justify-center space-x-2"
             >
               <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
@@ -140,7 +157,7 @@ const LoginPage: React.FC = () => {
 
             <button
               type="button"
-              onClick={() => setError("Apple sign-in coming soon. Please use email and password.")}
+              onClick={() => { setError(""); setInfoMessage("Apple sign-in coming soon. Please use email and password."); }}
               className="w-full py-3 border border-border rounded-lg text-sm font-medium text-content-primary hover:bg-surface-card transition-all flex items-center justify-center space-x-2"
             >
               <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">

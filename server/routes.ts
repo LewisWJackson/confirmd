@@ -4,7 +4,7 @@ import { storage } from "./storage.js";
 import { validateCommunityEvidence } from "./pipeline.js";
 import { pipeline } from "./pipeline-instance.js";
 import { runCreatorPipeline, evaluateDispute } from "./creator-pipeline.js";
-import { generateSvgFallback, generateStoryImageAI } from "./image-generator.js";
+import { generateSvgFallback, generateStoryImageAI, generateVideoThumbnail, getVideoThumbnailUrl } from "./image-generator.js";
 import type { Claim, Verdict, EvidenceItem, Resolution, Source, SourceScore, Creator, CreatorVideo, CreatorClaim, CreatorScore, Dispute } from "../shared/schema.js";
 
 declare module "express-session" {
@@ -952,6 +952,9 @@ router.get("/creators/feed", async (req: Request, res: Response) => {
           if (match) relatedStoryId = match.id;
         }
 
+        // Prefer AI-generated thumbnail over the one stored in the DB
+        const aiThumbnail = video ? getVideoThumbnailUrl(video.id) : null;
+
         return {
           id: cc.id,
           type: "creator_prediction" as const,
@@ -977,7 +980,7 @@ router.get("/creators/feed", async (req: Request, res: Response) => {
                 id: video.id,
                 title: video.title,
                 youtubeVideoId: video.youtubeVideoId,
-                thumbnailUrl: video.thumbnailUrl ?? null,
+                thumbnailUrl: aiThumbnail ?? video.thumbnailUrl ?? null,
               }
             : null,
           relatedStoryId,
@@ -1027,7 +1030,7 @@ router.get("/creators", requireTier("tribune"), async (req: Request, res: Respon
 
 // ─── GET /creators/leaderboard ──────────────────────────────────────
 
-router.get("/creators/leaderboard", requireTier("tribune"), async (_req: Request, res: Response) => {
+router.get("/creators/leaderboard", async (_req: Request, res: Response) => {
   try {
     const creators = await storage.getCreators();
 
@@ -1058,11 +1061,17 @@ router.get("/creators/:id", requireTier("tribune"), async (req: Request, res: Re
       return;
     }
 
-    const [videos, claims, scoreHistory] = await Promise.all([
+    const [rawVideos, claims, scoreHistory] = await Promise.all([
       storage.getCreatorVideos(creatorId, 10),
       storage.getCreatorClaims({ creatorId, limit: 20 }),
       storage.getCreatorScoreHistory(creatorId),
     ]);
+
+    // Enrich videos with AI-generated thumbnails when available
+    const videos = rawVideos.map(v => ({
+      ...v,
+      thumbnailUrl: getVideoThumbnailUrl(v.id) ?? v.thumbnailUrl,
+    }));
 
     res.json({ creator, videos, claims, scoreHistory });
   } catch (err) {
@@ -1213,6 +1222,58 @@ router.post("/admin/regenerate-images", async (req: Request, res: Response) => {
   } catch (err) {
     console.error("POST /admin/regenerate-images error:", err);
     res.status(500).json({ error: "Failed to regenerate images" });
+  }
+});
+
+// ─── POST /admin/regenerate-video-thumbnails ─────────────────────────
+// Generates AI thumbnails for creator videos sequentially with delays.
+
+let videoThumbRegenRunning = false;
+
+router.post("/admin/regenerate-video-thumbnails", async (req: Request, res: Response) => {
+  try {
+    if (videoThumbRegenRunning) {
+      res.status(409).json({ error: "Video thumbnail regeneration already in progress" });
+      return;
+    }
+
+    const force = req.query.force === "true";
+    const videos = await storage.getAllCreatorVideos();
+
+    // Respond immediately, process in background
+    res.json({
+      message: `Processing ${videos.length} video thumbnails sequentially in background`,
+      total: videos.length,
+    });
+
+    // Sequential background processing with delay
+    videoThumbRegenRunning = true;
+    (async () => {
+      let success = 0;
+      let failed = 0;
+      for (const video of videos) {
+        try {
+          const creator = await storage.getCreator(video.creatorId);
+          const channelName = creator?.channelName ?? "Unknown";
+          const url = await generateVideoThumbnail(video.id, video.title, channelName, force);
+          if (url) {
+            await storage.updateCreatorVideo(video.id, { thumbnailUrl: url });
+            success++;
+          } else {
+            failed++;
+          }
+        } catch {
+          failed++;
+        }
+        // 3 second delay between requests to respect rate limits
+        await new Promise(r => setTimeout(r, 3000));
+      }
+      console.log(`[RegenVideoThumbs] Done: ${success} generated, ${failed} failed`);
+      videoThumbRegenRunning = false;
+    })().catch(() => { videoThumbRegenRunning = false; });
+  } catch (err) {
+    console.error("POST /admin/regenerate-video-thumbnails error:", err);
+    res.status(500).json({ error: "Failed to regenerate video thumbnails" });
   }
 });
 

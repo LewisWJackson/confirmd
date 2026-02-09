@@ -5,7 +5,7 @@ import { fetchCreatorFeed, fetchCreatorLeaderboard } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
 
 const FREE_VISIBLE = 8;
-const FREE_BLURRED = 4;
+const FREE_BLURRED = 8;
 
 const CATEGORIES = ["All", "Markets", "Regulation", "DeFi", "Security", "Technology"];
 
@@ -47,9 +47,12 @@ function VideoCard({
 
   const youtubeId = video?.youtubeVideoId;
 
-  const thumbnailUrl = youtubeId
-    ? `https://img.youtube.com/vi/${youtubeId}/hqdefault.jpg`
-    : null;
+  // Prefer AI-generated thumbnail from the API, fall back to YouTube default
+  const thumbnailUrl = video?.thumbnailUrl
+    ? video.thumbnailUrl
+    : youtubeId
+      ? `https://img.youtube.com/vi/${youtubeId}/hqdefault.jpg`
+      : null;
 
   return (
     <div className="group">
@@ -353,7 +356,21 @@ export default function CreatorClaimsPage() {
     : allPredictions.slice(FREE_VISIBLE, FREE_VISIBLE + FREE_BLURRED);
 
   const visibleLeaderboard = isPaid ? leaderboard : leaderboard.slice(0, 5);
-  const blurredLeaderboard = isPaid ? [] : leaderboard.slice(5, 10);
+  // Ensure free users always see blurred leaderboard entries when data exists.
+  // If fewer than 10 entries, recycle from the beginning to fill the blurred slots.
+  const blurredLeaderboard = useMemo(() => {
+    if (isPaid || leaderboard.length === 0) return [];
+    const remaining = leaderboard.slice(5, 10);
+    if (remaining.length >= 5) return remaining;
+    // Fill up to 5 blurred entries by recycling from the full leaderboard
+    const filled = [...remaining];
+    let idx = 0;
+    while (filled.length < 5 && leaderboard.length > 0) {
+      filled.push({ ...leaderboard[idx % leaderboard.length], _blurKey: filled.length });
+      idx++;
+    }
+    return filled;
+  }, [isPaid, leaderboard]);
 
   return (
     <div className="animate-in fade-in duration-700 min-h-screen bg-surface-primary">
@@ -428,17 +445,29 @@ export default function CreatorClaimsPage() {
                 {/* Blurred cards + upgrade CTA overlay (free users) */}
                 {!isPaid && blurredClaims.length > 0 && (
                   <div className="relative mt-0">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-4 gap-y-8 blur-[6px] pointer-events-none select-none">
-                      {blurredClaims.map((prediction: any) => (
-                        <VideoCard
-                          key={prediction.id}
-                          prediction={prediction}
-                          onCreatorClick={() => {}}
-                        />
-                      ))}
+                    {/* Progressive blur: each card gets increasingly blurred */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-4 gap-y-8 pointer-events-none select-none">
+                      {blurredClaims.map((prediction: any, idx: number) => {
+                        // Progressive blur: 2px for first card, increasing by 2px per card
+                        const blurPx = 2 + idx * 2;
+                        return (
+                          <div key={prediction.id} style={{ filter: `blur(${blurPx}px)` }}>
+                            <VideoCard
+                              prediction={prediction}
+                              onCreatorClick={() => {}}
+                            />
+                          </div>
+                        );
+                      })}
                     </div>
-                    {/* Overlay gradient + CTA on top of blur */}
-                    <div className="absolute inset-0 bg-gradient-to-b from-transparent via-surface-primary/60 to-surface-primary flex items-end justify-center pb-4">
+                    {/* Overlay gradient + CTA centered on top of blurred area */}
+                    <div
+                      className="absolute inset-0 flex items-center justify-center"
+                      style={{
+                        background:
+                          "linear-gradient(to bottom, transparent 0%, var(--color-surface-primary, rgb(15,15,15)) 85%)",
+                      }}
+                    >
                       <div className="text-center">
                         <div className="w-12 h-12 rounded-full bg-accent/10 flex items-center justify-center mx-auto mb-4">
                           <svg className="w-6 h-6 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -449,7 +478,7 @@ export default function CreatorClaimsPage() {
                         <p className="text-sm text-content-secondary max-w-md mx-auto mb-6">Get Confirmd+ to see every prediction, track creator accuracy, and access full creator profiles.</p>
                         <button
                           onClick={() => setLocation("/plus")}
-                          className="px-6 py-3 bg-accent text-accent-text text-sm font-bold rounded-full hover:bg-accent-hover transition-all"
+                          className="pointer-events-auto px-6 py-3 bg-accent text-accent-text text-sm font-bold rounded-full hover:bg-accent-hover transition-all"
                         >
                           Upgrade to Confirmd+
                         </button>
@@ -508,15 +537,19 @@ export default function CreatorClaimsPage() {
                   {/* Blurred leaderboard (free users) */}
                   {!isPaid && blurredLeaderboard.length > 0 && (
                     <div className="relative mt-0">
-                      <div className="divide-y divide-border blur-[5px] pointer-events-none select-none">
-                        {blurredLeaderboard.map((creator: any, i: number) => (
-                          <LeaderboardChannel
-                            key={creator.id}
-                            creator={creator}
-                            rank={i + 6}
-                            onClick={() => {}}
-                          />
-                        ))}
+                      <div className="divide-y divide-border pointer-events-none select-none">
+                        {blurredLeaderboard.map((creator: any, i: number) => {
+                          const blurPx = 2 + i * 1.5;
+                          return (
+                            <div key={creator._blurKey ?? creator.id} style={{ filter: `blur(${blurPx}px)` }}>
+                              <LeaderboardChannel
+                                creator={creator}
+                                rank={i + 6}
+                                onClick={() => {}}
+                              />
+                            </div>
+                          );
+                        })}
                       </div>
                       <div className="absolute inset-0 bg-gradient-to-b from-transparent to-surface-primary" />
                     </div>

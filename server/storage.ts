@@ -99,6 +99,7 @@ export interface IStorage {
   getCreatorVideo(id: string): Promise<CreatorVideo | undefined>;
   getCreatorVideoByYoutubeId(youtubeVideoId: string): Promise<CreatorVideo | undefined>;
   getCreatorVideos(creatorId: string, limit?: number): Promise<CreatorVideo[]>;
+  getAllCreatorVideos(): Promise<CreatorVideo[]>;
   updateCreatorVideo(id: string, data: Partial<CreatorVideo>): Promise<void>;
 
   // Creator Claims
@@ -773,6 +774,10 @@ export class MemStorage implements IStorage {
       results = results.slice(0, limit);
     }
     return results;
+  }
+
+  async getAllCreatorVideos(): Promise<CreatorVideo[]> {
+    return Array.from(this.creatorVideosMap.values());
   }
 
   async updateCreatorVideo(id: string, data: Partial<CreatorVideo>): Promise<void> {

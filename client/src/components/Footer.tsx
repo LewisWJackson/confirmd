@@ -11,7 +11,7 @@ const columns: { title: string; links: FooterLink[] }[] = [
     title: "News",
     links: [
       { label: "Home", href: "/" },
-      { label: "Creator Claims", href: "/creators" },
+      { label: "Creator Claims", href: "/creator-claims" },
       { label: "Sources", href: "/sources" },
     ],
   },

@@ -513,6 +513,10 @@ export class DrizzleStorage implements IStorage {
     return query;
   }
 
+  async getAllCreatorVideos(): Promise<CreatorVideo[]> {
+    return this.db.select().from(creatorVideos).orderBy(desc(creatorVideos.createdAt));
+  }
+
   async updateCreatorVideo(id: string, data: Partial<CreatorVideo>): Promise<void> {
     await this.db.update(creatorVideos).set(data).where(eq(creatorVideos.id, id));
   }
