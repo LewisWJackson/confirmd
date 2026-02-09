@@ -4,6 +4,7 @@ import { storage } from "./storage.js";
 import { validateCommunityEvidence } from "./pipeline.js";
 import { pipeline } from "./pipeline-instance.js";
 import { runCreatorPipeline, evaluateDispute } from "./creator-pipeline.js";
+import { generateSvgFallback } from "./image-generator.js";
 import type { Claim, Verdict, EvidenceItem, Resolution, Source, SourceScore, Creator, CreatorVideo, CreatorClaim, CreatorScore, Dispute } from "../shared/schema.js";
 
 declare module "express-session" {
@@ -423,9 +424,10 @@ router.get("/stories", async (req: Request, res: Response) => {
       feedItems = feedItems.filter(s => s.assetSymbols.some(a => a.toUpperCase() === assetUpper));
     }
 
-    // Add singleSource flag for stories with 0 or 1 sources
+    // Add singleSource flag and ensure every story has an imageUrl
     const data = feedItems.map(s => ({
       ...s,
+      imageUrl: s.imageUrl || `/api/stories/${s.id}/image`,
       singleSource: s.sourceCount <= 1,
     }));
 
@@ -433,6 +435,30 @@ router.get("/stories", async (req: Request, res: Response) => {
   } catch (err) {
     console.error("Error fetching stories for feed:", (err as Error).message);
     res.status(500).json({ error: "Failed to fetch stories" });
+  }
+});
+
+// ─── GET /stories/:id/image — SVG fallback image ──────────────────
+
+router.get("/stories/:id/image", async (req: Request, res: Response) => {
+  try {
+    const storyId = param(req, "id");
+    const story = await storage.getStory(storyId);
+
+    const params = {
+      id: storyId,
+      title: story?.title || "Crypto News",
+      category: story?.category,
+      assetSymbols: story?.assetSymbols ?? [],
+    };
+
+    const svg = generateSvgFallback(params);
+
+    res.setHeader("Content-Type", "image/svg+xml");
+    res.setHeader("Cache-Control", "public, max-age=86400");
+    res.send(svg);
+  } catch {
+    res.status(500).send("");
   }
 });
 
@@ -558,7 +584,7 @@ router.get("/stories/:id", async (req: Request, res: Response) => {
       id: story.id,
       title: story.title,
       summary: story.summary,
-      imageUrl: story.imageUrl,
+      imageUrl: story.imageUrl || `/api/stories/${story.id}/image`,
       category: story.category,
       assetSymbols: story.assetSymbols ?? [],
       credibilityDistribution,

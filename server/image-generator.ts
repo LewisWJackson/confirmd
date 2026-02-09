@@ -1,0 +1,138 @@
+/**
+ * AI-powered story image generator.
+ *
+ * Generates unique editorial collage artwork for each story using OpenAI's
+ * image generation API. Style: classical Greek sculpture + newspaper print
+ * collage with halftone textures, muted slate blue / terracotta accents,
+ * cream paper backgrounds.
+ *
+ * Falls back to the programmatic SVG generator when AI is unavailable.
+ */
+
+import OpenAI from "openai";
+import fs from "fs";
+import path from "path";
+import { generateStoryImage, type StoryImageParams } from "./story-image.js";
+
+// ── Config ───────────────────────────────────────────────────────────
+
+const IMAGES_DIR = path.resolve("dist", "public", "story-images");
+
+const STYLE_PROMPT = `Editorial collage artwork. Classical ancient Greek marble sculpture rendered with halftone newspaper print dot texture, grayscale. Cream off-white paper background. Bold geometric color block shapes in muted slate blue and terracotta burnt orange. Torn newspaper clippings and fragments scattered in the composition. Mixed media collage aesthetic with layered paper elements. Moody, editorial, intellectual atmosphere. No text, no words, no letters, no writing, no watermarks.`;
+
+// Category-specific visual cues
+const CATEGORY_VISUALS: Record<string, string> = {
+  bitcoin: "A marble bust surrounded by golden coins and financial newspaper fragments, warm amber geometric accents",
+  ethereum: "A classical Greek figure examining a glowing crystalline structure, purple and blue geometric accents",
+  defi: "A marble statue of Prometheus bringing fire, green organic shapes intertwined with newspaper columns",
+  regulation: "A marble figure of Lady Justice holding scales, bold navy blue geometric blocks, legal document fragments",
+  security: "A classical warrior statue with a cracked shield, dark red and black geometric shapes, scattered broken fragments",
+  markets: "A marble trader figure surrounded by rising columns like a bar chart, gold and warm geometric accents",
+  nfts: "A marble sculptor creating art on a canvas, vibrant pink and purple geometric shapes",
+  stablecoins: "A marble figure holding a perfectly balanced sphere, calm teal and grey geometric elements",
+  technology: "A marble figure of Daedalus building wings, indigo and electric blue geometric shapes, blueprint fragments",
+  crypto: "A marble philosopher bust emerging from scattered newspaper clippings about finance, bold geometric color blocks",
+};
+
+// ── Helpers ──────────────────────────────────────────────────────────
+
+function ensureImagesDir(): void {
+  if (!fs.existsSync(IMAGES_DIR)) {
+    fs.mkdirSync(IMAGES_DIR, { recursive: true });
+  }
+}
+
+function getImagePath(storyId: string): string {
+  return path.join(IMAGES_DIR, `${storyId}.png`);
+}
+
+function imageExists(storyId: string): boolean {
+  return fs.existsSync(getImagePath(storyId));
+}
+
+function buildPrompt(title: string, category?: string | null): string {
+  const catKey = (category || "crypto").toLowerCase().replace(/[^a-z]/g, "");
+  const categoryVisual = CATEGORY_VISUALS[catKey] || CATEGORY_VISUALS.crypto;
+
+  // Extract the core subject from the title
+  const cleanTitle = title.replace(/[^a-zA-Z0-9 ,'-]/g, "").slice(0, 100);
+
+  return `${STYLE_PROMPT} Subject theme: "${cleanTitle}". ${categoryVisual}.`;
+}
+
+// ── Main generator ───────────────────────────────────────────────────
+
+/**
+ * Generate an AI image for a story using OpenAI.
+ * Returns the public URL path (e.g. "/story-images/{id}.png") on success,
+ * or null if generation fails.
+ */
+export async function generateStoryImageAI(
+  storyId: string,
+  title: string,
+  category?: string | null,
+): Promise<string | null> {
+  // Skip if already generated
+  if (imageExists(storyId)) {
+    return `/story-images/${storyId}.png`;
+  }
+
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    console.warn("[ImageGen] No OPENAI_API_KEY — skipping AI image generation");
+    return null;
+  }
+
+  try {
+    ensureImagesDir();
+
+    const openai = new OpenAI({ apiKey });
+    const prompt = buildPrompt(title, category);
+
+    console.log(`[ImageGen] Generating image for story "${title.slice(0, 50)}..."`);
+
+    const response = await openai.images.generate({
+      model: "dall-e-3",
+      prompt,
+      n: 1,
+      size: "1792x1024",
+      quality: "standard",
+      response_format: "b64_json",
+    });
+
+    const b64 = response.data?.[0]?.b64_json;
+    if (!b64) {
+      console.error("[ImageGen] No image data in response");
+      return null;
+    }
+
+    // Save to file
+    const buffer = Buffer.from(b64, "base64");
+    const filePath = getImagePath(storyId);
+    fs.writeFileSync(filePath, buffer);
+
+    console.log(`[ImageGen] Saved ${filePath} (${(buffer.length / 1024).toFixed(0)}KB)`);
+    return `/story-images/${storyId}.png`;
+  } catch (err: any) {
+    console.error(`[ImageGen] Failed for "${title.slice(0, 50)}":`, err.message || err);
+    return null;
+  }
+}
+
+/**
+ * Get the image URL for a story — AI-generated if available, otherwise
+ * the SVG fallback endpoint.
+ */
+export function getStoryImageFallbackUrl(storyId: string): string {
+  if (imageExists(storyId)) {
+    return `/story-images/${storyId}.png`;
+  }
+  return `/api/stories/${storyId}/image`;
+}
+
+/**
+ * Generate SVG fallback for a story (served from the route handler).
+ */
+export function generateSvgFallback(params: StoryImageParams): string {
+  return generateStoryImage(params);
+}

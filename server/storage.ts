@@ -1613,7 +1613,7 @@ export async function seedInitialData(storage: MemStorage): Promise<void> {
   const story1 = await storage.createStory({
     title: "Ethereum ETF: Regulatory Progress vs. Speculation",
     summary: "Tracking verified SEC activity alongside speculative claims about Ethereum ETF approval timelines. Official SEC calendar confirms February meeting while anonymous sources push unsubstantiated acceleration narratives.",
-    imageUrl: `https://image.pollinations.ai/prompt/${encodeURIComponent("professional editorial news photograph about Ethereum ETF Regulatory Progress vs Speculation, Regulation, photojournalism style, high quality, detailed")}?width=1200&height=675&nologo=true`,
+    imageUrl: null,
     category: "Regulation",
     metadata: {},
   });
@@ -1624,7 +1624,7 @@ export async function seedInitialData(storage: MemStorage): Promise<void> {
   const story2 = await storage.createStory({
     title: "DeFi Security: The Nexus Protocol Exploit",
     summary: "A verified smart contract exploit drained $45M from Nexus Protocol via a reentrancy vulnerability. On-chain evidence and independent security audits confirm the attack vector and fund movement.",
-    imageUrl: `https://image.pollinations.ai/prompt/${encodeURIComponent("professional editorial news photograph about DeFi Security The Nexus Protocol Exploit, Security, photojournalism style, high quality, detailed")}?width=1200&height=675&nologo=true`,
+    imageUrl: null,
     category: "Security",
     metadata: {},
   });

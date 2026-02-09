@@ -25,6 +25,7 @@ import type {
   Story,
 } from "../shared/schema.js";
 import { storage } from "./storage.js";
+import { generateStoryImageAI } from "./image-generator.js";
 
 // ============================================
 // CONFIGURATION
@@ -1068,12 +1069,9 @@ function delay(ms: number): Promise<void> {
  * Generate a unique AI-generated image URL for a story via Pollinations.ai.
  * Each story gets a truly unique image based on its title and category.
  */
-function getStoryImageUrl(title: string, category: string): string {
-  // Build a descriptive prompt for AI image generation
-  const cleanTitle = title.replace(/[^a-zA-Z0-9 ]/g, '').slice(0, 80);
-  const prompt = `professional editorial news photograph about ${cleanTitle}, ${category}, photojournalism style, high quality, detailed`;
-  const encoded = encodeURIComponent(prompt);
-  return `https://image.pollinations.ai/prompt/${encoded}?width=1200&height=675&nologo=true`;
+function getStoryImageUrl(storyId: string): string {
+  // Return the SVG fallback endpoint — AI image will be generated async
+  return `/api/stories/${storyId}/image`;
 }
 
 // ============================================
@@ -2070,7 +2068,7 @@ export class VerificationPipeline {
               assetSymbols: [...groupAssetSymbols],
             };
             if (!existingStory?.imageUrl) {
-              updateData.imageUrl = getStoryImageUrl(group.title, "crypto");
+              updateData.imageUrl = getStoryImageUrl(existingStoryId);
             }
             await this.storage.updateStory(existingStoryId, updateData);
           } catch {
@@ -2083,7 +2081,6 @@ export class VerificationPipeline {
         } else {
           // Create new story
           const storyCategory = "crypto";
-          const imageUrl = getStoryImageUrl(group.title, storyCategory);
 
           // Collect claim texts for summary
           const claimTexts = group.claimIds
@@ -2096,12 +2093,28 @@ export class VerificationPipeline {
             title: group.title,
             summary,
             category: storyCategory,
-            imageUrl,
+            imageUrl: null,
             metadata: {
               claimCount: group.claimIds.length,
               createdByPipeline: true,
             },
           });
+
+          // Kick off async AI image generation (don't block pipeline)
+          generateStoryImageAI(story.id, group.title, storyCategory)
+            .then(async (aiImageUrl) => {
+              if (aiImageUrl) {
+                try {
+                  await this.storage.updateStory(story.id, { imageUrl: aiImageUrl });
+                } catch { /* non-critical */ }
+              } else {
+                // Set SVG fallback URL
+                try {
+                  await this.storage.updateStory(story.id, { imageUrl: getStoryImageUrl(story.id) });
+                } catch { /* non-critical */ }
+              }
+            })
+            .catch(() => { /* AI gen failed silently */ });
 
           // Link claims to story
           for (const claimId of group.claimIds) {
