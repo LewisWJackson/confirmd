@@ -16,7 +16,7 @@ const plusFaqs: PlusFaqItem[] = [
   {
     question: "Is there a free trial?",
     answer:
-      "Yes. New users get a 7-day free trial when they subscribe. You can cancel anytime during the trial and you won't be charged.",
+      "Yes. New users get a 7-day free trial when they subscribe to Premium or Pro. You can cancel anytime during the trial and you won't be charged.",
   },
   {
     question: "What payment methods do you accept?",
@@ -26,7 +26,7 @@ const plusFaqs: PlusFaqItem[] = [
   {
     question: "What happens if I cancel?",
     answer:
-      "You retain access to all Plus features through the end of your billing period. After that, your account reverts to the free tier. Your watchlist and data are preserved.",
+      "You retain access to all paid features through the end of your billing period. After that, your account reverts to the Vantage (free) tier. Your watchlist and data are preserved.",
   },
   {
     question: "Do you offer team or enterprise plans?",
@@ -40,94 +40,160 @@ const plusFaqs: PlusFaqItem[] = [
   },
 ];
 
-const features: { label: string; icon: React.ReactNode }[] = [
+// --- Tier icons (editorial SVG illustrations) ---
+
+const VantageIcon: React.FC = () => (
+  <svg className="w-full h-full" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <rect x="10" y="20" width="60" height="45" rx="4" stroke="currentColor" strokeWidth="2" fill="none" />
+    <path d="M10 30h60" stroke="currentColor" strokeWidth="2" />
+    <circle cx="20" cy="25" r="2" fill="currentColor" />
+    <circle cx="27" cy="25" r="2" fill="currentColor" />
+    <circle cx="34" cy="25" r="2" fill="currentColor" />
+    <rect x="18" y="36" width="20" height="3" rx="1.5" fill="currentColor" opacity="0.5" />
+    <rect x="18" y="43" width="28" height="3" rx="1.5" fill="currentColor" opacity="0.3" />
+    <rect x="18" y="50" width="16" height="3" rx="1.5" fill="currentColor" opacity="0.3" />
+    <path d="M52 38l4 4 8-10" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
+const PremiumIcon: React.FC = () => (
+  <svg className="w-full h-full" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M40 8l8 16 18 3-13 12 3 18-16-8-16 8 3-18L14 27l18-3z" stroke="currentColor" strokeWidth="2" fill="none" />
+    <circle cx="40" cy="40" r="10" stroke="currentColor" strokeWidth="2" fill="none" />
+    <path d="M36 40l3 3 6-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M20 68h40" stroke="currentColor" strokeWidth="2" strokeLinecap="round" opacity="0.4" />
+    <path d="M26 74h28" stroke="currentColor" strokeWidth="2" strokeLinecap="round" opacity="0.2" />
+  </svg>
+);
+
+const ProIcon: React.FC = () => (
+  <svg className="w-full h-full" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="40" cy="36" r="22" stroke="currentColor" strokeWidth="2" fill="none" />
+    <path d="M28 36a12 12 0 0124 0" stroke="currentColor" strokeWidth="2" fill="none" />
+    <circle cx="40" cy="36" r="6" stroke="currentColor" strokeWidth="2" fill="none" />
+    <circle cx="40" cy="36" r="1.5" fill="currentColor" />
+    <path d="M40 14v-4M40 60v4M18 36h-4M66 36h-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    <path d="M24 20l-2-2M56 20l2-2M24 52l-2 2M56 52l2 2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    <rect x="22" y="66" width="36" height="6" rx="3" stroke="currentColor" strokeWidth="1.5" fill="none" />
+    <path d="M30 69h20" stroke="currentColor" strokeWidth="1" strokeLinecap="round" opacity="0.4" />
+  </svg>
+);
+
+// --- Tier definitions ---
+
+interface TierFeature {
+  label: string;
+}
+
+interface PricingTier {
+  id: string;
+  name: string;
+  tagline: string;
+  price: string;
+  period: string;
+  icon: React.FC;
+  highlight: boolean;
+  badge?: string;
+  ctaLabel: string;
+  features: TierFeature[];
+}
+
+const tiers: PricingTier[] = [
   {
-    label: "Full creator claims & predictions",
-    icon: (
-      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-      </svg>
-    ),
+    id: "vantage",
+    name: "Vantage",
+    tagline: "See the full picture.",
+    price: "$0",
+    period: "/month",
+    icon: VantageIcon,
+    highlight: false,
+    ctaLabel: "Get Started",
+    features: [
+      { label: "Daily stories & factuality bars" },
+      { label: "Source credibility scores" },
+      { label: "Basic claim summaries" },
+      { label: "Community access" },
+    ],
   },
   {
-    label: "Creator profile pages & accuracy tracking",
-    icon: (
-      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-      </svg>
-    ),
+    id: "premium",
+    name: "Premium",
+    tagline: "Rise above the noise.",
+    price: "$4.99",
+    period: "/month",
+    icon: PremiumIcon,
+    highlight: true,
+    badge: "Most Popular",
+    ctaLabel: "Start Free Trial",
+    features: [
+      { label: "Everything in Vantage" },
+      { label: "Full claim details" },
+      { label: "Creator profiles & accuracy" },
+      { label: "Evidence ladders" },
+      { label: "90-day claim history" },
+    ],
   },
   {
-    label: "Real-time alerts",
-    icon: (
-      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-      </svg>
-    ),
-  },
-  {
-    label: "Full evidence ladders",
-    icon: (
-      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-      </svg>
-    ),
-  },
-  {
-    label: "Source credibility history",
-    icon: (
-      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-      </svg>
-    ),
-  },
-  {
-    label: "Priority support",
-    icon: (
-      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-      </svg>
-    ),
-  },
-  {
-    label: "90-day claim history",
-    icon: (
-      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-      </svg>
-    ),
-  },
-  {
-    label: "Creator leaderboard",
-    icon: (
-      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-      </svg>
-    ),
-  },
-  {
-    label: "Most credible sources leaderboard",
-    icon: (
-      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-      </svg>
-    ),
-  },
-  {
-    label: "Blindspot reports",
-    icon: (
-      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-      </svg>
-    ),
+    id: "pro",
+    name: "Pro",
+    tagline: "Get full clarity.",
+    price: "$9.99",
+    period: "/month",
+    icon: ProIcon,
+    highlight: false,
+    ctaLabel: "Start Free Trial",
+    features: [
+      { label: "Everything in Premium" },
+      { label: "Creator leaderboard" },
+      { label: "Source leaderboard" },
+      { label: "Blindspot reports" },
+      { label: "Real-time alerts" },
+      { label: "Priority support" },
+    ],
   },
 ];
+
+// --- Comparison table data ---
+
+interface ComparisonRow {
+  feature: string;
+  vantage: boolean;
+  premium: boolean;
+  pro: boolean;
+}
+
+const comparisonRows: ComparisonRow[] = [
+  { feature: "Daily stories & factuality bars", vantage: true, premium: true, pro: true },
+  { feature: "Source credibility scores", vantage: true, premium: true, pro: true },
+  { feature: "Full claim details", vantage: false, premium: true, pro: true },
+  { feature: "Creator profiles & accuracy", vantage: false, premium: true, pro: true },
+  { feature: "Evidence ladders", vantage: false, premium: true, pro: true },
+  { feature: "90-day claim history", vantage: false, premium: true, pro: true },
+  { feature: "Creator leaderboard", vantage: false, premium: false, pro: true },
+  { feature: "Source leaderboard", vantage: false, premium: false, pro: true },
+  { feature: "Blindspot reports", vantage: false, premium: false, pro: true },
+  { feature: "Real-time alerts", vantage: false, premium: false, pro: true },
+  { feature: "Priority support", vantage: false, premium: false, pro: true },
+];
+
+// --- Check / Dash icons ---
+
+const CheckIcon: React.FC<{ className?: string }> = ({ className = "" }) => (
+  <svg className={`w-5 h-5 ${className}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+  </svg>
+);
+
+const DashIcon: React.FC<{ className?: string }> = ({ className = "" }) => (
+  <svg className={`w-5 h-5 ${className}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 12H6" />
+  </svg>
+);
 
 const PlusPage: React.FC = () => {
   const [, setLocation] = useLocation();
   const [openFaqs, setOpenFaqs] = useState<Record<number, boolean>>({});
-  const [loading, setLoading] = useState(false);
+  const [loadingTier, setLoadingTier] = useState<string | null>(null);
   const [showSuccess, setShowSuccess] = useState(false);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
 
@@ -139,16 +205,20 @@ const PlusPage: React.FC = () => {
     }
   }, []);
 
-  const handleSubscribe = async () => {
+  const handleSubscribe = async (tierId: string) => {
+    if (tierId === "vantage") {
+      setLocation("/signup");
+      return;
+    }
     setCheckoutError(null);
-    setLoading(true);
+    setLoadingTier(tierId);
     try {
-      const { url } = await createCheckoutSession("plus");
+      const { url } = await createCheckoutSession(tierId);
       if (url) window.location.href = url;
     } catch (err) {
       console.error("Checkout error:", err);
       setCheckoutError("Unable to start checkout. Please sign in first or try again.");
-      setLoading(false);
+      setLoadingTier(null);
     }
   };
 
@@ -160,7 +230,7 @@ const PlusPage: React.FC = () => {
     <div className="relative z-10 bg-surface-primary min-h-screen">
       {/* Success Banner */}
       {showSuccess && (
-        <div className="max-w-5xl mx-auto px-6 md:px-12 pt-6">
+        <div className="max-w-6xl mx-auto px-6 md:px-12 pt-6">
           <div className="bg-green-900/30 border border-green-700 rounded-lg px-6 py-4 flex items-center justify-between">
             <div className="flex items-center space-x-3">
               <svg className="w-5 h-5 text-green-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -181,30 +251,19 @@ const PlusPage: React.FC = () => {
 
       {/* Hero */}
       <section className="pt-16 pb-4 text-center">
-        <div className="max-w-5xl mx-auto px-6 md:px-12">
-          {/* Hero illustration */}
-          <div className="w-20 h-20 mx-auto mb-6 relative">
-            <div className="absolute inset-0 bg-accent/20 rounded-2xl rotate-6" />
-            <div className="absolute inset-0 bg-accent/10 rounded-2xl -rotate-3" />
-            <div className="relative w-full h-full bg-accent rounded-2xl flex items-center justify-center">
-              <svg className="w-10 h-10 text-accent-text" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-              </svg>
-            </div>
-          </div>
-
+        <div className="max-w-6xl mx-auto px-6 md:px-12">
           <h1 className="text-4xl md:text-5xl font-bold text-content-primary tracking-tight mb-4">
-            Confirmd+
+            Subscription Options
           </h1>
           <p className="text-content-secondary text-lg max-w-2xl mx-auto">
-            Get the full picture. Evidence-based clarity on the claims that matter most.
+            Evidence-based clarity on the claims that matter most. Choose the plan that fits your needs.
           </p>
         </div>
       </section>
 
       {/* Checkout Error */}
       {checkoutError && (
-        <section className="max-w-lg mx-auto px-6 md:px-12 pb-4">
+        <section className="max-w-2xl mx-auto px-6 md:px-12 pb-4">
           <div className="bg-red-900/30 border border-red-700 rounded-lg px-6 py-4 flex items-center justify-between">
             <div className="flex items-center space-x-3">
               <svg className="w-5 h-5 text-red-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -221,55 +280,94 @@ const PlusPage: React.FC = () => {
         </section>
       )}
 
-      {/* Single Pricing Card */}
-      <section className="max-w-lg mx-auto px-6 md:px-12 py-12">
-        <div className="rounded-xl border border-accent ring-2 ring-accent bg-surface-card overflow-hidden">
-          {/* Price */}
-          <div className="px-8 pt-8 pb-6 text-center border-b border-border">
-            <div className="flex items-baseline justify-center gap-1">
-              <span className="text-5xl font-bold text-content-primary">$9.99</span>
-              <span className="text-content-muted text-lg">/month</span>
-            </div>
-            <p className="text-content-secondary text-sm mt-3">
-              Cancel anytime. 7-day free trial included.
-            </p>
-          </div>
+      {/* 3-Tier Pricing Cards */}
+      <section className="max-w-6xl mx-auto px-6 md:px-12 py-12">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-stretch">
+          {tiers.map((tier) => {
+            const isLoading = loadingTier === tier.id;
+            const Icon = tier.icon;
+            return (
+              <div
+                key={tier.id}
+                className={`relative rounded-xl border overflow-hidden bg-surface-card flex flex-col ${
+                  tier.highlight
+                    ? "border-accent ring-2 ring-accent"
+                    : "border-border"
+                }`}
+              >
+                {/* Most Popular badge */}
+                {tier.badge && (
+                  <div className="bg-accent text-accent-text text-xs font-bold uppercase tracking-wider text-center py-1.5">
+                    {tier.badge}
+                  </div>
+                )}
 
-          {/* Features */}
-          <div className="px-8 py-8">
-            <p className="text-xs font-bold uppercase tracking-wider text-content-muted mb-5">
-              Everything included
-            </p>
-            <ul className="space-y-4">
-              {features.map((feature) => (
-                <li key={feature.label} className="flex items-start space-x-3">
-                  <span className="text-accent flex-shrink-0 mt-0.5">{feature.icon}</span>
-                  <span className="text-sm text-content-primary">{feature.label}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
+                {/* Card body */}
+                <div className="px-6 pt-6 pb-4 flex-1 flex flex-col">
+                  {/* Tier name row */}
+                  <div className="flex items-center gap-2 mb-1">
+                    <h3 className="text-lg font-bold text-content-primary">{tier.name}</h3>
+                    {tier.id === "vantage" && (
+                      <span className="text-[10px] font-bold uppercase tracking-wider bg-accent/20 text-accent px-2 py-0.5 rounded">
+                        Free
+                      </span>
+                    )}
+                  </div>
 
-          {/* CTA */}
-          <div className="px-8 pb-8">
-            <button
-              onClick={handleSubscribe}
-              disabled={loading}
-              className="w-full py-4 rounded-lg text-sm font-bold transition-all disabled:opacity-60 disabled:cursor-wait bg-accent text-accent-text hover:bg-accent-hover"
-            >
-              {loading ? (
-                <span className="flex items-center justify-center space-x-2">
-                  <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                  </svg>
-                  <span>Redirecting...</span>
-                </span>
-              ) : (
-                "Start Free Trial"
-              )}
-            </button>
-          </div>
+                  {/* Tagline */}
+                  <p className="text-sm text-content-secondary mb-5 italic">{tier.tagline}</p>
+
+                  {/* Icon illustration */}
+                  <div className={`w-full aspect-[4/3] mb-5 rounded-lg flex items-center justify-center ${
+                    tier.highlight ? "bg-accent/10" : "bg-surface-card-hover"
+                  }`}>
+                    <div className={`w-20 h-20 ${tier.highlight ? "text-accent" : "text-content-secondary"}`}>
+                      <Icon />
+                    </div>
+                  </div>
+
+                  {/* Price */}
+                  <div className="flex items-baseline gap-1 mb-5">
+                    <span className="text-4xl font-bold text-content-primary">{tier.price}</span>
+                    <span className="text-content-muted text-sm">{tier.period}</span>
+                  </div>
+
+                  {/* Features list */}
+                  <ul className="space-y-3 mb-6 flex-1">
+                    {tier.features.map((f) => (
+                      <li key={f.label} className="flex items-start gap-2.5">
+                        <CheckIcon className="text-accent flex-shrink-0 mt-0.5" />
+                        <span className="text-sm text-content-primary">{f.label}</span>
+                      </li>
+                    ))}
+                  </ul>
+
+                  {/* CTA button */}
+                  <button
+                    onClick={() => handleSubscribe(tier.id)}
+                    disabled={isLoading}
+                    className={`w-full py-3.5 rounded-lg text-sm font-bold transition-all disabled:opacity-60 disabled:cursor-wait ${
+                      tier.highlight
+                        ? "bg-accent text-accent-text hover:bg-accent-hover"
+                        : "border border-accent text-accent hover:bg-accent hover:text-accent-text"
+                    }`}
+                  >
+                    {isLoading ? (
+                      <span className="flex items-center justify-center space-x-2">
+                        <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                        </svg>
+                        <span>Redirecting...</span>
+                      </span>
+                    ) : (
+                      tier.ctaLabel
+                    )}
+                  </button>
+                </div>
+              </div>
+            );
+          })}
         </div>
       </section>
 
@@ -317,6 +415,89 @@ const PlusPage: React.FC = () => {
             <svg className="w-12 h-12 text-accent mx-auto mt-8 opacity-40 rotate-180" fill="currentColor" viewBox="0 0 24 24">
               <path d="M14.017 21v-7.391c0-5.704 3.731-9.57 8.983-10.609l.995 2.151c-2.432.917-3.995 3.638-3.995 5.849h4v10h-9.983zm-14.017 0v-7.391c0-5.704 3.748-9.57 9-10.609l.996 2.151c-2.433.917-3.996 3.638-3.996 5.849h3.983v10h-9.983z" />
             </svg>
+          </div>
+        </div>
+      </section>
+
+      {/* Feature Comparison Table */}
+      <section className="py-20">
+        <div className="max-w-6xl mx-auto px-6 md:px-12">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-border">
+                  <th className="text-left py-4 pr-4 text-sm font-bold text-content-primary w-2/5">
+                    Features
+                  </th>
+                  {tiers.map((tier) => (
+                    <th key={tier.id} className="py-4 px-3 text-center">
+                      <div className="text-sm font-bold text-content-primary">{tier.name}</div>
+                      <div className="text-xs text-content-muted mt-0.5">{tier.price}{tier.period}</div>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {comparisonRows.map((row, idx) => (
+                  <tr
+                    key={row.feature}
+                    className={`border-b border-border/50 ${
+                      idx % 2 === 0 ? "bg-surface-card/30" : ""
+                    }`}
+                  >
+                    <td className="py-4 pr-4 text-sm text-content-secondary">
+                      {row.feature}
+                    </td>
+                    <td className="py-4 px-3 text-center">
+                      {row.vantage ? (
+                        <CheckIcon className="text-accent mx-auto" />
+                      ) : (
+                        <DashIcon className="text-content-muted/40 mx-auto" />
+                      )}
+                    </td>
+                    <td className="py-4 px-3 text-center">
+                      {row.premium ? (
+                        <CheckIcon className="text-accent mx-auto" />
+                      ) : (
+                        <DashIcon className="text-content-muted/40 mx-auto" />
+                      )}
+                    </td>
+                    <td className="py-4 px-3 text-center">
+                      {row.pro ? (
+                        <CheckIcon className="text-accent mx-auto" />
+                      ) : (
+                        <DashIcon className="text-content-muted/40 mx-auto" />
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              {/* Pricing row at bottom of table */}
+              <tfoot>
+                <tr className="border-t border-border">
+                  <td className="py-6 pr-4"></td>
+                  {tiers.map((tier) => (
+                    <td key={tier.id} className="py-6 px-3 text-center">
+                      <div className="flex items-baseline justify-center gap-1 mb-3">
+                        <span className="text-2xl font-bold text-content-primary">{tier.price}</span>
+                        <span className="text-content-muted text-xs">{tier.period}</span>
+                      </div>
+                      <button
+                        onClick={() => handleSubscribe(tier.id)}
+                        disabled={loadingTier === tier.id}
+                        className={`px-5 py-2.5 rounded-lg text-xs font-bold transition-all disabled:opacity-60 disabled:cursor-wait ${
+                          tier.highlight
+                            ? "bg-accent text-accent-text hover:bg-accent-hover"
+                            : "border border-accent text-accent hover:bg-accent hover:text-accent-text"
+                        }`}
+                      >
+                        {loadingTier === tier.id ? "Redirecting..." : tier.ctaLabel}
+                      </button>
+                    </td>
+                  ))}
+                </tr>
+              </tfoot>
+            </table>
           </div>
         </div>
       </section>
@@ -371,7 +552,7 @@ const PlusPage: React.FC = () => {
       </section>
 
       {/* Gift Subscriptions Callout */}
-      <section className="max-w-5xl mx-auto px-6 md:px-12 pb-20">
+      <section className="max-w-6xl mx-auto px-6 md:px-12 pb-20">
         <div className="bg-surface-card border border-border rounded-xl p-8 md:p-12 text-center">
           <h3 className="text-2xl font-bold text-content-primary mb-2">Gift Subscriptions</h3>
           <p className="text-content-secondary text-sm max-w-lg mx-auto mb-6">
@@ -397,11 +578,11 @@ const PlusPage: React.FC = () => {
             Every subscription helps us remain independent, unbiased, and committed to factual reporting.
           </p>
           <button
-            onClick={handleSubscribe}
-            disabled={loading}
+            onClick={() => handleSubscribe("premium")}
+            disabled={loadingTier === "premium"}
             className="bg-accent text-accent-text px-8 py-4 rounded-lg text-sm font-bold hover:bg-accent-hover transition-all disabled:opacity-60 disabled:cursor-wait"
           >
-            {loading ? (
+            {loadingTier === "premium" ? (
               <span className="flex items-center justify-center space-x-2">
                 <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />

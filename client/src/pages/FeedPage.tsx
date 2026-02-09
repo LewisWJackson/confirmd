@@ -30,6 +30,54 @@ function getFactualityColor(trackRecord: number): string {
   return "bg-factuality-low";
 }
 
+function getFactualityAccentColor(dist: { high: number; medium: number; low: number }): string {
+  const total = dist.high + dist.medium + dist.low;
+  if (total === 0) return "bg-border";
+  if (dist.high >= dist.medium && dist.high >= dist.low) return "bg-factuality-high";
+  if (dist.medium >= dist.high && dist.medium >= dist.low) return "bg-factuality-mixed";
+  return "bg-factuality-low";
+}
+
+/* --- Overlapping Source Logos --------------------------------- */
+
+function SourceLogoStack({ sources, max = 4 }: { sources: any[]; max?: number }) {
+  const shown = sources.slice(0, max);
+  if (shown.length === 0) return null;
+
+  return (
+    <div className="flex items-center">
+      <div className="flex -space-x-1.5">
+        {shown.map((source: any, idx: number) => (
+          <div
+            key={source.id || idx}
+            className="w-5 h-5 rounded-full border-2 border-surface-primary bg-surface-card flex items-center justify-center overflow-hidden flex-shrink-0"
+            style={{ zIndex: max - idx }}
+            title={source.displayName}
+          >
+            {source.logoUrl ? (
+              <img
+                src={source.logoUrl}
+                alt=""
+                className="w-full h-full object-cover"
+                onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+              />
+            ) : (
+              <span className="text-[7px] font-bold text-content-muted">
+                {(source.displayName || "?").charAt(0)}
+              </span>
+            )}
+          </div>
+        ))}
+      </div>
+      {sources.length > max && (
+        <span className="text-[9px] text-content-muted ml-1">
+          +{sources.length - max}
+        </span>
+      )}
+    </div>
+  );
+}
+
 /* --- Source Factuality Bar (single source) -------------------- */
 
 function SourceFactualityLine({ source }: { source: any }) {
@@ -109,23 +157,41 @@ function HeroStory({ story, onClick }: { story: any; onClick: () => void }) {
       onClick={onClick}
       className="group cursor-pointer rounded-xl overflow-hidden relative bg-surface-card mb-6"
     >
-      <div className="relative aspect-[16/8] overflow-hidden">
+      {/* 16:8 wide cinematic aspect ratio */}
+      <div className="relative w-full overflow-hidden" style={{ paddingBottom: "50%" }}>
         {story.imageUrl ? (
           <img
             src={story.imageUrl}
             alt={story.title}
             loading="eager"
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+            className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
             onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
           />
         ) : (
-          <div className="w-full h-full bg-gradient-to-br from-surface-secondary to-surface-card" />
+          <div className="absolute inset-0 w-full h-full bg-gradient-to-br from-surface-secondary to-surface-card" />
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
 
-        {/* Source count badge top-left */}
+        {/* Source logos + count badge top-left */}
         <div className="absolute top-4 left-4 flex items-center gap-2">
-          <span className="text-[9px] font-bold tracking-widest uppercase px-2.5 py-1 rounded-md bg-white/20 text-white backdrop-blur-sm">
+          {topSources.length > 0 && (
+            <div className="flex -space-x-1.5">
+              {topSources.slice(0, 4).map((src: any, idx: number) => (
+                <div
+                  key={src.id || idx}
+                  className="w-6 h-6 rounded-full border-2 border-black/40 bg-surface-card flex items-center justify-center overflow-hidden flex-shrink-0 backdrop-blur-sm"
+                  style={{ zIndex: 4 - idx }}
+                >
+                  {src.logoUrl ? (
+                    <img src={src.logoUrl} alt="" className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                  ) : (
+                    <span className="text-[8px] font-bold text-content-muted">{(src.displayName || "?").charAt(0)}</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+          <span className="text-[10px] font-black tracking-widest uppercase px-2.5 py-1 rounded-md bg-white/20 text-white backdrop-blur-sm">
             {story.sourceCount || 0} {(story.sourceCount || 0) === 1 ? "source" : "sources"}
           </span>
         </div>
@@ -152,13 +218,14 @@ function StoryListRow({ story, onClick }: { story: any; onClick: () => void }) {
   const dist = story.credibilityDistribution || { high: 0, medium: 0, low: 0 };
   const topSources = story.topSources || [];
   const isSingleSource = (story.sourceCount || 0) <= 1;
+  const accentColor = getFactualityAccentColor(dist);
 
   return (
     <div
       onClick={onClick}
       className="group cursor-pointer py-4 border-b border-border last:border-b-0 hover:bg-surface-card-hover transition-colors px-3 rounded-lg -mx-3"
     >
-      {/* Time + source count */}
+      {/* Time */}
       <div className="flex items-center gap-2 mb-1.5">
         <span className="text-[9px] text-content-muted">
           {story.latestItemTimestamp ? timeAgo(story.latestItemTimestamp) : ""}
@@ -171,19 +238,29 @@ function StoryListRow({ story, onClick }: { story: any; onClick: () => void }) {
           <h3 className="text-[15px] font-bold text-content-primary leading-snug mb-2 group-hover:text-accent transition-colors line-clamp-2">
             {story.title}
           </h3>
+
           {isSingleSource && topSources[0] ? (
             <SourceFactualityLine source={topSources[0]} />
           ) : (
-            <>
+            <div>
               <FactualityBar distribution={dist} size="sm" />
-              <div className="mt-1.5 text-[10px] font-medium text-content-muted">
-                {story.sourceCount || 0} sources
+              {/* Thin colored accent underline */}
+              <div className={`h-[2px] mt-0.5 rounded-full ${accentColor} opacity-40`} style={{ width: "100%" }} />
+
+              {/* Source logos + count */}
+              <div className="flex items-center gap-2 mt-2">
+                <SourceLogoStack sources={topSources} max={4} />
+                <span className="text-[11px] font-bold text-content-secondary">
+                  {story.sourceCount || 0} sources
+                </span>
               </div>
-            </>
+            </div>
           )}
         </div>
+
+        {/* Square-ish thumbnail (4:3 aspect) */}
         {story.imageUrl && (
-          <div className="w-20 h-20 rounded-lg overflow-hidden flex-shrink-0 bg-surface-card">
+          <div className="w-20 flex-shrink-0 rounded-lg overflow-hidden bg-surface-card" style={{ aspectRatio: "4/3" }}>
             <img
               src={story.imageUrl}
               alt=""
@@ -192,6 +269,126 @@ function StoryListRow({ story, onClick }: { story: any; onClick: () => void }) {
             />
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+/* --- Topic Spotlight Section --------------------------------- */
+
+function TopicSpotlight({
+  title,
+  stories,
+  onStoryClick,
+}: {
+  title: string;
+  stories: any[];
+  onStoryClick: (id: string) => void;
+}) {
+  if (stories.length === 0) return null;
+  const featured = stories[0];
+  const rest = stories.slice(1, 4);
+
+  return (
+    <div className="my-8 rounded-xl border border-border bg-surface-card p-5">
+      <div className="flex items-center gap-2 mb-4">
+        <h2 className="text-[11px] font-black uppercase tracking-[0.2em] text-accent">
+          {title}
+        </h2>
+        <div className="flex-1 h-px bg-border" />
+      </div>
+
+      {/* Featured story for this topic */}
+      <div
+        onClick={() => onStoryClick(featured.id)}
+        className="group cursor-pointer flex gap-4 mb-4 pb-4 border-b border-border"
+      >
+        {featured.imageUrl && (
+          <div className="w-28 flex-shrink-0 rounded-lg overflow-hidden bg-surface-card-hover" style={{ aspectRatio: "16/10" }}>
+            <img
+              src={featured.imageUrl}
+              alt=""
+              className="w-full h-full object-cover"
+              onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+            />
+          </div>
+        )}
+        <div className="flex-1 min-w-0">
+          <h3 className="text-[14px] font-bold text-content-primary leading-snug group-hover:text-accent transition-colors line-clamp-2 mb-1.5">
+            {featured.title}
+          </h3>
+          <div className="flex items-center gap-2">
+            <SourceLogoStack sources={featured.topSources || []} max={3} />
+            <span className="text-[10px] font-medium text-content-muted">
+              {featured.sourceCount || 0} sources
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Additional stories in this topic */}
+      {rest.map((story: any) => (
+        <div
+          key={story.id}
+          onClick={() => onStoryClick(story.id)}
+          className="group cursor-pointer py-2 flex items-center gap-3 border-b border-border last:border-b-0"
+        >
+          <div className="flex-1 min-w-0">
+            <p className="text-[12px] font-bold text-content-primary leading-tight group-hover:text-accent transition-colors line-clamp-1">
+              {story.title}
+            </p>
+          </div>
+          <span className="text-[9px] text-content-muted whitespace-nowrap flex-shrink-0">
+            {story.sourceCount || 0} sources
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* --- Latest News Stories Section ------------------------------ */
+
+function LatestNewsStories({
+  stories,
+  onStoryClick,
+}: {
+  stories: any[];
+  onStoryClick: (id: string) => void;
+}) {
+  if (stories.length === 0) return null;
+
+  return (
+    <div className="mt-10 mb-4">
+      <div className="flex items-center gap-2 mb-4">
+        <h2 className="text-[11px] font-black uppercase tracking-[0.2em] text-content-muted">
+          Latest News Stories
+        </h2>
+        <div className="flex-1 h-px bg-border" />
+      </div>
+
+      <div className="space-y-0">
+        {stories.map((story: any) => (
+          <div
+            key={story.id}
+            onClick={() => onStoryClick(story.id)}
+            className="group cursor-pointer flex items-center justify-between py-2.5 border-b border-border last:border-b-0 hover:bg-surface-card-hover transition-colors rounded px-2 -mx-2"
+          >
+            <div className="flex-1 min-w-0 mr-3">
+              <p className="text-[13px] font-bold text-content-primary leading-snug line-clamp-1 group-hover:text-accent transition-colors">
+                {story.title}
+              </p>
+            </div>
+            <div className="flex items-center gap-3 flex-shrink-0">
+              <span className="text-[10px] text-content-muted whitespace-nowrap">
+                {story.latestItemTimestamp ? timeAgo(story.latestItemTimestamp) : ""}
+              </span>
+              <span className="text-[10px] font-bold text-content-secondary whitespace-nowrap">
+                {story.sourceCount || 0} sources
+              </span>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -464,7 +661,7 @@ function LoadingSkeleton() {
       {/* Center skeleton */}
       <div className="space-y-4">
         <div className="rounded-xl overflow-hidden animate-pulse">
-          <div className="aspect-[16/8] bg-surface-card" />
+          <div className="w-full bg-surface-card" style={{ paddingBottom: "50%" }} />
         </div>
         {[1, 2, 3, 4].map((i) => (
           <div key={i} className="py-4 border-b border-border animate-pulse">
@@ -475,7 +672,7 @@ function LoadingSkeleton() {
                 <div className="h-4 bg-surface-card rounded w-3/4" />
                 <div className="h-3 bg-surface-card rounded w-full" />
               </div>
-              <div className="w-20 h-20 bg-surface-card rounded-lg flex-shrink-0" />
+              <div className="w-20 bg-surface-card rounded-lg flex-shrink-0" style={{ aspectRatio: "4/3" }} />
             </div>
           </div>
         ))}
@@ -534,6 +731,52 @@ export default function FeedPage() {
     const rest = filteredStories.filter((_: any, i: number) => i !== bestIdx);
     return { heroStory: hero, centerStories: rest };
   }, [filteredStories]);
+
+  // Group stories by category for topic spotlight sections
+  const topicSections = useMemo(() => {
+    const groups: Record<string, any[]> = {};
+    for (const s of centerStories) {
+      const cat = s.category;
+      if (!cat || cat === activeCategory) continue; // skip if same as active filter (redundant)
+      if (!groups[cat]) groups[cat] = [];
+      groups[cat].push(s);
+    }
+    // Pick top 2 categories with the most stories (minimum 2 stories to warrant a section)
+    return Object.entries(groups)
+      .filter(([, items]) => items.length >= 2)
+      .sort((a, b) => b[1].length - a[1].length)
+      .slice(0, 2)
+      .map(([category, items]) => ({ category, stories: items.slice(0, 4) }));
+  }, [centerStories, activeCategory]);
+
+  // IDs used in topic spotlight sections (to avoid showing them again in the main list)
+  const topicStoryIds = useMemo(() => {
+    const ids = new Set<string>();
+    topicSections.forEach((t) => t.stories.forEach((s: any) => ids.add(s.id)));
+    return ids;
+  }, [topicSections]);
+
+  // Stories for the main list (excluding topic spotlight stories)
+  const mainListStories = useMemo(() => {
+    return centerStories.filter((s: any) => !topicStoryIds.has(s.id));
+  }, [centerStories, topicStoryIds]);
+
+  // Split: first few stories, then topic sections, then rest, then "Latest"
+  const INITIAL_STORIES_COUNT = 4;
+  const firstStories = mainListStories.slice(0, INITIAL_STORIES_COUNT);
+  const remainingStories = mainListStories.slice(INITIAL_STORIES_COUNT);
+  // "Latest News Stories" at the bottom: the last batch sorted by time
+  const LATEST_COUNT = 6;
+  const latestStories = useMemo(() => {
+    return [...filteredStories]
+      .sort((a, b) => {
+        const ta = a.latestItemTimestamp ? new Date(a.latestItemTimestamp).getTime() : 0;
+        const tb = b.latestItemTimestamp ? new Date(b.latestItemTimestamp).getTime() : 0;
+        return tb - ta;
+      })
+      .slice(0, LATEST_COUNT);
+  }, [filteredStories]);
+
   const sidebarStories = stories;
 
   const handleStoryClick = (id: string) => setLocation(`/stories/${id}`);
@@ -547,6 +790,18 @@ export default function FeedPage() {
         setLocation(`/creators/${creatorId}`);
       }
     }
+  };
+
+  // Category label for topic spotlight titles
+  const topicLabel = (cat: string) => {
+    const labels: Record<string, string> = {
+      DeFi: "DeFi News",
+      Regulation: "Regulation News",
+      Security: "Security News",
+      Markets: "Markets News",
+      Technology: "Technology News",
+    };
+    return labels[cat] || `${cat} News`;
   };
 
   return (
@@ -627,8 +882,9 @@ export default function FeedPage() {
                 onViewAll={() => setLocation("/creators")}
               />
 
+              {/* First batch of stories */}
               <div>
-                {centerStories.map((story: any) => (
+                {firstStories.map((story: any) => (
                   <StoryListRow
                     key={story.id}
                     story={story}
@@ -636,6 +892,35 @@ export default function FeedPage() {
                   />
                 ))}
               </div>
+
+              {/* Topic Spotlight Sections */}
+              {topicSections.map(({ category, stories: topicStories }) => (
+                <TopicSpotlight
+                  key={category}
+                  title={topicLabel(category)}
+                  stories={topicStories}
+                  onStoryClick={handleStoryClick}
+                />
+              ))}
+
+              {/* Remaining stories */}
+              {remainingStories.length > 0 && (
+                <div>
+                  {remainingStories.map((story: any) => (
+                    <StoryListRow
+                      key={story.id}
+                      story={story}
+                      onClick={() => handleStoryClick(story.id)}
+                    />
+                  ))}
+                </div>
+              )}
+
+              {/* Latest News Stories section at the bottom */}
+              <LatestNewsStories
+                stories={latestStories}
+                onStoryClick={handleStoryClick}
+              />
             </main>
 
             {/* RIGHT SIDEBAR */}

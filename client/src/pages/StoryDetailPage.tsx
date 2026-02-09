@@ -34,27 +34,56 @@ function FactualityBadge({ tier }: { tier: "high" | "medium" | "low" }) {
   };
   const c = config[tier];
   return (
-    <span className={`px-2.5 py-1 text-[10px] font-black uppercase tracking-widest rounded-lg border ${c.className}`}>
+    <span className={`px-2 py-0.5 text-[9px] font-black uppercase tracking-widest rounded border ${c.className}`}>
       {c.label}
     </span>
   );
 }
 
-function formatReasoning(raw: string): string {
-  // Clean up raw analysis text that reads like internal debug output
+function formatReasoning(raw: string, verdictLabel?: string): string {
   let text = raw;
-  // Remove "Analysis of N evidence items" prefix
+
+  // Strip "Credibility: X+" prefix (e.g. "Credibility: B+,")
+  text = text.replace(/^Credibility:\s*[A-Z][+-]?[.,;:]?\s*/i, "");
+
+  // Strip "Analysis of N evidence items" prefix
   text = text.replace(/^Analysis of \d+ evidence items?[.,:]?\s*/i, "");
-  // Remove grading breakdowns like "0 primary A, 0 strong secondary B"
-  text = text.replace(/\d+ primary [A-Z],?\s*/g, "");
-  text = text.replace(/\d+ strong secondary [A-Z],?\s*/g, "");
-  text = text.replace(/\d+ secondary [A-Z],?\s*/g, "");
-  text = text.replace(/\d+ tertiary [A-Z],?\s*/g, "");
-  // Clean up leftover empty parens/commas
-  text = text.replace(/^[,.\s]+/, "").replace(/[,.\s]+$/, "");
+
+  // Strip grade breakdowns like "5 strong secondary B+", "1 weak secondary C-", "0 primary A", "2 tertiary D"
+  text = text.replace(/\d+\s+(strong\s+|weak\s+)?(primary|secondary|tertiary)\s+[A-Z][+-]?[.,;:]?\s*/gi, "");
+
+  // Strip boilerplate phrases that appear in raw output
+  text = text.replace(/Credible indicators suggest this claim may be accurate,?\s*but primary confirmation is missing\.?\s*/gi, "");
+  text = text.replace(/Credible indicators suggest\s*/gi, "");
+  text = text.replace(/but primary confirmation is missing\.?\s*/gi, "");
+  text = text.replace(/Primary confirmation is missing\.?\s*/gi, "");
+  text = text.replace(/No direct evidence (was )?found\.?\s*/gi, "");
+  text = text.replace(/Evidence is (largely\s+)?circumstantial\.?\s*/gi, "");
+  text = text.replace(/Based on \d+ evidence items?\.?\s*/gi, "");
+  text = text.replace(/No contradicting evidence found\.?\s*/gi, "");
+
+  // Clean up leftover commas, periods, whitespace at start/end
+  text = text.replace(/^[,.\s;:]+/, "").replace(/[,.\s;:]+$/, "");
+
+  // Collapse multiple spaces
+  text = text.replace(/\s{2,}/g, " ");
+
   // Capitalize first letter
   if (text.length > 0) text = text.charAt(0).toUpperCase() + text.slice(1);
-  return text || raw;
+
+  // If the cleaned text is too short or empty, generate a fallback from the verdict
+  if (text.length < 15) {
+    const fallbacks: Record<string, string> = {
+      verified: "Multiple credible sources confirm this claim.",
+      speculative: "This claim lacks sufficient verification from primary sources.",
+      misleading: "Available evidence contradicts or does not support this claim.",
+      plausible_unverified: "This claim appears plausible but remains unconfirmed.",
+      unreviewed: "This claim has not yet been reviewed.",
+    };
+    return fallbacks[verdictLabel || ""] || fallbacks.unreviewed;
+  }
+
+  return text;
 }
 
 function VerdictBadge({ verdict }: { verdict: string }) {
@@ -62,19 +91,45 @@ function VerdictBadge({ verdict }: { verdict: string }) {
     verified: "bg-factuality-high/10 text-factuality-high border-factuality-high/30",
     speculative: "bg-factuality-mixed/10 text-factuality-mixed border-factuality-mixed/30",
     misleading: "bg-factuality-low/10 text-factuality-low border-factuality-low/30",
+    plausible_unverified: "bg-factuality-mixed/10 text-factuality-mixed border-factuality-mixed/30",
+  };
+  const labels: Record<string, string> = {
+    verified: "Verified",
+    speculative: "Speculative",
+    misleading: "Misleading",
+    plausible_unverified: "Plausible",
+    unreviewed: "Unreviewed",
   };
   return (
     <span className={`px-3 py-1 text-[10px] font-black uppercase tracking-widest rounded-lg border ${styles[verdict] || "bg-surface-card text-content-muted border-border"}`}>
-      {verdict}
+      {labels[verdict] || verdict}
     </span>
   );
+}
+
+/** Flatten all items from coverage entries into a single list for the articles view */
+function flattenArticles(coverage: any[]): Array<{ source: any; item: any }> {
+  const articles: Array<{ source: any; item: any }> = [];
+  for (const entry of coverage) {
+    const source = entry.source || {};
+    const items = entry.items || [];
+    for (const item of items) {
+      articles.push({ source, item });
+    }
+  }
+  // Sort by publishedAt descending
+  articles.sort((a, b) => {
+    const aTime = a.item.publishedAt ? new Date(a.item.publishedAt).getTime() : 0;
+    const bTime = b.item.publishedAt ? new Date(b.item.publishedAt).getTime() : 0;
+    return bTime - aTime;
+  });
+  return articles;
 }
 
 export default function StoryDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [, setLocation] = useLocation();
-  const [showClaims, setShowClaims] = useState(false);
-  const [activeTab, setActiveTab] = useState<"articles" | "predictions" | "timelines">("timelines");
+  const [activeTab, setActiveTab] = useState<"articles" | "predictions" | "claims">("articles");
   const { tier } = useAuth();
 
   const { data: story, isLoading } = useQuery({
@@ -145,6 +200,9 @@ export default function StoryDetailPage() {
     return (tierOrder[aTier as keyof typeof tierOrder] ?? 2) - (tierOrder[bTier as keyof typeof tierOrder] ?? 2);
   });
 
+  const allArticles = flattenArticles(sortedCoverage);
+  const totalArticleCount = allArticles.length;
+
   // Similar stories (same category, excluding this one)
   const similarStories = allStories
     .filter((s: any) => s.id !== id && s.category === story.category)
@@ -152,15 +210,30 @@ export default function StoryDetailPage() {
 
   return (
     <div className="min-h-screen bg-surface-primary animate-in fade-in duration-700">
-      {/* Promo banner */}
+      {/* Promo banner - Ground News style */}
       {tier === "free" && (
-        <div className="bg-accent text-accent-text text-center py-2.5 px-4">
-          <span className="text-[12px] font-bold">
-            Get Confirmd Vantage -- Factuality ratings, full source history, and real-time alerts.{" "}
-            <button onClick={() => setLocation("/plus")} className="underline font-black hover:opacity-80 transition-opacity">
+        <div className="bg-surface-card border-b border-border">
+          <div className="max-w-6xl mx-auto px-4 md:px-8 py-4 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className="hidden sm:flex w-10 h-10 rounded-xl bg-accent/10 items-center justify-center flex-shrink-0">
+                <svg className="w-5 h-5 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-sm font-black text-content-primary">See every side of every story</p>
+                <p className="text-[11px] text-content-muted font-medium">
+                  Join our community of exact, well-informed news readers
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setLocation("/plus")}
+              className="px-5 py-2 bg-accent text-accent-text text-[11px] font-black uppercase tracking-wider rounded-lg hover:bg-accent-hover transition-colors flex-shrink-0"
+            >
               Subscribe
             </button>
-          </span>
+          </div>
         </div>
       )}
 
@@ -180,7 +253,7 @@ export default function StoryDetailPage() {
           {/* Main content */}
           <div>
             {/* Story Header */}
-            <div className="space-y-4 mb-8">
+            <div className="space-y-4 mb-6">
               <div className="flex flex-wrap items-center gap-3">
                 {story.category && (
                   <span className="px-3 py-1.5 bg-accent text-accent-text text-[10px] font-black tracking-widest uppercase rounded-lg">
@@ -192,9 +265,6 @@ export default function StoryDetailPage() {
                     {s}
                   </span>
                 ))}
-                <span className="text-[10px] text-content-muted font-medium">
-                  {story.latestItemTimestamp ? timeAgo(story.latestItemTimestamp) : ""}
-                </span>
               </div>
 
               <h1 className="text-3xl md:text-4xl font-black leading-tight text-content-primary tracking-tight">
@@ -202,7 +272,7 @@ export default function StoryDetailPage() {
               </h1>
 
               {story.summary && !story.summary.startsWith("Story covering") && (
-                <p className="text-lg text-content-secondary leading-relaxed font-medium max-w-3xl">
+                <p className="text-base text-content-secondary leading-relaxed font-medium max-w-3xl">
                   {story.summary}
                 </p>
               )}
@@ -210,7 +280,7 @@ export default function StoryDetailPage() {
 
             {/* Story image */}
             {story.imageUrl && (
-              <div className="relative rounded-xl overflow-hidden aspect-[21/9] mb-8">
+              <div className="relative rounded-xl overflow-hidden aspect-[21/9] mb-6">
                 <img
                   src={story.imageUrl}
                   alt={story.title}
@@ -221,78 +291,121 @@ export default function StoryDetailPage() {
               </div>
             )}
 
-            {/* Claims & Verdicts - Always visible */}
+            {/* Factuality summary bar - compact Ground News style */}
+            <div className="rounded-xl border border-border bg-surface-card p-4 mb-6">
+              <div className="flex items-center gap-4 mb-3">
+                <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-content-muted">
+                  Source Factuality Distribution
+                </h3>
+                <span className="text-[10px] font-bold text-content-muted ml-auto">
+                  {(dist.high || 0) + (dist.medium || 0) + (dist.low || 0)} sources
+                </span>
+              </div>
+              <FactualityBar distribution={dist} size="lg" showLabels={true} />
+              <div className="flex items-center gap-5 mt-3">
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-factuality-high" />
+                  <span className="text-[11px] font-bold text-content-primary">High {dist.high || 0}</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-factuality-mixed" />
+                  <span className="text-[11px] font-bold text-content-primary">Mixed {dist.medium || 0}</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-factuality-low" />
+                  <span className="text-[11px] font-bold text-content-primary">Low {dist.low || 0}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Claims & Verdicts */}
             {claims.length > 0 && (
-              <div className="mb-8">
-                <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-content-muted mb-4">
+              <div className="mb-6">
+                <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-content-muted mb-3">
                   Claims & Verification
                 </h3>
-                <div className="space-y-3">
+                <div className="space-y-2.5">
                   {claims.map((claim: any) => {
                     const verdictLabel = claim.verdict?.verdictLabel || "unreviewed";
                     const probability = claim.verdict?.probabilityTrue;
                     const reasoning = claim.verdict?.reasoningSummary;
-                    const verdictStyles: Record<string, string> = {
-                      verified: "border-l-factuality-high bg-factuality-high/5",
-                      speculative: "border-l-factuality-mixed bg-factuality-mixed/5",
-                      misleading: "border-l-factuality-low bg-factuality-low/5",
-                      unreviewed: "border-l-border bg-surface-card",
+                    const accentColors: Record<string, string> = {
+                      verified: "border-l-factuality-high",
+                      speculative: "border-l-factuality-mixed",
+                      misleading: "border-l-factuality-low",
+                      plausible_unverified: "border-l-factuality-mixed",
+                      unreviewed: "border-l-border",
                     };
                     const badgeStyles: Record<string, string> = {
-                      verified: "bg-factuality-high/10 text-factuality-high border-factuality-high/30",
-                      speculative: "bg-factuality-mixed/10 text-factuality-mixed border-factuality-mixed/30",
-                      misleading: "bg-factuality-low/10 text-factuality-low border-factuality-low/30",
-                      unreviewed: "bg-surface-card-hover text-content-muted border-border",
+                      verified: "bg-factuality-high text-white",
+                      speculative: "bg-factuality-mixed text-white",
+                      misleading: "bg-factuality-low text-white",
+                      plausible_unverified: "bg-factuality-mixed text-white",
+                      unreviewed: "bg-surface-card-hover text-content-muted",
+                    };
+                    const badgeLabels: Record<string, string> = {
+                      verified: "Verified",
+                      speculative: "Speculative",
+                      misleading: "Misleading",
+                      plausible_unverified: "Plausible",
+                      unreviewed: "Unreviewed",
                     };
                     return (
                       <div
                         key={claim.id}
-                        className={`rounded-xl border border-border p-5 border-l-4 ${verdictStyles[verdictLabel] || verdictStyles.unreviewed}`}
+                        className={`rounded-lg border border-border bg-surface-card border-l-[3px] ${accentColors[verdictLabel] || accentColors.unreviewed}`}
                       >
-                        <div className="flex items-start justify-between gap-4 mb-2">
-                          <p className="text-[15px] font-bold text-content-primary leading-relaxed flex-1">
-                            {claim.claimText}
-                          </p>
-                          <span className={`px-3 py-1 text-[10px] font-black uppercase tracking-widest rounded-lg border flex-shrink-0 ${badgeStyles[verdictLabel] || badgeStyles.unreviewed}`}>
-                            {verdictLabel}
-                          </span>
-                        </div>
-                        {/* Probability + reasoning */}
-                        <div className="space-y-2 mt-3">
-                          {probability != null && (
-                            <div className="flex items-center gap-2">
-                              <div className="flex-1 h-2 bg-surface-secondary rounded-full overflow-hidden">
-                                <div
-                                  className={`h-full rounded-full ${
-                                    probability >= 0.7 ? "bg-factuality-high" :
-                                    probability >= 0.4 ? "bg-factuality-mixed" : "bg-factuality-low"
-                                  }`}
-                                  style={{ width: `${Math.round(probability * 100)}%` }}
-                                />
+                        <div className="p-4">
+                          {/* Verdict badge + claim text row */}
+                          <div className="flex items-start gap-3">
+                            <span className={`px-2.5 py-1 text-[9px] font-black uppercase tracking-widest rounded flex-shrink-0 mt-0.5 ${badgeStyles[verdictLabel] || badgeStyles.unreviewed}`}>
+                              {badgeLabels[verdictLabel] || verdictLabel}
+                            </span>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-[14px] font-bold text-content-primary leading-snug">
+                                {claim.claimText}
+                              </p>
+                              {/* Probability bar */}
+                              {probability != null && (
+                                <div className="flex items-center gap-2 mt-2.5">
+                                  <div className="flex-1 h-1.5 bg-surface-secondary rounded-full overflow-hidden max-w-[200px]">
+                                    <div
+                                      className={`h-full rounded-full ${
+                                        probability >= 0.7 ? "bg-factuality-high" :
+                                        probability >= 0.4 ? "bg-factuality-mixed" : "bg-factuality-low"
+                                      }`}
+                                      style={{ width: `${Math.round(probability * 100)}%` }}
+                                    />
+                                  </div>
+                                  <span className="text-[10px] font-bold text-content-muted">
+                                    {Math.round(probability * 100)}% likely
+                                  </span>
+                                </div>
+                              )}
+                              {/* Reasoning */}
+                              {reasoning && (
+                                <p className="text-[12px] text-content-secondary leading-relaxed mt-2">
+                                  {formatReasoning(reasoning, verdictLabel)}
+                                </p>
+                              )}
+                              {/* Source + type */}
+                              <div className="flex items-center gap-2 mt-2">
+                                {claim.source && (
+                                  <span className="text-[10px] text-content-muted font-medium">
+                                    via {claim.source.displayName}
+                                  </span>
+                                )}
+                                {claim.source && claim.claimType && (
+                                  <span className="text-content-muted text-[8px]">|</span>
+                                )}
+                                {claim.claimType && (
+                                  <span className="text-[10px] text-content-muted font-medium">
+                                    {claim.claimType.replace(/_/g, " ")}
+                                  </span>
+                                )}
                               </div>
-                              <span className="text-[11px] font-bold text-content-secondary">
-                                {Math.round(probability * 100)}% likely true
-                              </span>
                             </div>
-                          )}
-                          {reasoning && (
-                            <p className="text-[12px] text-content-secondary leading-relaxed">
-                              {formatReasoning(reasoning)}
-                            </p>
-                          )}
-                        </div>
-                        {/* Source + meta */}
-                        <div className="flex items-center gap-3 mt-3">
-                          {claim.source && (
-                            <span className="text-[10px] font-bold text-content-muted">
-                              Source: {claim.source.displayName}
-                            </span>
-                          )}
-                          {claim.claimType && (
-                            <span className="px-2 py-0.5 bg-surface-card-hover text-content-muted rounded text-[9px] font-bold uppercase tracking-wider border border-border">
-                              {claim.claimType}
-                            </span>
-                          )}
+                          </div>
                         </div>
                       </div>
                     );
@@ -301,44 +414,17 @@ export default function StoryDetailPage() {
               </div>
             )}
 
-            {/* Factuality Distribution */}
-            <div className="rounded-xl border border-border bg-surface-card p-6 mb-8">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-content-muted">
-                  Source Factuality Distribution
-                </h3>
-                <span className="text-[10px] font-bold text-content-muted">
-                  {(dist.high || 0) + (dist.medium || 0) + (dist.low || 0)} total sources
-                </span>
-              </div>
-              <FactualityBar distribution={dist} size="lg" showLabels={true} />
-              <div className="flex items-center gap-6 mt-4">
-                <div className="flex items-center gap-2">
-                  <span className="w-3 h-3 rounded-full bg-factuality-high" />
-                  <span className="text-sm font-bold text-content-primary">High: {dist.high || 0}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="w-3 h-3 rounded-full bg-factuality-mixed" />
-                  <span className="text-sm font-bold text-content-primary">Mixed: {dist.medium || 0}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="w-3 h-3 rounded-full bg-factuality-low" />
-                  <span className="text-sm font-bold text-content-primary">Low: {dist.low || 0}</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Tab bar */}
-            <div className="flex items-center gap-1 border-b border-border mb-6">
+            {/* Tab bar - Ground News style */}
+            <div className="flex items-center gap-0 border-b border-border mb-6">
               {[
-                { key: "articles" as const, label: `${sortedCoverage.length} Articles` },
+                { key: "articles" as const, label: `${totalArticleCount} Articles` },
+                ...(claims.length ? [{ key: "claims" as const, label: `${claims.length} Claims` }] : []),
                 ...(story.creatorPredictions?.length ? [{ key: "predictions" as const, label: "Predictions" }] : []),
-                ...(claims.length ? [{ key: "timelines" as const, label: "Claims" }] : []),
               ].map((tab) => (
                 <button
                   key={tab.key}
                   onClick={() => setActiveTab(tab.key)}
-                  className={`px-4 py-3 text-[11px] font-bold uppercase tracking-wider transition-colors border-b-2 -mb-[1px] ${
+                  className={`px-5 py-3 text-[11px] font-bold uppercase tracking-wider transition-colors border-b-2 -mb-[1px] ${
                     activeTab === tab.key
                       ? "border-accent text-accent"
                       : "border-transparent text-content-muted hover:text-content-primary"
@@ -349,82 +435,91 @@ export default function StoryDetailPage() {
               ))}
             </div>
 
-            {/* Articles tab */}
+            {/* Articles tab - Ground News article list style */}
             {activeTab === "articles" && (
-              <div className="space-y-0">
-                {sortedCoverage.map((entry: any, idx: number) => {
-                  const source = entry.source || {};
+              <div>
+                {allArticles.map(({ source, item }, idx) => {
                   const sourceTier = source.tier || getFactualityTier(source.trackRecord || 0);
-                  const items = entry.items || [];
-
                   return (
-                    <div key={source.id || idx} className="border-b border-border last:border-b-0">
-                      {items.map((item: any, itemIdx: number) => (
-                        <div
-                          key={item.id || itemIdx}
-                          className="flex items-start gap-4 py-4 hover:bg-surface-card-hover transition-colors px-3 rounded-lg -mx-3"
-                        >
-                          {/* Source logo */}
-                          <div className={`w-10 h-10 rounded-lg flex items-center justify-center font-black text-sm flex-shrink-0 ${
-                            source.logoUrl ? "bg-surface-card p-1 border border-border" :
-                            sourceTier === "high" ? "bg-factuality-high text-white" :
-                            sourceTier === "medium" ? "bg-factuality-mixed text-white" : "bg-factuality-low text-white"
-                          }`}>
-                            {source.logoUrl ? (
-                              <img src={source.logoUrl} alt={source.displayName} className="w-full h-full object-contain rounded" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
-                            ) : (
-                              <span>{source.displayName?.charAt(0) || "?"}</span>
-                            )}
-                          </div>
+                    <a
+                      key={item.id || idx}
+                      href={item.url || "#"}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-start gap-4 py-4 border-b border-border last:border-b-0 hover:bg-surface-card-hover/50 transition-colors group"
+                    >
+                      {/* Source logo */}
+                      <div className={`w-9 h-9 rounded-lg flex items-center justify-center font-black text-xs flex-shrink-0 ${
+                        source.logoUrl ? "bg-surface-card border border-border p-1" :
+                        sourceTier === "high" ? "bg-factuality-high/15 text-factuality-high" :
+                        sourceTier === "medium" ? "bg-factuality-mixed/15 text-factuality-mixed" : "bg-factuality-low/15 text-factuality-low"
+                      }`}>
+                        {source.logoUrl ? (
+                          <img src={source.logoUrl} alt={source.displayName} className="w-full h-full object-contain rounded" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                        ) : (
+                          <span>{source.displayName?.charAt(0) || "?"}</span>
+                        )}
+                      </div>
 
-                          {/* Content */}
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-1">
-                              <span className="text-[12px] font-black text-content-primary">{source.displayName || "Unknown Source"}</span>
-                              <FactualityBadge tier={sourceTier} />
-                            </div>
-                            <h4 className="text-sm font-bold text-content-primary leading-snug line-clamp-2 mb-1">
-                              {item.title || "Untitled article"}
-                            </h4>
-                            <div className="flex items-center gap-3">
-                              {item.publishedAt && (
-                                <span className="text-[10px] font-medium text-content-muted">
-                                  {timeAgo(item.publishedAt)}
-                                </span>
-                              )}
-                              {item.url && (
-                                <a
-                                  href={item.url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  onClick={(e) => e.stopPropagation()}
-                                  className="text-[10px] font-black uppercase tracking-widest text-accent hover:text-accent-hover transition-colors"
-                                >
-                                  Read original
-                                </a>
-                              )}
-                            </div>
-                          </div>
+                      {/* Content */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-[11px] font-black text-content-secondary uppercase tracking-wide">
+                            {source.displayName || "Unknown Source"}
+                          </span>
+                          <FactualityBadge tier={sourceTier} />
+                          {item.publishedAt && (
+                            <span className="text-[10px] text-content-muted font-medium ml-auto flex-shrink-0">
+                              {timeAgo(item.publishedAt)}
+                            </span>
+                          )}
                         </div>
-                      ))}
-                    </div>
+                        <h4 className="text-sm font-bold text-content-primary leading-snug line-clamp-2 group-hover:text-accent transition-colors">
+                          {item.title || "Untitled article"}
+                        </h4>
+                      </div>
+
+                      {/* Arrow icon */}
+                      <svg className="w-4 h-4 text-content-muted flex-shrink-0 mt-2 opacity-0 group-hover:opacity-100 transition-opacity" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                      </svg>
+                    </a>
                   );
                 })}
-                {sortedCoverage.length === 0 && (
+                {allArticles.length === 0 && (
                   <div className="rounded-xl border border-border bg-surface-card p-12 text-center">
-                    <p className="text-sm text-content-muted font-medium">No source coverage data available yet.</p>
+                    <p className="text-sm text-content-muted font-medium">No source articles available yet.</p>
                   </div>
                 )}
               </div>
             )}
 
+            {/* Claims tab */}
+            {activeTab === "claims" && claims.length > 0 && (
+              <div className="space-y-3">
+                {claims.map((claim: any) => {
+                  const verdictLabel = typeof claim.verdict === "string" ? claim.verdict : claim.verdict?.verdictLabel || "unreviewed";
+                  return (
+                    <div key={claim.id} className="rounded-lg border border-border bg-surface-card p-4">
+                      <div className="flex items-start gap-3">
+                        <VerdictBadge verdict={verdictLabel} />
+                        <p className="text-sm font-bold text-content-primary leading-relaxed flex-1">
+                          {claim.claimText}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
             {/* Predictions tab */}
             {activeTab === "predictions" && story.creatorPredictions && (
-              <div className="space-y-4">
+              <div className="space-y-3">
                 {story.creatorPredictions.map((pred: any, idx: number) => (
                   <div
                     key={pred.claim?.id || idx}
-                    className="rounded-xl border border-border bg-surface-card p-5 hover:bg-surface-card-hover transition-all cursor-pointer"
+                    className="rounded-lg border border-border bg-surface-card p-4 hover:bg-surface-card-hover transition-all cursor-pointer"
                     onClick={() => {
                       if (tier === "free") {
                         setLocation("/plus");
@@ -435,7 +530,7 @@ export default function StoryDetailPage() {
                   >
                     <div className="flex items-start justify-between mb-3">
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-accent/20 flex items-center justify-center overflow-hidden flex-shrink-0 border-2 border-accent/30">
+                        <div className="w-9 h-9 rounded-full bg-accent/20 flex items-center justify-center overflow-hidden flex-shrink-0 border-2 border-accent/30">
                           {pred.creator?.avatarUrl ? (
                             <img src={pred.creator.avatarUrl} alt={pred.creator?.channelName} className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
                           ) : (
@@ -464,7 +559,7 @@ export default function StoryDetailPage() {
                         </span>
                       )}
                     </div>
-                    <p className="text-base font-bold text-content-primary leading-relaxed">
+                    <p className="text-sm font-bold text-content-primary leading-relaxed">
                       {pred.claim?.claimText || ""}
                     </p>
                     {pred.claim?.statedTimeframe && (
@@ -476,45 +571,31 @@ export default function StoryDetailPage() {
                 ))}
               </div>
             )}
-
-            {/* Timelines tab (claims) */}
-            {activeTab === "timelines" && claims.length > 0 && (
-              <div className="space-y-4">
-                {claims.map((claim: any) => (
-                  <div key={claim.id} className="rounded-xl border border-border bg-surface-card p-5">
-                    <div className="flex items-start justify-between gap-4">
-                      <p className="text-base font-bold text-content-primary leading-relaxed flex-1">
-                        {claim.claimText}
-                      </p>
-                      {claim.verdict && (
-                        <VerdictBadge verdict={typeof claim.verdict === "string" ? claim.verdict : claim.verdict.verdictLabel || "unreviewed"} />
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
 
-          {/* Right sidebar: Similar News Topics */}
+          {/* Right sidebar: Similar News Topics - Ground News style */}
           <aside className="hidden lg:block">
-            <div className="sticky top-24">
-              <div className="bg-surface-card rounded-xl p-5 border border-border">
-                <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-content-muted mb-4">
-                  Similar News Topics
-                </h3>
+            <div className="sticky top-24 space-y-4">
+              {/* Similar News Topics */}
+              <div className="bg-surface-card rounded-xl border border-border overflow-hidden">
+                <div className="px-4 py-3 border-b border-border">
+                  <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-content-muted">
+                    Similar News Topics
+                  </h3>
+                </div>
                 {similarStories.length > 0 ? (
-                  <div className="space-y-0">
+                  <div>
                     {similarStories.map((s: any) => {
                       const sDist = s.credibilityDistribution || { high: 0, medium: 0, low: 0 };
                       return (
                         <div
                           key={s.id}
                           onClick={() => setLocation(`/stories/${s.id}`)}
-                          className="cursor-pointer py-3 border-b border-border last:border-b-0 hover:bg-surface-card-hover transition-colors rounded px-1 -mx-1"
+                          className="cursor-pointer flex gap-3 px-4 py-3 border-b border-border last:border-b-0 hover:bg-surface-card-hover transition-colors"
                         >
-                          {s.imageUrl && (
-                            <div className="w-full h-24 rounded-lg overflow-hidden mb-2 bg-surface-card-hover">
+                          {/* Thumbnail */}
+                          {s.imageUrl ? (
+                            <div className="w-16 h-16 rounded-lg overflow-hidden bg-surface-card-hover flex-shrink-0">
                               <img
                                 src={s.imageUrl}
                                 alt=""
@@ -522,30 +603,41 @@ export default function StoryDetailPage() {
                                 onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
                               />
                             </div>
+                          ) : (
+                            <div className="w-16 h-16 rounded-lg bg-surface-card-hover flex-shrink-0" />
                           )}
-                          <p className="text-[12px] font-bold text-content-primary leading-tight line-clamp-2 mb-1.5">
-                            {s.title}
-                          </p>
-                          <FactualityBar distribution={sDist} size="sm" />
-                          <span className="text-[9px] text-content-muted mt-1 block">
-                            {s.sourceCount || 0} sources
-                          </span>
+                          {/* Text */}
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[12px] font-bold text-content-primary leading-tight line-clamp-2 mb-1.5">
+                              {s.title}
+                            </p>
+                            <div className="flex items-center gap-2">
+                              <FactualityBar distribution={sDist} size="sm" />
+                            </div>
+                            <span className="text-[9px] text-content-muted mt-1 block font-medium">
+                              {s.sourceCount || 0} sources
+                            </span>
+                          </div>
                         </div>
                       );
                     })}
                   </div>
                 ) : (
-                  <p className="text-[11px] text-content-muted">No similar stories found.</p>
+                  <div className="px-4 py-6 text-center">
+                    <p className="text-[11px] text-content-muted">No similar stories found.</p>
+                  </div>
                 )}
               </div>
 
-              {/* Trending topics */}
+              {/* Related Topics */}
               {story.assetSymbols?.length > 0 && (
-                <div className="bg-surface-card rounded-xl p-5 border border-border mt-4">
-                  <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-content-muted mb-3">
-                    Related Topics
-                  </h3>
-                  <div className="flex flex-wrap gap-2">
+                <div className="bg-surface-card rounded-xl border border-border overflow-hidden">
+                  <div className="px-4 py-3 border-b border-border">
+                    <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-content-muted">
+                      Related Topics
+                    </h3>
+                  </div>
+                  <div className="px-4 py-3 flex flex-wrap gap-2">
                     {story.assetSymbols.map((sym: string) => (
                       <button
                         key={sym}
@@ -555,6 +647,44 @@ export default function StoryDetailPage() {
                         {sym}
                       </button>
                     ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Verdict summary */}
+              {Object.keys(verdictDist).length > 0 && (
+                <div className="bg-surface-card rounded-xl border border-border overflow-hidden">
+                  <div className="px-4 py-3 border-b border-border">
+                    <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-content-muted">
+                      Verdict Summary
+                    </h3>
+                  </div>
+                  <div className="px-4 py-3 space-y-2">
+                    {Object.entries(verdictDist).map(([label, count]) => {
+                      const colors: Record<string, string> = {
+                        verified: "bg-factuality-high",
+                        speculative: "bg-factuality-mixed",
+                        misleading: "bg-factuality-low",
+                        plausible_unverified: "bg-factuality-mixed",
+                      };
+                      const labels: Record<string, string> = {
+                        verified: "Verified",
+                        speculative: "Speculative",
+                        misleading: "Misleading",
+                        plausible_unverified: "Plausible",
+                      };
+                      return (
+                        <div key={label} className="flex items-center gap-2">
+                          <span className={`w-2 h-2 rounded-full ${colors[label] || "bg-content-muted"}`} />
+                          <span className="text-[11px] font-bold text-content-primary flex-1">
+                            {labels[label] || label}
+                          </span>
+                          <span className="text-[11px] font-black text-content-secondary">
+                            {count as number}
+                          </span>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )}

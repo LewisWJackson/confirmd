@@ -56,9 +56,10 @@ function VideoCard({
 
   return (
     <div className="group">
-      {/* Thumbnail with play button overlay */}
+      {/* Thumbnail with enforced 16:9 aspect ratio and play button overlay */}
       <div
-        className="relative aspect-video rounded-xl overflow-hidden bg-black mb-3 cursor-pointer"
+        className="relative w-full rounded-xl overflow-hidden bg-black mb-3 cursor-pointer"
+        style={{ paddingBottom: "56.25%" }}
         onClick={(e) => {
           e.stopPropagation();
           if (youtubeId) window.open(`https://www.youtube.com/watch?v=${youtubeId}`, "_blank");
@@ -86,9 +87,9 @@ function VideoCard({
         </div>
       </div>
 
-      {/* Meta row: avatar + text — clicks navigate to creator profile */}
+      {/* Meta row: avatar + text -- clicks navigate to creator profile */}
       <div className="flex gap-3">
-        {/* Creator avatar — clicks to creator profile */}
+        {/* Creator avatar -- clicks to creator profile */}
         <div
           onClick={(e) => { e.stopPropagation(); onCreatorClick(); }}
           className="w-9 h-9 rounded-full overflow-hidden bg-surface-card-hover flex-shrink-0 mt-0.5 cursor-pointer hover:ring-2 hover:ring-accent/50 transition-all"
@@ -108,14 +109,14 @@ function VideoCard({
 
         {/* Title + channel info */}
         <div className="flex-1 min-w-0">
-          {/* Claim text — clicks to creator profile */}
+          {/* Claim text -- clicks to creator profile, clamped to 2 lines */}
           <h3
             onClick={(e) => { e.stopPropagation(); onCreatorClick(); }}
             className="text-sm font-semibold text-content-primary leading-snug line-clamp-2 hover:text-accent transition-colors cursor-pointer"
           >
             {prediction.claimText}
           </h3>
-          {/* Channel name — clicks to creator profile */}
+          {/* Channel name -- clicks to creator profile */}
           <p
             onClick={(e) => { e.stopPropagation(); onCreatorClick(); }}
             className="text-[13px] text-content-muted mt-1 hover:text-content-secondary transition-colors cursor-pointer"
@@ -225,7 +226,7 @@ function LoadingSkeleton() {
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-4 gap-y-8">
       {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
         <div key={i} className="animate-pulse">
-          <div className="aspect-video bg-surface-card rounded-xl mb-3" />
+          <div className="w-full rounded-xl mb-3 bg-surface-card" style={{ paddingBottom: "56.25%" }} />
           <div className="flex gap-3">
             <div className="w-9 h-9 bg-surface-card rounded-full flex-shrink-0" />
             <div className="flex-1 space-y-2">
@@ -331,7 +332,7 @@ export default function CreatorClaimsPage() {
     queryFn: fetchCreatorLeaderboard,
   });
 
-  // Deduplicate by creator — one claim per creator, interleaved for variety
+  // Deduplicate by creator -- one claim per creator, interleaved for variety
   const allPredictions = useMemo(() => {
     const seen = new Set<string>();
     const unique: any[] = [];
@@ -365,7 +366,7 @@ export default function CreatorClaimsPage() {
 
   return (
     <div className="animate-in fade-in duration-700 min-h-screen bg-surface-primary">
-      {/* Category filter chips — YouTube style */}
+      {/* Category filter chips -- gold accent for active */}
       <div className="sticky top-0 z-20 bg-surface-primary border-b border-border">
         <div className="max-w-[1400px] mx-auto px-4 md:px-6 py-3">
           <div className="flex gap-2.5 overflow-x-auto scrollbar-hide" style={{ scrollbarWidth: "none" }}>
@@ -375,7 +376,7 @@ export default function CreatorClaimsPage() {
                 onClick={() => setActiveCategory(cat)}
                 className={`px-3 py-1.5 rounded-lg text-[13px] font-medium whitespace-nowrap transition-all ${
                   activeCategory === cat
-                    ? "bg-content-primary text-surface-primary"
+                    ? "bg-accent text-accent-text"
                     : "bg-surface-card text-content-primary hover:bg-surface-card-hover"
                 }`}
               >
@@ -389,7 +390,7 @@ export default function CreatorClaimsPage() {
       {/* Main content area */}
       <div className="max-w-[1400px] mx-auto px-4 md:px-6 py-6">
         <div className="flex gap-6">
-          {/* Video grid — main content */}
+          {/* Video grid -- main content */}
           <div className="flex-1 min-w-0">
             {feedLoading ? (
               <LoadingSkeleton />
@@ -481,7 +482,7 @@ export default function CreatorClaimsPage() {
             )}
           </div>
 
-          {/* Right sidebar — Leaderboard */}
+          {/* Right sidebar -- Leaderboard */}
           <aside className="hidden lg:block w-[300px] flex-shrink-0">
             <div className="sticky top-16">
               <div className="flex items-center justify-between mb-4">
@@ -514,7 +515,7 @@ export default function CreatorClaimsPage() {
                 </p>
               ) : (
                 <div>
-                  {/* Blurred top creators (free users) — most blurred at #1, less blurred going down */}
+                  {/* Blurred top creators (free users) -- most blurred at #1, less blurred going down */}
                   {!isPaid && blurredLeaderboard.length > 0 && (
                     <div className="relative mb-0">
                       <div className="divide-y divide-border pointer-events-none select-none">
