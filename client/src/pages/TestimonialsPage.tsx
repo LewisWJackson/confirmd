@@ -11,14 +11,6 @@ const filterPills: { label: string; value: FilterCategory }[] = [
   { label: "Developers", value: "developer" },
 ];
 
-const pressLogos = [
-  "CoinDesk",
-  "The Block",
-  "Decrypt",
-  "Blockworks",
-  "Bitcoin Magazine",
-];
-
 const StarRating: React.FC<{ rating: number }> = ({ rating }) => (
   <div className="flex items-center space-x-0.5">
     {Array.from({ length: 5 }).map((_, i) => (
@@ -89,30 +81,11 @@ const TestimonialsPage: React.FC = () => {
           </div>
 
           <h1 className="text-4xl md:text-5xl font-bold text-content-primary tracking-tight mb-3">
-            10,000+ 5-star reviews
+            Why choose Confirmd?
           </h1>
           <p className="text-content-secondary text-lg max-w-2xl mx-auto">
-            See why investors, researchers, and developers trust Confirmd to cut through the noise.
+            Hear from investors, researchers, and developers who rely on Confirmd to cut through the noise.
           </p>
-        </div>
-      </section>
-
-      {/* Press / Media Logos */}
-      <section className="border-y border-border/50 bg-surface-secondary py-8">
-        <div className="max-w-6xl mx-auto px-6 md:px-12">
-          <p className="text-center text-xs text-content-muted uppercase tracking-wider mb-6 font-semibold">
-            As featured in
-          </p>
-          <div className="flex flex-wrap items-center justify-center gap-x-10 gap-y-4">
-            {pressLogos.map((name) => (
-              <span
-                key={name}
-                className="text-content-muted/60 text-lg md:text-xl font-bold tracking-tight whitespace-nowrap select-none"
-              >
-                {name}
-              </span>
-            ))}
-          </div>
         </div>
       </section>
 
@@ -173,16 +146,16 @@ const TestimonialsPage: React.FC = () => {
         <div className="max-w-6xl mx-auto px-6 md:px-12">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 text-center">
             <div>
-              <div className="text-3xl font-bold text-accent">10,000+</div>
-              <div className="text-xs text-content-muted mt-1">5-star reviews</div>
+              <div className="text-3xl font-bold text-accent">200+</div>
+              <div className="text-xs text-content-muted mt-1">Sources tracked</div>
             </div>
             <div>
               <div className="text-3xl font-bold text-accent">+1 Million</div>
               <div className="text-xs text-content-muted mt-1">Claims verified</div>
             </div>
             <div>
-              <div className="text-3xl font-bold text-accent">50,000+</div>
-              <div className="text-xs text-content-muted mt-1">Active subscribers</div>
+              <div className="text-3xl font-bold text-accent">50+</div>
+              <div className="text-xs text-content-muted mt-1">Creators monitored</div>
             </div>
           </div>
         </div>

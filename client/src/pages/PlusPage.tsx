@@ -452,7 +452,7 @@ const PlusPage: React.FC = () => {
               ))}
             </div>
             <div className="text-3xl md:text-4xl font-bold text-content-primary mb-2">
-              10,000+ 5-star reviews
+              Why choose Confirmd?
             </div>
             <p className="text-content-secondary text-sm">
               See why thousands trust Confirmd for verified crypto news
