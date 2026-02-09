@@ -44,29 +44,50 @@ function confidenceColor(conf: string): string {
 
 function VideoCard({
   prediction,
-  onClick,
+  onCreatorClick,
 }: {
   prediction: any;
-  onClick: () => void;
+  onCreatorClick: () => void;
 }) {
   const creator = prediction.creator;
   const video = prediction.video;
   const confidence = (prediction.confidenceLanguage || "").toLowerCase();
+  const [imgFailed, setImgFailed] = useState(false);
+
+  const youtubeUrl = video?.youtubeVideoId
+    ? `https://www.youtube.com/watch?v=${video.youtubeVideoId}`
+    : null;
+
+  const handleThumbnailClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (youtubeUrl) {
+      window.open(youtubeUrl, "_blank", "noopener,noreferrer");
+    }
+  };
 
   return (
-    <div
-      onClick={onClick}
-      className="group cursor-pointer"
-    >
-      {/* Thumbnail */}
-      <div className="relative aspect-video rounded-xl overflow-hidden bg-surface-card mb-3">
-        {/* Gradient placeholder with category visual */}
-        <div className="absolute inset-0 bg-gradient-to-br from-surface-secondary via-surface-card to-surface-card-hover" />
+    <div className="group">
+      {/* Thumbnail — clicks open YouTube video */}
+      <div
+        onClick={handleThumbnailClick}
+        className="relative aspect-video rounded-xl overflow-hidden bg-surface-card mb-3 cursor-pointer"
+      >
+        {/* Video thumbnail or gradient fallback */}
+        {video?.thumbnailUrl && !imgFailed ? (
+          <img
+            src={video.thumbnailUrl}
+            alt={video.title || ""}
+            className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+            onError={() => setImgFailed(true)}
+          />
+        ) : (
+          <div className="absolute inset-0 bg-gradient-to-br from-surface-secondary via-surface-card to-surface-card-hover" />
+        )}
 
-        {/* Center play icon */}
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div className="w-12 h-12 rounded-full bg-black/60 flex items-center justify-center group-hover:bg-accent/90 transition-colors">
-            <svg className="w-5 h-5 text-white ml-0.5" fill="currentColor" viewBox="0 0 24 24">
+        {/* Play button overlay */}
+        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+          <div className="w-14 h-10 rounded-lg bg-red-600 flex items-center justify-center shadow-lg">
+            <svg className="w-6 h-6 text-white ml-0.5" fill="currentColor" viewBox="0 0 24 24">
               <path d="M8 5v14l11-7z" />
             </svg>
           </div>
@@ -74,8 +95,8 @@ function VideoCard({
 
         {/* Video title overlay at bottom */}
         {video?.title && (
-          <div className="absolute bottom-0 left-0 right-0 p-2.5 bg-gradient-to-t from-black/70 to-transparent">
-            <p className="text-[10px] text-white/80 font-medium line-clamp-1">
+          <div className="absolute bottom-0 left-0 right-0 p-2.5 bg-gradient-to-t from-black/80 to-transparent">
+            <p className="text-[11px] text-white font-medium line-clamp-1">
               {video.title}
             </p>
           </div>
@@ -100,10 +121,13 @@ function VideoCard({
         )}
       </div>
 
-      {/* Meta row: avatar + text */}
+      {/* Meta row: avatar + text — clicks navigate to creator profile */}
       <div className="flex gap-3">
-        {/* Creator avatar */}
-        <div className="w-9 h-9 rounded-full overflow-hidden bg-surface-card-hover flex-shrink-0 mt-0.5">
+        {/* Creator avatar — clicks to creator profile */}
+        <div
+          onClick={(e) => { e.stopPropagation(); onCreatorClick(); }}
+          className="w-9 h-9 rounded-full overflow-hidden bg-surface-card-hover flex-shrink-0 mt-0.5 cursor-pointer hover:ring-2 hover:ring-accent/50 transition-all"
+        >
           {creator?.avatarUrl ? (
             <img
               src={creator.avatarUrl}
@@ -119,10 +143,18 @@ function VideoCard({
 
         {/* Title + channel info */}
         <div className="flex-1 min-w-0">
-          <h3 className="text-sm font-semibold text-content-primary leading-snug line-clamp-2 group-hover:text-accent transition-colors">
+          {/* Claim text — clicks to creator profile */}
+          <h3
+            onClick={(e) => { e.stopPropagation(); onCreatorClick(); }}
+            className="text-sm font-semibold text-content-primary leading-snug line-clamp-2 hover:text-accent transition-colors cursor-pointer"
+          >
             {prediction.claimText}
           </h3>
-          <p className="text-[13px] text-content-muted mt-1 hover:text-content-secondary transition-colors">
+          {/* Channel name — clicks to creator profile */}
+          <p
+            onClick={(e) => { e.stopPropagation(); onCreatorClick(); }}
+            className="text-[13px] text-content-muted mt-1 hover:text-content-secondary transition-colors cursor-pointer"
+          >
             {creator?.channelName || "Unknown"}
           </p>
           <p className="text-[12px] text-content-muted">
@@ -245,11 +277,84 @@ function LoadingSkeleton() {
 
 /* --- Main Page ------------------------------------------------ */
 
+/* --- Explainer Tutorial --------------------------------------- */
+
+function ExplainerBanner({ onDismiss }: { onDismiss: () => void }) {
+  return (
+    <div className="bg-surface-card border border-border rounded-xl p-5 mb-6 relative">
+      <button
+        onClick={onDismiss}
+        className="absolute top-3 right-3 text-content-muted hover:text-content-primary transition-colors"
+        aria-label="Dismiss"
+      >
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+
+      <div className="flex items-start gap-3 mb-4">
+        <div className="w-8 h-8 rounded-lg bg-red-600 flex items-center justify-center flex-shrink-0">
+          <svg className="w-4 h-4 text-white ml-0.5" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M8 5v14l11-7z" />
+          </svg>
+        </div>
+        <div>
+          <h3 className="text-sm font-bold text-content-primary">How to use Creator Claims</h3>
+          <p className="text-[12px] text-content-muted mt-0.5">Every card is a claim made by a crypto creator in one of their videos.</p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="flex items-start gap-2.5 bg-surface-primary rounded-lg p-3">
+          <div className="w-6 h-6 rounded bg-surface-card-hover flex items-center justify-center flex-shrink-0 mt-0.5">
+            <svg className="w-3.5 h-3.5 text-red-500" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M8 5v14l11-7z" />
+            </svg>
+          </div>
+          <div>
+            <p className="text-[12px] font-semibold text-content-primary">Click the thumbnail</p>
+            <p className="text-[11px] text-content-muted">Watch the original YouTube video where the claim was made</p>
+          </div>
+        </div>
+
+        <div className="flex items-start gap-2.5 bg-surface-primary rounded-lg p-3">
+          <div className="w-6 h-6 rounded bg-surface-card-hover flex items-center justify-center flex-shrink-0 mt-0.5">
+            <svg className="w-3.5 h-3.5 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+          </div>
+          <div>
+            <p className="text-[12px] font-semibold text-content-primary">Click the claim text</p>
+            <p className="text-[11px] text-content-muted">View the creator's profile and their full prediction history</p>
+          </div>
+        </div>
+
+        <div className="flex items-start gap-2.5 bg-surface-primary rounded-lg p-3">
+          <div className="w-6 h-6 rounded bg-surface-card-hover flex items-center justify-center flex-shrink-0 mt-0.5">
+            <svg className="w-3.5 h-3.5 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+            </svg>
+          </div>
+          <div>
+            <p className="text-[12px] font-semibold text-content-primary">Click the channel name</p>
+            <p className="text-[11px] text-content-muted">See the creator's accuracy score and all their verified claims</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* --- Main Page ------------------------------------------------ */
+
 export default function CreatorClaimsPage() {
   const [, setLocation] = useLocation();
   const { tier } = useAuth();
   const isPaid = tier !== "free";
   const [activeCategory, setActiveCategory] = useState("All");
+  const [showExplainer, setShowExplainer] = useState(() => {
+    try { return localStorage.getItem("confirmd_claims_tutorial_dismissed") !== "1"; } catch { return true; }
+  });
 
   const { data: predictions = [], isLoading: feedLoading } = useQuery({
     queryKey: ["creator-feed", "claims-page"],
@@ -326,13 +431,21 @@ export default function CreatorClaimsPage() {
               </div>
             ) : (
               <>
+                {/* Explainer tutorial */}
+                {showExplainer && (
+                  <ExplainerBanner onDismiss={() => {
+                    setShowExplainer(false);
+                    try { localStorage.setItem("confirmd_claims_tutorial_dismissed", "1"); } catch {}
+                  }} />
+                )}
+
                 {/* Video grid */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-4 gap-y-8">
                   {visibleClaims.map((prediction: any) => (
                     <VideoCard
                       key={prediction.id}
                       prediction={prediction}
-                      onClick={() =>
+                      onCreatorClick={() =>
                         setLocation(
                           `/creators/${prediction.creator?.id || prediction.id}`
                         )
@@ -347,7 +460,7 @@ export default function CreatorClaimsPage() {
                         <div key={prediction.id} className="blur-[6px] pointer-events-none select-none">
                           <VideoCard
                             prediction={prediction}
-                            onClick={() => {}}
+                            onCreatorClick={() => {}}
                           />
                         </div>
                       ))}
