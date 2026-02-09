@@ -1157,40 +1157,58 @@ router.get("/disputes/:claimId", requireTier("tribune"), async (req: Request, re
 });
 
 // ─── POST /admin/regenerate-images ─────────────────────────────────
-// Clears old external image URLs and triggers AI generation for all stories.
+// Clears old external image URLs and sequentially generates AI images
+// with a delay between each to avoid rate limits.
+
+let regenRunning = false;
 
 router.post("/admin/regenerate-images", async (_req: Request, res: Response) => {
   try {
-    const stories = await storage.getStories();
-    let queued = 0;
-
-    for (const story of stories) {
-      // Skip stories that already have a local AI-generated image
-      if (story.imageUrl?.startsWith("/story-images/")) continue;
-
-      // Clear old external URL so SVG fallback shows immediately
-      await storage.updateStory(story.id, { imageUrl: null as any });
-
-      // Fire off AI generation in background
-      generateStoryImageAI(story.id, story.title, story.category)
-        .then(async (aiUrl) => {
-          if (aiUrl) {
-            await storage.updateStory(story.id, { imageUrl: aiUrl });
-            console.log(`[RegenImages] AI image saved for "${story.title.slice(0, 40)}"`);
-          } else {
-            await storage.updateStory(story.id, { imageUrl: `/api/stories/${story.id}/image` });
-          }
-        })
-        .catch(() => {});
-
-      queued++;
+    if (regenRunning) {
+      res.status(409).json({ error: "Regeneration already in progress" });
+      return;
     }
 
+    const stories = await storage.getStories();
+    const toProcess = stories.filter(s => !s.imageUrl?.startsWith("/story-images/"));
+
+    // Clear all old URLs immediately so SVG fallbacks show
+    for (const story of toProcess) {
+      await storage.updateStory(story.id, { imageUrl: null as any });
+    }
+
+    // Respond immediately, process in background
     res.json({
-      message: `Queued ${queued} stories for image regeneration`,
+      message: `Processing ${toProcess.length} stories sequentially in background`,
       total: stories.length,
-      skipped: stories.length - queued,
+      skipped: stories.length - toProcess.length,
     });
+
+    // Sequential background processing with delay
+    regenRunning = true;
+    (async () => {
+      let success = 0;
+      let failed = 0;
+      for (const story of toProcess) {
+        try {
+          const aiUrl = await generateStoryImageAI(story.id, story.title, story.category);
+          if (aiUrl) {
+            await storage.updateStory(story.id, { imageUrl: aiUrl });
+            success++;
+          } else {
+            await storage.updateStory(story.id, { imageUrl: `/api/stories/${story.id}/image` });
+            failed++;
+          }
+        } catch {
+          await storage.updateStory(story.id, { imageUrl: `/api/stories/${story.id}/image` });
+          failed++;
+        }
+        // 3 second delay between requests to respect rate limits
+        await new Promise(r => setTimeout(r, 3000));
+      }
+      console.log(`[RegenImages] Done: ${success} generated, ${failed} fell back to SVG`);
+      regenRunning = false;
+    })().catch(() => { regenRunning = false; });
   } catch (err) {
     console.error("POST /admin/regenerate-images error:", err);
     res.status(500).json({ error: "Failed to regenerate images" });
