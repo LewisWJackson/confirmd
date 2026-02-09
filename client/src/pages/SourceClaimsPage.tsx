@@ -379,7 +379,7 @@ export default function SourceClaimsPage() {
                     <SourceClaimCard
                       key={claim.id}
                       claim={claim}
-                      onClick={() => setLocation(`/sources/${claim.source?.id || ""}`)}
+                      onClick={() => setLocation(isPaid ? `/sources/${claim.source?.id || ""}` : "/plus")}
                     />
                   ))}
                 </div>
@@ -478,7 +478,7 @@ export default function SourceClaimsPage() {
                         key={source.id}
                         source={source}
                         rank={isPaid ? i + 1 : i + 6}
-                        onClick={() => setLocation(`/sources/${source.id}`)}
+                        onClick={() => setLocation(isPaid ? `/sources/${source.id}` : "/plus")}
                       />
                     ))}
                   </div>
