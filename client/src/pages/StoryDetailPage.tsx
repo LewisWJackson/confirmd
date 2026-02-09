@@ -40,6 +40,23 @@ function FactualityBadge({ tier }: { tier: "high" | "medium" | "low" }) {
   );
 }
 
+function formatReasoning(raw: string): string {
+  // Clean up raw analysis text that reads like internal debug output
+  let text = raw;
+  // Remove "Analysis of N evidence items" prefix
+  text = text.replace(/^Analysis of \d+ evidence items?[.,:]?\s*/i, "");
+  // Remove grading breakdowns like "0 primary A, 0 strong secondary B"
+  text = text.replace(/\d+ primary [A-Z],?\s*/g, "");
+  text = text.replace(/\d+ strong secondary [A-Z],?\s*/g, "");
+  text = text.replace(/\d+ secondary [A-Z],?\s*/g, "");
+  text = text.replace(/\d+ tertiary [A-Z],?\s*/g, "");
+  // Clean up leftover empty parens/commas
+  text = text.replace(/^[,.\s]+/, "").replace(/[,.\s]+$/, "");
+  // Capitalize first letter
+  if (text.length > 0) text = text.charAt(0).toUpperCase() + text.slice(1);
+  return text || raw;
+}
+
 function VerdictBadge({ verdict }: { verdict: string }) {
   const styles: Record<string, string> = {
     verified: "bg-factuality-high/10 text-factuality-high border-factuality-high/30",
@@ -260,7 +277,7 @@ export default function StoryDetailPage() {
                           )}
                           {reasoning && (
                             <p className="text-[12px] text-content-secondary leading-relaxed">
-                              {reasoning}
+                              {formatReasoning(reasoning)}
                             </p>
                           )}
                         </div>

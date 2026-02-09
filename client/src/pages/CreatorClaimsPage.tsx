@@ -47,26 +47,40 @@ function VideoCard({
 
   const youtubeId = video?.youtubeVideoId;
 
+  const thumbnailUrl = youtubeId
+    ? `https://img.youtube.com/vi/${youtubeId}/hqdefault.jpg`
+    : null;
+
   return (
     <div className="group">
-      {/* Embedded YouTube player */}
-      <div className="relative aspect-video rounded-xl overflow-hidden bg-black mb-3">
-        {youtubeId ? (
-          <iframe
-            src={`https://www.youtube.com/embed/${youtubeId}`}
-            title={video?.title || "YouTube video"}
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            allowFullScreen
-            className="absolute inset-0 w-full h-full"
+      {/* Thumbnail with play button overlay */}
+      <div
+        className="relative aspect-video rounded-xl overflow-hidden bg-black mb-3 cursor-pointer"
+        onClick={(e) => {
+          e.stopPropagation();
+          if (youtubeId) window.open(`https://www.youtube.com/watch?v=${youtubeId}`, "_blank");
+        }}
+      >
+        {thumbnailUrl ? (
+          <img
+            src={thumbnailUrl}
+            alt={video?.title || "Video thumbnail"}
+            className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
             loading="lazy"
           />
         ) : (
-          <div className="absolute inset-0 bg-gradient-to-br from-surface-secondary via-surface-card to-surface-card-hover flex items-center justify-center">
-            <svg className="w-10 h-10 text-content-muted/30" fill="currentColor" viewBox="0 0 24 24">
+          <div className="absolute inset-0 bg-gradient-to-br from-surface-secondary via-surface-card to-surface-card-hover" />
+        )}
+        {/* Dark overlay */}
+        <div className="absolute inset-0 bg-black/20 group-hover:bg-black/10 transition-colors" />
+        {/* Play button */}
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="w-12 h-12 rounded-full bg-red-600 flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
+            <svg className="w-5 h-5 text-white ml-0.5" fill="currentColor" viewBox="0 0 24 24">
               <path d="M8 5v14l11-7z" />
             </svg>
           </div>
-        )}
+        </div>
       </div>
 
       {/* Meta row: avatar + text — clicks navigate to creator profile */}
@@ -409,28 +423,38 @@ export default function CreatorClaimsPage() {
                     />
                   ))}
 
-                  {/* Blurred cards (free users) */}
-                  {!isPaid && blurredClaims.length > 0 && (
-                    <>
-                      {blurredClaims.map((prediction: any) => (
-                        <div key={prediction.id} className="blur-[6px] pointer-events-none select-none">
-                          <VideoCard
-                            prediction={prediction}
-                            onCreatorClick={() => {}}
-                          />
-                        </div>
-                      ))}
-                    </>
-                  )}
                 </div>
 
-                {/* Upgrade CTA below grid (free users) */}
-                {!isPaid && (
-                  <div className="mt-8">
-                    <UpgradeCTA
-                      heading="Unlock all creator claims"
-                      description="Get Confirmd+ to see every prediction, track creator accuracy, and access full creator profiles."
-                    />
+                {/* Blurred cards + upgrade CTA overlay (free users) */}
+                {!isPaid && blurredClaims.length > 0 && (
+                  <div className="relative mt-0">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-4 gap-y-8 blur-[6px] pointer-events-none select-none">
+                      {blurredClaims.map((prediction: any) => (
+                        <VideoCard
+                          key={prediction.id}
+                          prediction={prediction}
+                          onCreatorClick={() => {}}
+                        />
+                      ))}
+                    </div>
+                    {/* Overlay gradient + CTA on top of blur */}
+                    <div className="absolute inset-0 bg-gradient-to-b from-transparent via-surface-primary/60 to-surface-primary flex items-end justify-center pb-4">
+                      <div className="text-center">
+                        <div className="w-12 h-12 rounded-full bg-accent/10 flex items-center justify-center mx-auto mb-4">
+                          <svg className="w-6 h-6 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                          </svg>
+                        </div>
+                        <h3 className="text-lg font-bold text-content-primary mb-2">Unlock all creator claims</h3>
+                        <p className="text-sm text-content-secondary max-w-md mx-auto mb-6">Get Confirmd+ to see every prediction, track creator accuracy, and access full creator profiles.</p>
+                        <button
+                          onClick={() => setLocation("/plus")}
+                          className="px-6 py-3 bg-accent text-accent-text text-sm font-bold rounded-full hover:bg-accent-hover transition-all"
+                        >
+                          Upgrade to Confirmd+
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 )}
               </>

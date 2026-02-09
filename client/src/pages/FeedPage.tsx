@@ -24,17 +24,17 @@ function timeAgo(dateStr: string): string {
   return `${Math.floor(diffDay / 7)}w ago`;
 }
 
-function getFactualityLabel(trackRecord: number): { label: string; colorClass: string } {
-  if (trackRecord >= 70) return { label: "High Factuality", colorClass: "bg-factuality-high text-white" };
-  if (trackRecord >= 50) return { label: "Mixed Factuality", colorClass: "bg-factuality-mixed text-white" };
-  return { label: "Low Factuality", colorClass: "bg-factuality-low text-white" };
+function getFactualityColor(trackRecord: number): string {
+  if (trackRecord >= 70) return "bg-factuality-high";
+  if (trackRecord >= 50) return "bg-factuality-mixed";
+  return "bg-factuality-low";
 }
 
-/* --- Source Factuality Line ----------------------------------- */
+/* --- Source Factuality Bar (single source) -------------------- */
 
 function SourceFactualityLine({ source }: { source: any }) {
   const tr = source?.trackRecord ?? 0;
-  const fact = getFactualityLabel(tr);
+  const color = getFactualityColor(tr);
 
   return (
     <div className="flex items-center gap-2">
@@ -53,9 +53,30 @@ function SourceFactualityLine({ source }: { source: any }) {
       <span className="text-[11px] font-bold text-content-secondary">
         {source?.displayName || "Unknown"}
       </span>
-      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${fact.colorClass}`}>
-        {fact.label}
-      </span>
+      <div className="w-16 h-2 rounded-full bg-surface-card-hover overflow-hidden">
+        <div className={`h-full rounded-full ${color}`} style={{ width: `${Math.min(tr, 100)}%` }} />
+      </div>
+    </div>
+  );
+}
+
+/* --- Factuality Key ------------------------------------------ */
+
+function FactualityKey() {
+  return (
+    <div className="flex items-center gap-4 text-[10px] text-content-muted">
+      <div className="flex items-center gap-1.5">
+        <span className="w-3 h-2 rounded-sm bg-factuality-high" />
+        <span>Factual</span>
+      </div>
+      <div className="flex items-center gap-1.5">
+        <span className="w-3 h-2 rounded-sm bg-factuality-mixed" />
+        <span>Mixed</span>
+      </div>
+      <div className="flex items-center gap-1.5">
+        <span className="w-3 h-2 rounded-sm bg-factuality-low" />
+        <span>Unfactual</span>
+      </div>
     </div>
   );
 }
@@ -102,13 +123,8 @@ function HeroStory({ story, onClick }: { story: any; onClick: () => void }) {
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
 
-        {/* Category badge top-left */}
+        {/* Source count badge top-left */}
         <div className="absolute top-4 left-4 flex items-center gap-2">
-          {story.category && (
-            <span className="text-[9px] font-bold tracking-widest uppercase px-2.5 py-1 rounded-md bg-accent text-accent-text backdrop-blur-sm">
-              {story.category}
-            </span>
-          )}
           <span className="text-[9px] font-bold tracking-widest uppercase px-2.5 py-1 rounded-md bg-white/20 text-white backdrop-blur-sm">
             {story.sourceCount || 0} {(story.sourceCount || 0) === 1 ? "source" : "sources"}
           </span>
@@ -142,13 +158,8 @@ function StoryListRow({ story, onClick }: { story: any; onClick: () => void }) {
       onClick={onClick}
       className="group cursor-pointer py-4 border-b border-border last:border-b-0 hover:bg-surface-card-hover transition-colors px-3 rounded-lg -mx-3"
     >
-      {/* Category + time */}
+      {/* Time + source count */}
       <div className="flex items-center gap-2 mb-1.5">
-        {story.category && (
-          <span className="text-[9px] font-bold uppercase tracking-widest text-accent">
-            {story.category}
-          </span>
-        )}
         <span className="text-[9px] text-content-muted">
           {story.latestItemTimestamp ? timeAgo(story.latestItemTimestamp) : ""}
         </span>
@@ -510,9 +521,19 @@ export default function FeedPage() {
     return stories.filter((s: any) => s.category === activeCategory);
   }, [stories, activeCategory]);
 
-  // Split stories for layout
-  const heroStory = filteredStories.length > 0 ? filteredStories[0] : null;
-  const centerStories = filteredStories.slice(1);
+  // Main Story of the Day: pick the story with the most sources
+  const { heroStory, centerStories } = useMemo(() => {
+    if (filteredStories.length === 0) return { heroStory: null, centerStories: [] };
+    let bestIdx = 0;
+    let bestCount = filteredStories[0]?.sourceCount || 0;
+    for (let i = 1; i < filteredStories.length; i++) {
+      const sc = filteredStories[i]?.sourceCount || 0;
+      if (sc > bestCount) { bestCount = sc; bestIdx = i; }
+    }
+    const hero = filteredStories[bestIdx];
+    const rest = filteredStories.filter((_: any, i: number) => i !== bestIdx);
+    return { heroStory: hero, centerStories: rest };
+  }, [filteredStories]);
   const sidebarStories = stories;
 
   const handleStoryClick = (id: string) => setLocation(`/stories/${id}`);
@@ -540,9 +561,10 @@ export default function FeedPage() {
         </span>
       </div>
 
-      {/* Category pills */}
+      {/* Category pills + factuality key */}
       <section className="max-w-[1280px] mx-auto px-4 md:px-8 pt-6 pb-4">
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+          <div className="flex flex-wrap gap-2">
           {CATEGORIES.map((cat) => (
             <button
               key={cat}
@@ -556,6 +578,8 @@ export default function FeedPage() {
               {cat}
             </button>
           ))}
+          </div>
+          <FactualityKey />
         </div>
       </section>
 

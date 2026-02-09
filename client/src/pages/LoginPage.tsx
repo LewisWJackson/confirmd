@@ -122,10 +122,11 @@ const LoginPage: React.FC = () => {
             <div className="flex-1 border-t border-border" />
           </div>
 
-          {/* Social auth placeholders */}
+          {/* Social auth */}
           <div className="space-y-3">
             <button
               type="button"
+              onClick={() => setError("Google sign-in coming soon. Please use email and password.")}
               className="w-full py-3 border border-border rounded-lg text-sm font-medium text-content-primary hover:bg-surface-card transition-all flex items-center justify-center space-x-2"
             >
               <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
@@ -139,6 +140,7 @@ const LoginPage: React.FC = () => {
 
             <button
               type="button"
+              onClick={() => setError("Apple sign-in coming soon. Please use email and password.")}
               className="w-full py-3 border border-border rounded-lg text-sm font-medium text-content-primary hover:bg-surface-card transition-all flex items-center justify-center space-x-2"
             >
               <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
