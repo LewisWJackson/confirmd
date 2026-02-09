@@ -713,9 +713,18 @@ export default function FeedPage() {
   });
 
   // Filter stories by category
+  const MAX_FEED_STORIES = 30;
+
+  // Sort stories chronologically (most recent first) and cap at MAX_FEED_STORIES
   const filteredStories = useMemo(() => {
-    if (activeCategory === "All") return stories;
-    return stories.filter((s: any) => s.category === activeCategory);
+    const base = activeCategory === "All" ? stories : stories.filter((s: any) => s.category === activeCategory);
+    return [...base]
+      .sort((a: any, b: any) => {
+        const ta = a.latestItemTimestamp ? new Date(a.latestItemTimestamp).getTime() : 0;
+        const tb = b.latestItemTimestamp ? new Date(b.latestItemTimestamp).getTime() : 0;
+        return tb - ta;
+      })
+      .slice(0, MAX_FEED_STORIES);
   }, [stories, activeCategory]);
 
   // Main Story of the Day: pick the story with the most sources
