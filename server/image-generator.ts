@@ -195,7 +195,7 @@ export async function generateVideoThumbnail(
     ensureVideoThumbnailsDir();
 
     const cleanTitle = title.replace(/[^a-zA-Z0-9 ,'-]/g, "").slice(0, 120);
-    const prompt = `Create a YouTube video thumbnail about: ${cleanTitle} by ${channelName}. Style: bold text overlay effect, dramatic lighting, eye-catching crypto/finance aesthetic. No actual text or letters.`;
+    const prompt = `Create an editorial illustration about: ${cleanTitle}. Show a scene that visually captures the specific subject matter — depict the key objects, actions, and setting described in the title. ${STYLE_SUFFIX}`;
 
     console.log(`[VideoThumb] Generating thumbnail for "${title.slice(0, 50)}..."`);
 

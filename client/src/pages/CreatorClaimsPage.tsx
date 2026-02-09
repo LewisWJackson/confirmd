@@ -355,22 +355,13 @@ export default function CreatorClaimsPage() {
     ? []
     : allPredictions.slice(FREE_VISIBLE, FREE_VISIBLE + FREE_BLURRED);
 
-  const visibleLeaderboard = isPaid ? leaderboard : leaderboard.slice(0, 5);
-  // Ensure free users always see blurred leaderboard entries when data exists.
-  // If fewer than 10 entries, recycle from the beginning to fill the blurred slots.
+  // For free users: blur the TOP creators (1-5), show lower-ranked (6-10) clearly
+  // This gates the most valuable info (who's best) behind the paywall
   const blurredLeaderboard = useMemo(() => {
     if (isPaid || leaderboard.length === 0) return [];
-    const remaining = leaderboard.slice(5, 10);
-    if (remaining.length >= 5) return remaining;
-    // Fill up to 5 blurred entries by recycling from the full leaderboard
-    const filled = [...remaining];
-    let idx = 0;
-    while (filled.length < 5 && leaderboard.length > 0) {
-      filled.push({ ...leaderboard[idx % leaderboard.length], _blurKey: filled.length });
-      idx++;
-    }
-    return filled;
+    return leaderboard.slice(0, Math.min(5, leaderboard.length));
   }, [isPaid, leaderboard]);
+  const visibleLeaderboard = isPaid ? leaderboard : leaderboard.slice(5, 10);
 
   return (
     <div className="animate-in fade-in duration-700 min-h-screen bg-surface-primary">
@@ -523,37 +514,39 @@ export default function CreatorClaimsPage() {
                 </p>
               ) : (
                 <div>
-                  <div className="divide-y divide-border">
-                    {visibleLeaderboard.map((creator: any, i: number) => (
-                      <LeaderboardChannel
-                        key={creator.id}
-                        creator={creator}
-                        rank={i + 1}
-                        onClick={() => setLocation(`/creators/${creator.id}`)}
-                      />
-                    ))}
-                  </div>
-
-                  {/* Blurred leaderboard (free users) */}
+                  {/* Blurred top creators (free users) — most blurred at #1, less blurred going down */}
                   {!isPaid && blurredLeaderboard.length > 0 && (
-                    <div className="relative mt-0">
+                    <div className="relative mb-0">
                       <div className="divide-y divide-border pointer-events-none select-none">
                         {blurredLeaderboard.map((creator: any, i: number) => {
-                          const blurPx = 2 + i * 1.5;
+                          // #1 is most blurred, progressively less blurred going down
+                          const blurPx = 8 - i * 1.5;
                           return (
-                            <div key={creator._blurKey ?? creator.id} style={{ filter: `blur(${blurPx}px)` }}>
+                            <div key={creator.id} style={{ filter: `blur(${Math.max(blurPx, 2)}px)` }}>
                               <LeaderboardChannel
                                 creator={creator}
-                                rank={i + 6}
+                                rank={i + 1}
                                 onClick={() => {}}
                               />
                             </div>
                           );
                         })}
                       </div>
-                      <div className="absolute inset-0 bg-gradient-to-b from-transparent to-surface-primary" />
+                      <div className="absolute inset-0 bg-gradient-to-t from-transparent to-surface-primary/60" />
                     </div>
                   )}
+
+                  {/* Visible leaderboard entries */}
+                  <div className="divide-y divide-border">
+                    {visibleLeaderboard.map((creator: any, i: number) => (
+                      <LeaderboardChannel
+                        key={creator.id}
+                        creator={creator}
+                        rank={isPaid ? i + 1 : i + 6}
+                        onClick={() => setLocation(`/creators/${creator.id}`)}
+                      />
+                    ))}
+                  </div>
 
                   {!isPaid && (
                     <button
