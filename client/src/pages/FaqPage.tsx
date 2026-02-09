@@ -71,8 +71,8 @@ const faqItems: FaqItem[] = [
     question: "How can I see fewer ads?",
     answer: (
       <span>
-        Confirmd Plus subscribers (Tribune and Oracle tiers) enjoy an
-        ad-reduced experience. Visit our{" "}
+        Confirmd+ subscribers enjoy an
+        ad-free experience. Visit our{" "}
         <a href="/plus" className="text-accent font-bold hover:underline">
           Plus page
         </a>{" "}
@@ -119,7 +119,7 @@ const faqItems: FaqItem[] = [
       <span>
         Confirmd subscriptions are available through our website. Visit the{" "}
         <a href="/plus" className="text-accent font-bold hover:underline">
-          Confirmd Plus
+          Confirmd+
         </a>{" "}
         page to compare plans and start a free trial. We accept all major
         credit cards via Stripe.
@@ -235,7 +235,7 @@ const FaqPage: React.FC = () => {
                   href="/plus"
                   className="block text-accent font-bold hover:underline text-lg"
                 >
-                  Confirmd Plus Subscriptions
+                  Confirmd+ Subscriptions
                 </a>
               </div>
             </div>
@@ -250,7 +250,7 @@ const FaqPage: React.FC = () => {
             How do I subscribe?
           </h2>
           <p className="text-accent-text/80 font-medium max-w-lg mx-auto mb-8">
-            Confirmd Plus subscriptions are purchased through our website.
+            Confirmd+ subscriptions are purchased through our website.
             Start with a free trial and upgrade anytime.
           </p>
           <a

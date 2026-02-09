@@ -44,7 +44,7 @@ const columns: { title: string; links: FooterLink[] }[] = [
   {
     title: "Tools",
     links: [
-      { label: "Confirmd Plus", href: "/plus" },
+      { label: "Confirmd+", href: "/plus" },
       { label: "Gift", href: "/plus" },
     ],
   },

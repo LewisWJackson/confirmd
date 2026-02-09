@@ -160,7 +160,7 @@ function UpgradeCTA({
         onClick={() => setLocation("/plus")}
         className="px-8 py-3 bg-gradient-to-r from-amber-500 to-orange-500 text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:from-amber-600 hover:to-orange-600 transition-all shadow-lg hover:shadow-xl"
       >
-        Upgrade to Confirmd Plus
+        Upgrade to Confirmd+
       </button>
     </div>
   );
@@ -353,7 +353,7 @@ export default function CreatorClaimsPage() {
             {!isPaid && (
               <UpgradeCTA
                 heading="Unlock all creator claims"
-                description="Get Confirmd Plus to see every prediction, track creator accuracy, and access full creator profiles."
+                description="Get Confirmd+ to see every prediction, track creator accuracy, and access full creator profiles."
               />
             )}
           </div>
@@ -439,7 +439,7 @@ export default function CreatorClaimsPage() {
             {!isPaid && (
               <UpgradeCTA
                 heading="See the full leaderboard"
-                description="Upgrade to Confirmd Plus for complete rankings and accuracy tracking."
+                description="Upgrade to Confirmd+ for complete rankings and accuracy tracking."
               />
             )}
           </div>

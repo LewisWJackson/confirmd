@@ -213,7 +213,7 @@ const NewsletterPage: React.FC = () => {
             <p className="text-xs text-content-muted mt-6 text-center">
               Want to see personalized coverage analysis?{" "}
               <a href="/plus" className="text-accent font-bold hover:underline">
-                Subscribe to Confirmd Plus
+                Subscribe to Confirmd+
               </a>
             </p>
           </div>

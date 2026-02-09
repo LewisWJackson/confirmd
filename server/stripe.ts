@@ -7,8 +7,7 @@ const router = Router();
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 
 const TIER_PRICES: Record<string, { amount: number; name: string }> = {
-  tribune: { amount: 999, name: "Confirmd Plus — Tribune" },
-  oracle: { amount: 2999, name: "Confirmd Plus — Oracle" },
+  plus: { amount: 999, name: "Confirmd+" },
 };
 
 // ─── GET /config ─────────────────────────────────────────────────────
@@ -24,7 +23,7 @@ router.post("/create-checkout", async (req: Request, res: Response) => {
     const { tier } = req.body;
 
     if (!tier || !TIER_PRICES[tier]) {
-      res.status(400).json({ error: "Invalid tier. Must be 'tribune' or 'oracle'." });
+      res.status(400).json({ error: "Invalid tier. Must be 'plus'." });
       return;
     }
 

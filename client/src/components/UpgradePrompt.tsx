@@ -1,6 +1,6 @@
 import React from "react";
 import { useLocation } from "wouter";
-import { type SubscriptionTier, tierLabel } from "../lib/auth-context";
+import { type SubscriptionTier } from "../lib/auth-context";
 
 interface UpgradePromptProps {
   requiredTier: SubscriptionTier;
@@ -24,7 +24,7 @@ const UpgradePrompt: React.FC<UpgradePromptProps> = ({
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
         </svg>
         <span className="text-sm text-content-secondary font-medium">
-          Upgrade to <strong className="text-accent">Confirmd {tierLabel(requiredTier)}</strong> to access {featureName}
+          Upgrade to <strong className="text-accent">Confirmd+</strong> to access {featureName}
         </span>
         <button
           onClick={() => setLocation("/plus")}
@@ -44,16 +44,16 @@ const UpgradePrompt: React.FC<UpgradePromptProps> = ({
         </svg>
       </div>
       <h4 className="text-lg font-black text-content-primary tracking-tight mb-2">
-        Upgrade to Confirmd {tierLabel(requiredTier)}
+        Upgrade to Confirmd+
       </h4>
       <p className="text-sm text-content-secondary font-medium mb-6 max-w-sm mx-auto">
-        {description || `${featureName} is available for Confirmd ${tierLabel(requiredTier)} members.`}
+        {description || `${featureName} is available for Confirmd+ members.`}
       </p>
       <button
         onClick={() => setLocation("/plus")}
         className="px-8 py-3 bg-accent text-accent-text text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-accent-hover transition-all"
       >
-        Get Confirmd Plus — $9.99/mo
+        Get Confirmd+ — $9.99/mo
       </button>
     </div>
   );

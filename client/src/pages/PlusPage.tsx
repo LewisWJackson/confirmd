@@ -151,7 +151,7 @@ const PlusPage: React.FC = () => {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
               </svg>
               <span className="text-sm font-semibold text-green-300">
-                Subscription activated! Welcome to Confirmd Plus.
+                Subscription activated! Welcome to Confirmd+.
               </span>
             </div>
             <button onClick={() => setShowSuccess(false)} className="text-green-500 hover:text-green-300 transition-colors">
@@ -178,7 +178,7 @@ const PlusPage: React.FC = () => {
           </div>
 
           <h1 className="text-4xl md:text-5xl font-bold text-content-primary tracking-tight mb-4">
-            Confirmd Plus
+            Confirmd+
           </h1>
           <p className="text-content-secondary text-lg max-w-2xl mx-auto">
             Get the full picture. Evidence-based clarity on the claims that matter most.

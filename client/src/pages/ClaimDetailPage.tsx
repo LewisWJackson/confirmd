@@ -152,7 +152,7 @@ export default function ClaimDetailPage() {
       {tier === "free" && (
         <div className="rounded-2xl p-6 mb-10 border border-accent bg-accent/10 flex items-center justify-between">
           <div>
-            <span className="text-[10px] font-black text-accent uppercase tracking-widest">Confirmd Plus</span>
+            <span className="text-[10px] font-black text-accent uppercase tracking-widest">Confirmd+</span>
             <p className="text-sm text-content-secondary mt-1 font-medium">Get full evidence ladders, real-time alerts, and source history with a Plus membership.</p>
           </div>
           <button onClick={() => setLocation("/plus")} className="px-6 py-3 bg-accent text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-accent-hover transition-all shadow-lg whitespace-nowrap">

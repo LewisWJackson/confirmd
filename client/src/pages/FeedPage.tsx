@@ -288,6 +288,9 @@ function CreatorPredictionsSection({
           <h2 className="text-sm font-black uppercase tracking-[0.15em] text-accent">
             Creator Predictions
           </h2>
+          <span className="text-[9px] font-bold text-accent/60 bg-accent/10 px-1.5 py-0.5 rounded">
+            Confirmd+
+          </span>
         </div>
         <button
           onClick={onViewAll}
@@ -302,7 +305,6 @@ function CreatorPredictionsSection({
         {items.map((prediction: any, idx: number) => {
           const creatorName = prediction.creator?.channelName || "Unknown";
           const avatarUrl = prediction.creator?.avatarUrl;
-          const thumbnailUrl = prediction.video?.thumbnailUrl;
           const creatorTier = prediction.creator?.tier;
           const claimText = prediction.claimText || "";
           const confidence = prediction.confidenceLanguage || "";
@@ -312,91 +314,50 @@ function CreatorPredictionsSection({
             <div
               key={prediction.id || idx}
               onClick={() => onPredictionClick(prediction)}
-              className="cursor-pointer flex-shrink-0 w-[260px] snap-start bg-surface-card rounded-xl border border-border overflow-hidden hover:bg-surface-card-hover transition-all group"
+              className="cursor-pointer flex-shrink-0 w-[240px] snap-start bg-surface-card rounded-xl border border-border p-3.5 hover:bg-surface-card-hover transition-all group"
             >
-              {/* Thumbnail / video preview */}
-              <div className="relative aspect-video bg-surface-secondary overflow-hidden">
-                {thumbnailUrl ? (
-                  <img
-                    src={thumbnailUrl}
-                    alt=""
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                    onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-                  />
-                ) : (
-                  <div className="w-full h-full bg-gradient-to-br from-accent/10 to-surface-card flex items-center justify-center">
-                    <svg className="w-8 h-8 text-accent/30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                  </div>
-                )}
-                {/* Confidence overlay */}
-                {confidence && (
-                  <div className="absolute top-2 right-2">
-                    <ConfidenceBadge confidence={confidence} />
-                  </div>
-                )}
-              </div>
-
-              {/* Card body */}
-              <div className="p-3">
-                {/* Creator row */}
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="w-7 h-7 rounded-full bg-accent/20 flex items-center justify-center overflow-hidden flex-shrink-0 ring-1 ring-border">
-                    {avatarUrl ? (
-                      <img
-                        src={avatarUrl}
-                        alt={creatorName}
-                        className="w-full h-full object-cover"
-                        onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-                      />
-                    ) : (
-                      <span className="text-[10px] font-bold text-accent">
-                        {creatorName.charAt(0)}
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-[12px] font-bold text-content-primary truncate">
-                        {creatorName}
-                      </span>
-                      {creatorTier && <TierBadge tier={creatorTier} size="sm" />}
-                    </div>
-                    {accuracy != null && (
-                      <span className="text-[9px] text-content-muted">
-                        {Math.round(accuracy)}% accuracy
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                {/* Claim text */}
-                <p className="text-[12px] text-content-secondary leading-snug line-clamp-2">
-                  {claimText}
-                </p>
-
-                {/* Category pill */}
-                {prediction.category && (
-                  <div className="mt-2">
-                    <span className="px-2 py-0.5 bg-accent/10 text-accent rounded text-[9px] font-bold uppercase tracking-wider">
-                      {prediction.category}
+              {/* Creator row */}
+              <div className="flex items-center gap-2 mb-2.5">
+                <div className="w-8 h-8 rounded-full bg-accent/20 flex items-center justify-center overflow-hidden flex-shrink-0 ring-1 ring-border">
+                  {avatarUrl ? (
+                    <img
+                      src={avatarUrl}
+                      alt={creatorName}
+                      className="w-full h-full object-cover"
+                      onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                    />
+                  ) : (
+                    <span className="text-[11px] font-bold text-accent">
+                      {creatorName.charAt(0)}
                     </span>
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[12px] font-bold text-content-primary truncate">
+                      {creatorName}
+                    </span>
+                    {creatorTier && <TierBadge tier={creatorTier} size="sm" />}
                   </div>
-                )}
+                  {accuracy != null && (
+                    <span className="text-[9px] text-content-muted">
+                      {Math.round(accuracy)}% accuracy
+                    </span>
+                  )}
+                </div>
+                {confidence && <ConfidenceBadge confidence={confidence} />}
               </div>
 
-              {/* Premium lock for free users */}
-              {isFree && (
-                <div className="px-3 pb-3">
-                  <div className="flex items-center gap-1 text-[9px] text-accent font-bold">
-                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                    </svg>
-                    Upgrade for full details
-                  </div>
-                </div>
+              {/* Claim text */}
+              <p className="text-[12px] text-content-secondary leading-snug line-clamp-3 mb-2">
+                {claimText}
+              </p>
+
+              {/* Category pill */}
+              {prediction.category && (
+                <span className="px-2 py-0.5 bg-accent/10 text-accent rounded text-[9px] font-bold uppercase tracking-wider">
+                  {prediction.category}
+                </span>
               )}
             </div>
           );
