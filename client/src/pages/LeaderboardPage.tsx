@@ -145,7 +145,7 @@ export default function LeaderboardPage() {
         </section>
         <section className="max-w-2xl mx-auto px-6 md:px-12 pb-24">
           <UpgradePrompt
-            requiredTier="tribune"
+            requiredTier="plus"
             featureName="Creator Leaderboard"
             description="Access the full leaderboard with accuracy rankings, podium positions, and rank changes."
           />

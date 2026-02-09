@@ -1608,6 +1608,24 @@ async function ensureSource(feed: {
   return source.id;
 }
 
+/**
+ * Generate a meaningful summary for a story from its claim texts.
+ */
+function generateStorySummary(title: string, claimTexts: string[]): string {
+  if (claimTexts.length === 0) return title;
+
+  // Use the first claim as the core summary, clean it up
+  const primaryClaim = claimTexts[0];
+
+  if (claimTexts.length === 1) {
+    return primaryClaim.length > 200 ? primaryClaim.slice(0, 197) + "..." : primaryClaim;
+  }
+
+  // Multiple claims: summarize the scope
+  const truncated = primaryClaim.length > 150 ? primaryClaim.slice(0, 147) + "..." : primaryClaim;
+  return `${truncated} This story includes ${claimTexts.length} related claims from multiple sources.`;
+}
+
 // ============================================
 // PIPELINE ORCHESTRATOR
 // ============================================
@@ -2066,9 +2084,17 @@ export class VerificationPipeline {
           // Create new story
           const storyCategory = "crypto";
           const imageUrl = getStoryImageUrl(group.title, storyCategory);
+
+          // Collect claim texts for summary
+          const claimTexts = group.claimIds
+            .map(cid => claims.find(c => c.claimId === cid)?.claimText)
+            .filter((t): t is string => !!t);
+
+          const summary = generateStorySummary(group.title, claimTexts);
+
           const story = await this.storage.createStory({
             title: group.title,
-            summary: `Story covering ${group.claimIds.length} related claims`,
+            summary,
             category: storyCategory,
             imageUrl,
             metadata: {

@@ -12,7 +12,6 @@ import AboutPage from "./pages/AboutPage";
 import FaqPage from "./pages/FaqPage";
 import PrivacyPage from "./pages/PrivacyPage";
 import PlusPage from "./pages/PlusPage";
-import BlindspotPage from "./pages/BlindspotPage";
 import SignalsPage from "./pages/SignalsPage";
 import LoginPage from "./pages/LoginPage";
 import SignupPage from "./pages/SignupPage";
@@ -49,7 +48,6 @@ const App: React.FC = () => {
           <Route path="/creators/:id" component={CreatorDetailPage} />
           <Route path="/creators" component={CreatorsPage} />
           <Route path="/leaderboard" component={LeaderboardPage} />
-          <Route path="/blindspot" component={BlindspotPage} />
           <Route path="/signals" component={SignalsPage} />
           <Route path="/search" component={SearchPage} />
           <Route path="/briefing" component={DailyBriefingPage} />

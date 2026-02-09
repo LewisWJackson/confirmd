@@ -157,7 +157,7 @@ export default function CreatorsPage() {
         </section>
         <section className="max-w-2xl mx-auto px-6 md:px-12 pb-24">
           <UpgradePrompt
-            requiredTier="tribune"
+            requiredTier="plus"
             featureName="Creator Intelligence"
             description="Track creator accuracy, view detailed claim histories, and see who you can actually trust. Available for Tribune members."
           />

@@ -2,7 +2,7 @@ import React, { createContext, useContext, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { fetchMe } from "./api";
 
-export type SubscriptionTier = "free" | "tribune" | "oracle";
+export type SubscriptionTier = "free" | "plus";
 
 export interface AuthUser {
   id: string;
@@ -21,20 +21,23 @@ interface AuthContextValue {
 
 const TIER_RANK: Record<SubscriptionTier, number> = {
   free: 0,
-  tribune: 1,
-  oracle: 2,
+  plus: 1,
 };
 
 const FEATURE_REQUIREMENTS: Record<string, SubscriptionTier> = {
-  full_evidence: "tribune",
-  real_time_alerts: "tribune",
-  source_history: "tribune",
-  extended_watchlist: "tribune",
-  priority_support: "tribune",
-  api_access: "oracle",
-  data_export: "oracle",
-  custom_alerts: "oracle",
-  unlimited_history: "oracle",
+  full_evidence: "plus",
+  real_time_alerts: "plus",
+  source_history: "plus",
+  extended_watchlist: "plus",
+  priority_support: "plus",
+  api_access: "plus",
+  data_export: "plus",
+  custom_alerts: "plus",
+  unlimited_history: "plus",
+  creator_claims: "plus",
+  creator_profiles: "plus",
+  leaderboard: "plus",
+  blindspot_reports: "plus",
 };
 
 const AuthContext = createContext<AuthContextValue>({
@@ -54,8 +57,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   const value = useMemo<AuthContextValue>(() => {
-    const tier: SubscriptionTier =
-      (apiUser?.subscriptionTier as SubscriptionTier) || "free";
+    const raw = apiUser?.subscriptionTier || "free";
+    // Map any legacy tier names to "plus"
+    const tier: SubscriptionTier = raw === "free" ? "free" : "plus";
 
     return {
       user: apiUser
@@ -85,5 +89,5 @@ export function useAuth() {
 }
 
 export function tierLabel(tier: SubscriptionTier): string {
-  return { free: "Scholar", tribune: "Tribune", oracle: "Oracle" }[tier];
+  return { free: "Free", plus: "Plus" }[tier];
 }

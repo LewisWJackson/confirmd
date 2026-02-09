@@ -108,7 +108,7 @@ export const Header: React.FC = () => {
           <div className="flex items-center gap-3">
             {/* Search icon */}
             <button
-              onClick={() => setLocation("/sources")}
+              onClick={() => setLocation("/search")}
               className="text-gray-400 hover:text-white transition-colors p-1.5"
               aria-label="Search"
             >

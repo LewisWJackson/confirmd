@@ -81,7 +81,7 @@ export default function CreatorDetailPage() {
         </section>
         <section className="max-w-2xl mx-auto px-6 md:px-12 pb-24">
           <UpgradePrompt
-            requiredTier="tribune"
+            requiredTier="plus"
             featureName="Creator Profiles"
             description="View detailed creator profiles with accuracy breakdowns, radar charts, claim histories, and more."
           />
