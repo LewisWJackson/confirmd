@@ -33,13 +33,6 @@ function accuracyColor(pct: number): string {
   return "text-factuality-low";
 }
 
-function confidenceColor(conf: string): string {
-  const key = (conf || "").toLowerCase();
-  if (key === "strong") return "bg-factuality-low";
-  if (key === "medium") return "bg-factuality-mixed";
-  return "bg-content-muted";
-}
-
 /* --- YouTube-style Video Card --------------------------------- */
 
 function VideoCard({
@@ -51,72 +44,27 @@ function VideoCard({
 }) {
   const creator = prediction.creator;
   const video = prediction.video;
-  const confidence = (prediction.confidenceLanguage || "").toLowerCase();
-  const [imgFailed, setImgFailed] = useState(false);
 
-  const youtubeUrl = video?.youtubeVideoId
-    ? `https://www.youtube.com/watch?v=${video.youtubeVideoId}`
-    : null;
-
-  const handleThumbnailClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (youtubeUrl) {
-      window.open(youtubeUrl, "_blank", "noopener,noreferrer");
-    }
-  };
+  const youtubeId = video?.youtubeVideoId;
 
   return (
     <div className="group">
-      {/* Thumbnail — clicks open YouTube video */}
-      <div
-        onClick={handleThumbnailClick}
-        className="relative aspect-video rounded-xl overflow-hidden bg-surface-card mb-3 cursor-pointer"
-      >
-        {/* Video thumbnail or gradient fallback */}
-        {video?.thumbnailUrl && !imgFailed ? (
-          <img
-            src={video.thumbnailUrl}
-            alt={video.title || ""}
-            className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-            onError={() => setImgFailed(true)}
+      {/* Embedded YouTube player */}
+      <div className="relative aspect-video rounded-xl overflow-hidden bg-black mb-3">
+        {youtubeId ? (
+          <iframe
+            src={`https://www.youtube.com/embed/${youtubeId}`}
+            title={video?.title || "YouTube video"}
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowFullScreen
+            className="absolute inset-0 w-full h-full"
+            loading="lazy"
           />
         ) : (
-          <div className="absolute inset-0 bg-gradient-to-br from-surface-secondary via-surface-card to-surface-card-hover" />
-        )}
-
-        {/* Play button overlay */}
-        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-          <div className="w-14 h-10 rounded-lg bg-red-600 flex items-center justify-center shadow-lg">
-            <svg className="w-6 h-6 text-white ml-0.5" fill="currentColor" viewBox="0 0 24 24">
+          <div className="absolute inset-0 bg-gradient-to-br from-surface-secondary via-surface-card to-surface-card-hover flex items-center justify-center">
+            <svg className="w-10 h-10 text-content-muted/30" fill="currentColor" viewBox="0 0 24 24">
               <path d="M8 5v14l11-7z" />
             </svg>
-          </div>
-        </div>
-
-        {/* Video title overlay at bottom */}
-        {video?.title && (
-          <div className="absolute bottom-0 left-0 right-0 p-2.5 bg-gradient-to-t from-black/80 to-transparent">
-            <p className="text-[11px] text-white font-medium line-clamp-1">
-              {video.title}
-            </p>
-          </div>
-        )}
-
-        {/* Confidence pill top-right */}
-        {confidence && (
-          <div className="absolute top-2 right-2">
-            <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold text-white uppercase ${confidenceColor(confidence)}`}>
-              {prediction.confidenceLanguage}
-            </span>
-          </div>
-        )}
-
-        {/* Category pill top-left */}
-        {prediction.category && (
-          <div className="absolute top-2 left-2">
-            <span className="px-1.5 py-0.5 rounded bg-black/50 text-[9px] font-bold text-white uppercase backdrop-blur-sm">
-              {prediction.category}
-            </span>
           </div>
         )}
       </div>
@@ -312,8 +260,8 @@ function ExplainerBanner({ onDismiss }: { onDismiss: () => void }) {
             </svg>
           </div>
           <div>
-            <p className="text-[12px] font-semibold text-content-primary">Click the thumbnail</p>
-            <p className="text-[11px] text-content-muted">Watch the original YouTube video where the claim was made</p>
+            <p className="text-[12px] font-semibold text-content-primary">Watch the video</p>
+            <p className="text-[11px] text-content-muted">Play the original YouTube video where the claim was made, right here</p>
           </div>
         </div>
 
@@ -324,7 +272,7 @@ function ExplainerBanner({ onDismiss }: { onDismiss: () => void }) {
             </svg>
           </div>
           <div>
-            <p className="text-[12px] font-semibold text-content-primary">Click the claim text</p>
+            <p className="text-[12px] font-semibold text-content-primary">Click the claim</p>
             <p className="text-[11px] text-content-muted">View the creator's profile and their full prediction history</p>
           </div>
         </div>
@@ -336,7 +284,7 @@ function ExplainerBanner({ onDismiss }: { onDismiss: () => void }) {
             </svg>
           </div>
           <div>
-            <p className="text-[12px] font-semibold text-content-primary">Click the channel name</p>
+            <p className="text-[12px] font-semibold text-content-primary">Click the channel</p>
             <p className="text-[11px] text-content-muted">See the creator's accuracy score and all their verified claims</p>
           </div>
         </div>
