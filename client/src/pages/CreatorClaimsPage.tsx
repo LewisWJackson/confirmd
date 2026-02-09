@@ -436,7 +436,7 @@ export default function CreatorClaimsPage() {
 
                 {/* Blurred cards + upgrade CTA overlay (free users) */}
                 {!isPaid && blurredClaims.length > 0 && (
-                  <div className="relative mt-0">
+                  <div className="relative mt-0" style={{ maskImage: "linear-gradient(to bottom, transparent 0%, black 8%, black 100%)", WebkitMaskImage: "linear-gradient(to bottom, transparent 0%, black 8%, black 100%)" }}>
                     {/* Progressive blur: each card gets increasingly blurred */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-4 gap-y-8 pointer-events-none select-none">
                       {blurredClaims.map((prediction: any, idx: number) => {
@@ -517,7 +517,7 @@ export default function CreatorClaimsPage() {
                 <div>
                   {/* Blurred top creators (free users) -- most blurred at #1, less blurred going down */}
                   {!isPaid && blurredLeaderboard.length > 0 && (
-                    <div className="relative mb-0">
+                    <div className="relative mb-0" style={{ maskImage: "linear-gradient(to bottom, black 0%, black 70%, transparent 100%)", WebkitMaskImage: "linear-gradient(to bottom, black 0%, black 70%, transparent 100%)" }}>
                       <div className="divide-y divide-border pointer-events-none select-none">
                         {blurredLeaderboard.map((creator: any, i: number) => {
                           // #1 is most blurred, progressively less blurred going down
