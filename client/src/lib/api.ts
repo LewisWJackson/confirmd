@@ -55,6 +55,20 @@ export function fetchSource(id: string) {
   return fetchJson<any>(`/sources/${id}`);
 }
 
+// Source Feed (for SourceClaimsPage)
+export function fetchSourceFeed(params?: { limit?: number; offset?: number }) {
+  const qs = new URLSearchParams();
+  if (params?.limit) qs.set("limit", String(params.limit));
+  if (params?.offset) qs.set("offset", String(params.offset));
+  const query = qs.toString();
+  return fetchJson<{ data: any[] }>(`/sources/feed${query ? `?${query}` : ""}`).then(r => r.data);
+}
+
+// Source Leaderboard
+export function fetchSourceLeaderboard() {
+  return fetchJson<{ data: any[] }>("/sources/leaderboard").then(r => r.data);
+}
+
 // Stories
 export function fetchStories(params?: { category?: string; asset?: string }) {
   const qs = new URLSearchParams();

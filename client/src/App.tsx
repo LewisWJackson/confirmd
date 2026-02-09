@@ -35,6 +35,8 @@ import CareersPage from "./pages/CareersPage";
 import ContactPage from "./pages/ContactPage";
 import TermsPage from "./pages/TermsPage";
 import CreatorClaimsPage from "./pages/CreatorClaimsPage";
+import SourceClaimsPage from "./pages/SourceClaimsPage";
+import SourceLeaderboardPage from "./pages/SourceLeaderboardPage";
 import AdminPage from "./pages/AdminPage";
 import FirmyChat from "./components/FirmyChat";
 
@@ -46,6 +48,8 @@ const App: React.FC = () => {
           <Route path="/" component={FeedPage} />
           <Route path="/claims/:id" component={ClaimDetailPage} />
           <Route path="/claims" component={ClaimsPage} />
+          <Route path="/source-claims" component={SourceClaimsPage} />
+          <Route path="/source-leaderboard" component={SourceLeaderboardPage} />
           <Route path="/sources/:id" component={SourceDetailPage} />
           <Route path="/sources" component={SourcesPage} />
           <Route path="/stories/:id" component={StoryDetailPage} />

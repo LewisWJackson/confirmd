@@ -290,14 +290,50 @@ const GiftPage: React.FC = () => {
               </p>
               <p className="text-content-secondary text-sm">
                 Our mission is to empower the relationship between you and
-                the information you consume. Join our community of 50,000+
+                the information you consume. Join a growing community of
                 researchers and analysts who use Confirmd to make better
                 decisions every day.
               </p>
             </div>
             <div className="flex-shrink-0">
-              <div className="bg-surface-card border border-border rounded-xl w-64 h-48 flex items-center justify-center">
-                <span className="text-content-muted text-sm italic">Gift illustration</span>
+              <div className="w-64 h-48 flex items-center justify-center">
+                <svg viewBox="0 0 240 200" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
+                  {/* Glow behind box */}
+                  <ellipse cx="120" cy="170" rx="80" ry="12" className="fill-accent/10" />
+
+                  {/* Box bottom */}
+                  <rect x="50" y="100" width="140" height="70" rx="6" className="fill-surface-card stroke-border" strokeWidth="1.5" />
+                  <rect x="50" y="100" width="140" height="70" rx="6" className="fill-accent/5" />
+
+                  {/* Box lid */}
+                  <rect x="42" y="80" width="156" height="24" rx="5" className="fill-surface-card stroke-border" strokeWidth="1.5" />
+                  <rect x="42" y="80" width="156" height="24" rx="5" className="fill-accent/8" />
+
+                  {/* Vertical ribbon */}
+                  <rect x="112" y="80" width="16" height="90" rx="2" className="fill-accent/30 stroke-accent" strokeWidth="1" />
+
+                  {/* Horizontal ribbon */}
+                  <rect x="42" y="86" width="156" height="12" rx="2" className="fill-accent/30 stroke-accent" strokeWidth="1" />
+
+                  {/* Bow - left loop */}
+                  <path d="M120 80 C100 50 70 55 80 70 C85 78 110 82 120 80Z" className="fill-accent/25 stroke-accent" strokeWidth="1.5" />
+                  {/* Bow - right loop */}
+                  <path d="M120 80 C140 50 170 55 160 70 C155 78 130 82 120 80Z" className="fill-accent/25 stroke-accent" strokeWidth="1.5" />
+                  {/* Bow center knot */}
+                  <circle cx="120" cy="78" r="6" className="fill-accent stroke-accent" strokeWidth="1" />
+
+                  {/* Sparkles */}
+                  <g className="text-accent">
+                    <path d="M40 60 l2-6 2 6-6 2 6 2-2 6-2-6 6-2z" fill="currentColor" opacity="0.6" />
+                    <path d="M190 50 l1.5-4.5 1.5 4.5-4.5 1.5 4.5 1.5-1.5 4.5-1.5-4.5 4.5-1.5z" fill="currentColor" opacity="0.4" />
+                    <path d="M175 95 l1-3 1 3-3 1 3 1-1 3-1-3 3-1z" fill="currentColor" opacity="0.5" />
+                    <path d="M55 55 l1-3 1 3-3 1 3 1-1 3-1-3 3-1z" fill="currentColor" opacity="0.3" />
+                  </g>
+
+                  {/* Confirmd logo mark on box */}
+                  <circle cx="120" cy="138" r="12" className="fill-accent/15 stroke-accent/40" strokeWidth="1" />
+                  <path d="M115 138 l3 3 7-7" className="stroke-accent" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
               </div>
             </div>
           </div>

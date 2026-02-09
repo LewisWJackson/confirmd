@@ -38,6 +38,8 @@ const FEATURE_REQUIREMENTS: Record<string, SubscriptionTier> = {
   creator_profiles: "plus",
   leaderboard: "plus",
   blindspot_reports: "plus",
+  source_leaderboard: "plus",
+  source_claims: "plus",
 };
 
 const AuthContext = createContext<AuthContextValue>({

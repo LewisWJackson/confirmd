@@ -1733,21 +1733,67 @@ export async function seedInitialData(storage: MemStorage): Promise<void> {
     summary: "Tracking verified SEC activity alongside speculative claims about Ethereum ETF approval timelines. Official SEC calendar confirms February meeting while anonymous sources push unsubstantiated acceleration narratives.",
     imageUrl: null,
     category: "Regulation",
+    assetSymbols: ["ETH"],
+    sourceCount: 2,
     metadata: {},
   });
 
   await storage.addClaimToStory(story1.id, claim1.id);
   await storage.addClaimToStory(story1.id, claim2.id);
+  await storage.addItemToStory(story1.id, item1.id);
+  await storage.addItemToStory(story1.id, item2.id);
 
   const story2 = await storage.createStory({
     title: "DeFi Security: The Nexus Protocol Exploit",
     summary: "A verified smart contract exploit drained $45M from Nexus Protocol via a reentrancy vulnerability. On-chain evidence and independent security audits confirm the attack vector and fund movement.",
     imageUrl: null,
     category: "Security",
+    assetSymbols: ["NEXUS", "ETH"],
+    sourceCount: 1,
     metadata: {},
   });
 
   await storage.addClaimToStory(story2.id, claim3.id);
+  await storage.addItemToStory(story2.id, item3.id);
+
+  const story3 = await storage.createStory({
+    title: "Arbitrum Airdrop Rumors Debunked",
+    summary: "Anonymous Telegram channel claims Arbitrum Foundation is finalizing a massive airdrop for active users. The Foundation has explicitly denied any upcoming token distributions, and the source has a poor track record.",
+    imageUrl: null,
+    category: "DeFi",
+    assetSymbols: ["ARB"],
+    sourceCount: 1,
+    metadata: {},
+  });
+
+  await storage.addClaimToStory(story3.id, claim4.id);
+  await storage.addItemToStory(story3.id, item4.id);
+
+  const story4 = await storage.createStory({
+    title: "ECB Advances Digital Euro to Preparation Phase",
+    summary: "The European Central Bank has officially moved the Digital Euro project into its preparation phase, with ECB President Lagarde citing a potential 2027 launch. Multiple primary sources confirm the milestone, though issuance is not guaranteed.",
+    imageUrl: null,
+    category: "Regulation",
+    assetSymbols: ["EUR"],
+    sourceCount: 1,
+    metadata: {},
+  });
+
+  await storage.addClaimToStory(story4.id, claim5.id);
+  await storage.addItemToStory(story4.id, item5.id);
+
+  const story5 = await storage.createStory({
+    title: "Bitcoin $150K Post-Halving Price Predictions",
+    summary: "Market analysts predict Bitcoin could reach $150,000 following the 2024 halving event. While historical halving cycles have preceded bull runs, experts caution that specific price targets lack methodological rigor and current market conditions differ from previous cycles.",
+    imageUrl: null,
+    category: "Market",
+    assetSymbols: ["BTC"],
+    sourceCount: 1,
+    metadata: {},
+  });
+
+  await storage.addClaimToStory(story5.id, claim6.id);
+  await storage.addItemToStory(story5.id, item6.id);
 
   // Mark initial pipeline run
   storage.setLastPipelineRun(new Date().toISOString());

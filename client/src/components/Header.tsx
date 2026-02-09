@@ -21,6 +21,7 @@ const topicPills = [
 const navItems = [
   { path: "/", label: "Home" },
   { path: "/creator-claims", label: "Creator Claims" },
+  { path: "/source-claims", label: "Source Claims" },
 ];
 
 export const Header: React.FC = () => {
@@ -105,6 +106,13 @@ export const Header: React.FC = () => {
                       </svg>
                     </span>
                     r Claims
+                  </span>
+                ) : label === "Source Claims" ? (
+                  <span className="inline-flex items-center gap-1">
+                    <svg className="w-[14px] h-[14px] text-current opacity-80" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2" />
+                    </svg>
+                    Source Claims
                   </span>
                 ) : (
                   label
@@ -253,6 +261,13 @@ export const Header: React.FC = () => {
                       </svg>
                     </span>
                     r Claims
+                  </span>
+                ) : label === "Source Claims" ? (
+                  <span className="inline-flex items-center gap-1">
+                    <svg className="w-[14px] h-[14px] text-current opacity-80" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2" />
+                    </svg>
+                    Source Claims
                   </span>
                 ) : (
                   label

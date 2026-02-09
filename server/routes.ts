@@ -345,6 +345,74 @@ router.get("/sources", async (_req: Request, res: Response) => {
   }
 });
 
+// ─── GET /sources/feed ─────────────────────────────────────────────
+
+router.get("/sources/feed", async (req: Request, res: Response) => {
+  try {
+    const limit = parseInt(req.query.limit as string) || 50;
+    const offset = parseInt(req.query.offset as string) || 0;
+
+    const claims = await storage.getClaims({
+      sort: "newest",
+      limit,
+      offset,
+    });
+
+    const enriched = await Promise.all(claims.map(enrichClaim));
+
+    res.json({ data: enriched });
+  } catch (err) {
+    console.error("GET /sources/feed error:", err);
+    res.status(500).json({ error: "Failed to fetch source feed" });
+  }
+});
+
+// ─── GET /sources/leaderboard ──────────────────────────────────────
+
+router.get("/sources/leaderboard", async (req: Request, res: Response) => {
+  try {
+    const sources = await storage.getSources();
+
+    const ranked = await Promise.all(
+      sources.map(async (source) => {
+        const score = await storage.getSourceScore(source.id);
+        const claims = await storage.getClaimsBySource(source.id);
+        const logoAbbrev = source.displayName
+          .split(" ")
+          .map((w) => w[0])
+          .join("")
+          .toUpperCase()
+          .slice(0, 3);
+
+        return {
+          id: source.id,
+          displayName: source.displayName,
+          handleOrDomain: source.handleOrDomain,
+          logoUrl: source.logoUrl,
+          logo: logoAbbrev,
+          type: source.type,
+          trackRecord: score?.trackRecord ?? 0,
+          methodDiscipline: score?.methodDiscipline ?? 0,
+          sampleSize: score?.sampleSize ?? 0,
+          confidenceInterval: score?.confidenceInterval ?? null,
+          claimCount: claims.length,
+        };
+      })
+    );
+
+    // Filter to sources with scores and sort by trackRecord desc
+    const sorted = ranked
+      .filter((s) => s.trackRecord > 0)
+      .sort((a, b) => b.trackRecord - a.trackRecord)
+      .map((s, i) => ({ ...s, rank: i + 1, rankChange: 0 }));
+
+    res.json({ data: sorted });
+  } catch (err) {
+    console.error("GET /sources/leaderboard error:", err);
+    res.status(500).json({ error: "Failed to fetch source leaderboard" });
+  }
+});
+
 // ─── GET /sources/:id ───────────────────────────────────────────────
 
 router.get("/sources/:id", async (req: Request, res: Response) => {
