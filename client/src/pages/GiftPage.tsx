@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useLocation } from "wouter";
+import { createGiftCheckoutSession } from "../lib/api";
 
 const giftOptions = [
   {
@@ -8,6 +9,7 @@ const giftOptions = [
     priceNote: "one-time payment",
     perMonth: "$8.33/month",
     tier: "Tribune",
+    giftTier: "gift_3",
     description: "A great introduction to verified intelligence.",
   },
   {
@@ -16,6 +18,7 @@ const giftOptions = [
     priceNote: "one-time payment",
     perMonth: "$7.50/month",
     tier: "Tribune",
+    giftTier: "gift_6",
     description: "Half a year of full verification power.",
     popular: true,
   },
@@ -25,6 +28,7 @@ const giftOptions = [
     priceNote: "one-time payment",
     perMonth: "$6.67/month",
     tier: "Tribune",
+    giftTier: "gift_12",
     description: "A full year of premium access. Best value.",
   },
 ];
@@ -42,21 +46,21 @@ const howItWorks = [
   },
   {
     step: 2,
-    title: "Add a customized gift message (optional)",
-    description: "Include a personal note with your gift to let the recipient know why you're sharing Confirmd.",
+    title: "Complete your purchase",
+    description: "After purchase, you'll receive a unique gift code and link. Share it however you like -- text, email, or even a handwritten note.",
     icon: (
       <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
       </svg>
     ),
   },
   {
     step: 3,
-    title: "We'll send the recipient an email",
-    description: "The recipient will receive instructions on how to activate their gift subscription.",
+    title: "Share the gift code or link with your recipient",
+    description: "You'll get a unique code and shareable link. Send it via text, email, social media, or even a handwritten note.",
     icon: (
       <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
       </svg>
     ),
   },
@@ -82,8 +86,8 @@ const faqItems = [
     answer: "Yes, all gift subscriptions are one-time payments. We accept all major credit and debit cards through Stripe.",
   },
   {
-    question: "Can I send the gift subscription directly to my recipient?",
-    answer: "Yes. During checkout, you can enter the recipient's email address and we'll send them instructions to activate their subscription.",
+    question: "How do I send the gift to my recipient?",
+    answer: "After purchase, you'll receive a unique gift code and a shareable redemption link. You can share it however you like -- via text message, email, social media, or even write it in a card.",
   },
   {
     question: "Will I be charged after the year gift subscription is up?",
@@ -91,7 +95,7 @@ const faqItems = [
   },
   {
     question: "When and how will the recipient receive their gift subscription?",
-    answer: "The recipient will receive an email within minutes of your purchase with activation instructions. You can also choose a future delivery date.",
+    answer: "Immediately after your purchase, you'll see a gift code and shareable link on the confirmation page. Share the code or link with your recipient whenever you're ready -- it won't expire until redeemed.",
   },
   {
     question: "Can I buy gifts for multiple people?",
@@ -102,6 +106,8 @@ const faqItems = [
 const GiftPage: React.FC = () => {
   const [, setLocation] = useLocation();
   const [openFaqs, setOpenFaqs] = useState<Record<number, boolean>>({});
+  const [loadingTier, setLoadingTier] = useState<string | null>(null);
+  const [checkoutError, setCheckoutError] = useState<string | null>(null);
 
   const toggleFaq = (idx: number) => {
     setOpenFaqs((prev) => ({ ...prev, [idx]: !prev[idx] }));
@@ -121,6 +127,25 @@ const GiftPage: React.FC = () => {
           </p>
         </div>
       </section>
+
+      {/* Checkout Error */}
+      {checkoutError && (
+        <section className="max-w-5xl mx-auto px-6 md:px-12 pb-4">
+          <div className="bg-red-900/30 border border-red-700 rounded-lg px-6 py-4 flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <svg className="w-5 h-5 text-red-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span className="text-sm font-semibold text-red-300">{checkoutError}</span>
+            </div>
+            <button onClick={() => setCheckoutError(null)} className="text-red-500 hover:text-red-300 transition-colors">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </section>
+      )}
 
       {/* How it works */}
       <section className="bg-surface-secondary py-12">
@@ -173,31 +198,41 @@ const GiftPage: React.FC = () => {
 
                   {/* CTA */}
                   <button
-                    onClick={() => setLocation("/plus")}
-                    className={`w-full py-3 rounded-lg text-sm font-bold transition-all mt-auto ${
+                    onClick={async () => {
+                      setCheckoutError(null);
+                      setLoadingTier(opt.giftTier);
+                      try {
+                        const { url } = await createGiftCheckoutSession(opt.giftTier);
+                        if (url) window.location.href = url;
+                      } catch (err: any) {
+                        setCheckoutError("Unable to start checkout. Please try again.");
+                        setLoadingTier(null);
+                      }
+                    }}
+                    disabled={loadingTier === opt.giftTier}
+                    className={`w-full py-3 rounded-lg text-sm font-bold transition-all mt-auto disabled:opacity-60 disabled:cursor-wait ${
                       opt.popular
                         ? "bg-accent text-accent-text hover:bg-accent-hover"
                         : "border border-border text-content-primary hover:bg-surface-secondary"
                     }`}
                   >
-                    Gift This Plan
+                    {loadingTier === opt.giftTier ? (
+                      <span className="flex items-center justify-center space-x-2">
+                        <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                        </svg>
+                        <span>Redirecting...</span>
+                      </span>
+                    ) : (
+                      "Gift This Plan"
+                    )}
                   </button>
                 </div>
               </div>
             ))}
           </div>
 
-          {/* Trusted by logos */}
-          <div className="mt-12 text-center">
-            <p className="text-content-muted text-xs uppercase tracking-wider mb-4">As featured in</p>
-            <div className="flex items-center justify-center space-x-8 text-content-muted">
-              <span className="text-sm font-semibold opacity-50">Forbes</span>
-              <span className="text-sm font-semibold opacity-50">CoinDesk</span>
-              <span className="text-sm font-semibold opacity-50">The Block</span>
-              <span className="text-sm font-semibold opacity-50">Decrypt</span>
-              <span className="text-sm font-semibold opacity-50">Messari</span>
-            </div>
-          </div>
         </div>
       </section>
 

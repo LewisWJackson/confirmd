@@ -18,6 +18,7 @@ import {
   creatorClaims,
   creatorScores,
   disputes,
+  gifts,
 } from "../shared/schema.js";
 import type {
   Source,
@@ -46,6 +47,7 @@ import type {
   InsertCreatorScore,
   Dispute,
   InsertDispute,
+  Gift,
 } from "../shared/schema.js";
 
 export class DrizzleStorage implements IStorage {
@@ -586,6 +588,39 @@ export class DrizzleStorage implements IStorage {
 
   async updateDispute(id: string, data: Partial<Dispute>): Promise<void> {
     await this.db.update(disputes).set(data).where(eq(disputes.id, id));
+  }
+
+  // ── Gifts ──────────────────────────────────────────────────────
+
+  async createGift(data: Omit<Gift, "id" | "createdAt" | "redeemedAt" | "redeemedByUserId">): Promise<Gift> {
+    const [gift] = await this.db.insert(gifts).values(data).returning();
+    return gift;
+  }
+
+  async getGiftByCode(code: string): Promise<Gift | undefined> {
+    const [gift] = await this.db.select().from(gifts).where(eq(gifts.code, code));
+    return gift;
+  }
+
+  async getGiftByStripeSession(sessionId: string): Promise<Gift | undefined> {
+    const [gift] = await this.db.select().from(gifts).where(eq(gifts.stripeSessionId, sessionId));
+    return gift;
+  }
+
+  async redeemGift(giftId: string, userId: string): Promise<void> {
+    await this.db
+      .update(gifts)
+      .set({ status: "redeemed", redeemedByUserId: userId, redeemedAt: new Date() })
+      .where(eq(gifts.id, giftId));
+  }
+
+  async activateGiftSubscription(userId: string, durationMonths: number): Promise<void> {
+    const expiresAt = new Date();
+    expiresAt.setMonth(expiresAt.getMonth() + durationMonths);
+    await this.db
+      .update(users)
+      .set({ subscriptionTier: "premium", subscriptionExpiresAt: expiresAt })
+      .where(eq(users.id, userId));
   }
 
   // ── Pipeline Stats ───────────────────────────────────────────────

@@ -25,6 +25,7 @@ import type {
   InsertCreatorScore,
   Dispute,
   InsertDispute,
+  Gift,
 } from "../shared/schema.js";
 import { db } from "./db.js";
 import { DrizzleStorage } from "./drizzle-storage.js";
@@ -117,6 +118,13 @@ export interface IStorage {
   getDisputesByClaimId(claimId: string): Promise<Dispute[]>;
   updateDispute(id: string, data: Partial<Dispute>): Promise<void>;
 
+  // Gifts
+  createGift(data: Omit<Gift, "id" | "createdAt" | "redeemedAt" | "redeemedByUserId">): Promise<Gift>;
+  getGiftByCode(code: string): Promise<Gift | undefined>;
+  getGiftByStripeSession(sessionId: string): Promise<Gift | undefined>;
+  redeemGift(giftId: string, userId: string): Promise<void>;
+  activateGiftSubscription(userId: string, durationMonths: number): Promise<void>;
+
   // Pipeline Stats
   getPipelineStats(): Promise<PipelineStats>;
 }
@@ -189,6 +197,7 @@ export class MemStorage implements IStorage {
   private creatorClaimsMap: Map<string, CreatorClaim> = new Map();
   private creatorScoresMap: Map<string, CreatorScore> = new Map();
   private disputesMap: Map<string, Dispute> = new Map();
+  private giftsMap: Map<string, Gift> = new Map();
   private lastPipelineRun: string | null = null;
 
   // ── Sources ──────────────────────────────────────────────────────
@@ -643,6 +652,7 @@ export class MemStorage implements IStorage {
       passwordHash: data.passwordHash,
       displayName: data.displayName,
       subscriptionTier: data.subscriptionTier ?? "free",
+      subscriptionExpiresAt: null,
       createdAt: new Date(),
     };
     this.users.set(id, user);
@@ -905,6 +915,59 @@ export class MemStorage implements IStorage {
     const dispute = this.disputesMap.get(id);
     if (dispute) {
       Object.assign(dispute, data);
+    }
+  }
+
+  // ── Gifts ──────────────────────────────────────────────────────
+
+  async createGift(data: Omit<Gift, "id" | "createdAt" | "redeemedAt" | "redeemedByUserId">): Promise<Gift> {
+    const id = crypto.randomUUID();
+    const gift: Gift = {
+      id,
+      code: data.code,
+      purchaserEmail: data.purchaserEmail,
+      stripeSessionId: data.stripeSessionId,
+      durationMonths: data.durationMonths,
+      amountCents: data.amountCents,
+      status: data.status ?? "pending",
+      redeemedByUserId: null,
+      redeemedAt: null,
+      createdAt: new Date(),
+    };
+    this.giftsMap.set(id, gift);
+    return gift;
+  }
+
+  async getGiftByCode(code: string): Promise<Gift | undefined> {
+    return Array.from(this.giftsMap.values()).find((g) => g.code === code);
+  }
+
+  async getGiftByStripeSession(sessionId: string): Promise<Gift | undefined> {
+    return Array.from(this.giftsMap.values()).find((g) => g.stripeSessionId === sessionId);
+  }
+
+  async redeemGift(giftId: string, userId: string): Promise<void> {
+    const gift = this.giftsMap.get(giftId);
+    if (gift) {
+      this.giftsMap.set(giftId, {
+        ...gift,
+        status: "redeemed",
+        redeemedByUserId: userId,
+        redeemedAt: new Date(),
+      });
+    }
+  }
+
+  async activateGiftSubscription(userId: string, durationMonths: number): Promise<void> {
+    const user = this.users.get(userId);
+    if (user) {
+      const expiresAt = new Date();
+      expiresAt.setMonth(expiresAt.getMonth() + durationMonths);
+      this.users.set(userId, {
+        ...user,
+        subscriptionTier: "premium",
+        subscriptionExpiresAt: expiresAt,
+      });
     }
   }
 

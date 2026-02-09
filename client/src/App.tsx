@@ -28,6 +28,8 @@ import MyBiasPage from "./pages/MyBiasPage";
 import TestimonialsPage from "./pages/TestimonialsPage";
 import GroupSubsPage from "./pages/GroupSubsPage";
 import GiftPage from "./pages/GiftPage";
+import GiftConfirmationPage from "./pages/GiftConfirmationPage";
+import GiftRedeemPage from "./pages/GiftRedeemPage";
 import TrialPage from "./pages/TrialPage";
 import CareersPage from "./pages/CareersPage";
 import ContactPage from "./pages/ContactPage";
@@ -61,6 +63,8 @@ const App: React.FC = () => {
           <Route path="/my-bias" component={MyBiasPage} />
           <Route path="/testimonials" component={TestimonialsPage} />
           <Route path="/groups" component={GroupSubsPage} />
+          <Route path="/gift/confirmation" component={GiftConfirmationPage} />
+          <Route path="/gift/redeem" component={GiftRedeemPage} />
           <Route path="/gift" component={GiftPage} />
           <Route path="/trial" component={TrialPage} />
           <Route path="/careers" component={CareersPage} />

@@ -26,7 +26,10 @@ function requireTier(minTier: string) {
     }
     try {
       const user = await storage.getUserById(userId);
-      const userTier = user?.subscriptionTier || "free";
+      let userTier = user?.subscriptionTier || "free";
+      if (user?.subscriptionExpiresAt && new Date(user.subscriptionExpiresAt) < new Date()) {
+        userTier = "free";
+      }
       if ((TIER_RANK[userTier] ?? 0) < (TIER_RANK[minTier] ?? 0)) {
         return res.status(403).json({ error: `Requires ${minTier} subscription` });
       }
@@ -910,11 +913,15 @@ router.get("/auth/me", async (req: Request, res: Response) => {
       return;
     }
 
+    const effectiveTier = (user.subscriptionExpiresAt && new Date(user.subscriptionExpiresAt) < new Date())
+      ? "free" : user.subscriptionTier;
+
     res.json({
       id: user.id,
       email: user.email,
       displayName: user.displayName,
-      subscriptionTier: user.subscriptionTier,
+      subscriptionTier: effectiveTier,
+      subscriptionExpiresAt: user.subscriptionExpiresAt,
       createdAt: user.createdAt,
     });
   } catch (err) {
@@ -1290,6 +1297,72 @@ router.post("/admin/generate-tier-images", async (_req: Request, res: Response) 
   } catch (err) {
     console.error("POST /admin/generate-tier-images error:", err);
     res.status(500).json({ error: "Failed to generate tier images" });
+  }
+});
+
+// ─── Gift Redemption & Validation ────────────────────────────────────
+
+router.post("/gifts/redeem", async (req: Request, res: Response) => {
+  try {
+    const userId = req.session?.userId;
+    if (!userId) {
+      res.status(401).json({ error: "Authentication required" });
+      return;
+    }
+
+    const { code } = req.body || {};
+    if (!code || typeof code !== "string") {
+      res.status(400).json({ error: "Gift code is required" });
+      return;
+    }
+
+    const normalizedCode = code.trim().toUpperCase();
+    const gift = await storage.getGiftByCode(normalizedCode);
+    if (!gift) {
+      res.status(404).json({ error: "Gift code not found" });
+      return;
+    }
+
+    if (gift.status === "redeemed") {
+      res.status(409).json({ error: "This gift code has already been redeemed" });
+      return;
+    }
+
+    await storage.redeemGift(gift.id, userId);
+    await storage.activateGiftSubscription(userId, gift.durationMonths);
+
+    const user = await storage.getUserById(userId);
+
+    res.json({
+      success: true,
+      durationMonths: gift.durationMonths,
+      subscriptionTier: user?.subscriptionTier ?? "plus",
+      subscriptionExpiresAt: user?.subscriptionExpiresAt ?? null,
+    });
+  } catch (err) {
+    console.error("POST /gifts/redeem error:", err);
+    res.status(500).json({ error: "Failed to redeem gift" });
+  }
+});
+
+router.get("/gifts/validate/:code", async (req: Request, res: Response) => {
+  try {
+    const normalizedCode = param(req, "code").trim().toUpperCase();
+    const gift = await storage.getGiftByCode(normalizedCode);
+
+    if (!gift) {
+      res.json({ valid: false, durationMonths: null, status: null });
+      return;
+    }
+
+    res.json({
+      valid: gift.status === "pending",
+      durationMonths: gift.durationMonths,
+      status: gift.status,
+    });
+  } catch (err) {
+    console.error("GET /gifts/validate/:code error:", err);
+    res.status(500).json({ error: "Failed to validate gift code" });
   }
 });
 

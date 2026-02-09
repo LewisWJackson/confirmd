@@ -164,6 +164,20 @@ export const users = pgTable("user", {
   passwordHash: text("password_hash").notNull(),
   displayName: text("display_name").notNull(),
   subscriptionTier: text("subscription_tier").notNull().default("free"),
+  subscriptionExpiresAt: timestamp("subscription_expires_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const gifts = pgTable("gift", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  code: text("code").notNull().unique(),
+  purchaserEmail: text("purchaser_email").notNull(),
+  stripeSessionId: text("stripe_session_id").notNull(),
+  durationMonths: integer("duration_months").notNull(),
+  amountCents: integer("amount_cents").notNull(),
+  status: text("status").notNull().default("pending"),
+  redeemedByUserId: uuid("redeemed_by_user_id"),
+  redeemedAt: timestamp("redeemed_at"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -285,6 +299,7 @@ export const insertCreatorVideoSchema = createInsertSchema(creatorVideos).omit({
 export const insertCreatorClaimSchema = createInsertSchema(creatorClaims).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertCreatorScoreSchema = createInsertSchema(creatorScores).omit({ id: true });
 export const insertDisputeSchema = createInsertSchema(disputes).omit({ id: true, createdAt: true });
+export const insertGiftSchema = createInsertSchema(gifts).omit({ id: true, createdAt: true });
 
 // Types
 export type Source = typeof sources.$inferSelect;
@@ -315,3 +330,5 @@ export type CreatorScore = typeof creatorScores.$inferSelect;
 export type InsertCreatorScore = z.infer<typeof insertCreatorScoreSchema>;
 export type Dispute = typeof disputes.$inferSelect;
 export type InsertDispute = z.infer<typeof insertDisputeSchema>;
+export type Gift = typeof gifts.$inferSelect;
+export type InsertGift = z.infer<typeof insertGiftSchema>;

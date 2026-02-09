@@ -211,3 +211,20 @@ export function submitDispute(data: { claimId: string; reason: string; evidenceU
 export function createCheckoutSession(tier: string) {
   return postJson<{ url: string }>("/stripe/create-checkout", { tier });
 }
+
+// Gift subscriptions
+export function createGiftCheckoutSession(giftTier: string) {
+  return postJson<{ url: string }>("/stripe/create-gift-checkout", { giftTier });
+}
+
+export function fetchGiftBySession(sessionId: string) {
+  return fetchJson<{ code: string; durationMonths: number; status: string; createdAt: string }>(`/stripe/gift/${sessionId}`);
+}
+
+export function validateGiftCode(code: string) {
+  return fetchJson<{ valid: boolean; durationMonths: number; status: string }>(`/gifts/validate/${encodeURIComponent(code)}`);
+}
+
+export function redeemGiftCode(code: string) {
+  return postJson<{ success: boolean; durationMonths: number; subscriptionTier: string; subscriptionExpiresAt: string }>("/gifts/redeem", { code });
+}
