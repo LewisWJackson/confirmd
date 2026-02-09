@@ -4,7 +4,7 @@ import { storage } from "./storage.js";
 import { validateCommunityEvidence } from "./pipeline.js";
 import { pipeline } from "./pipeline-instance.js";
 import { runCreatorPipeline, evaluateDispute } from "./creator-pipeline.js";
-import { generateSvgFallback } from "./image-generator.js";
+import { generateSvgFallback, generateStoryImageAI } from "./image-generator.js";
 import type { Claim, Verdict, EvidenceItem, Resolution, Source, SourceScore, Creator, CreatorVideo, CreatorClaim, CreatorScore, Dispute } from "../shared/schema.js";
 
 declare module "express-session" {
@@ -1153,6 +1153,47 @@ router.get("/disputes/:claimId", requireTier("tribune"), async (req: Request, re
   } catch (err) {
     console.error("GET /disputes/:claimId error:", err);
     res.status(500).json({ error: "Failed to fetch disputes" });
+  }
+});
+
+// ─── POST /admin/regenerate-images ─────────────────────────────────
+// Clears old external image URLs and triggers AI generation for all stories.
+
+router.post("/admin/regenerate-images", async (_req: Request, res: Response) => {
+  try {
+    const stories = await storage.getStories();
+    let queued = 0;
+
+    for (const story of stories) {
+      // Skip stories that already have a local AI-generated image
+      if (story.imageUrl?.startsWith("/story-images/")) continue;
+
+      // Clear old external URL so SVG fallback shows immediately
+      await storage.updateStory(story.id, { imageUrl: null as any });
+
+      // Fire off AI generation in background
+      generateStoryImageAI(story.id, story.title, story.category)
+        .then(async (aiUrl) => {
+          if (aiUrl) {
+            await storage.updateStory(story.id, { imageUrl: aiUrl });
+            console.log(`[RegenImages] AI image saved for "${story.title.slice(0, 40)}"`);
+          } else {
+            await storage.updateStory(story.id, { imageUrl: `/api/stories/${story.id}/image` });
+          }
+        })
+        .catch(() => {});
+
+      queued++;
+    }
+
+    res.json({
+      message: `Queued ${queued} stories for image regeneration`,
+      total: stories.length,
+      skipped: stories.length - queued,
+    });
+  } catch (err) {
+    console.error("POST /admin/regenerate-images error:", err);
+    res.status(500).json({ error: "Failed to regenerate images" });
   }
 });
 
