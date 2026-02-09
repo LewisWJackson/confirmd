@@ -15,8 +15,10 @@ import { generateStoryImage, type StoryImageParams } from "./story-image.js";
 
 // ── Config ───────────────────────────────────────────────────────────
 
-const IMAGES_DIR = path.resolve("dist", "public", "story-images");
-const VIDEO_THUMBNAILS_DIR = path.resolve("dist", "public", "video-thumbnails");
+// Use persistent volume in production (survives redeploys), ephemeral dir otherwise
+const STORAGE_ROOT = process.env.PERSISTENT_STORAGE_DIR || path.resolve("dist", "public");
+const IMAGES_DIR = path.join(STORAGE_ROOT, "story-images");
+const VIDEO_THUMBNAILS_DIR = path.join(STORAGE_ROOT, "video-thumbnails");
 
 const GEMINI_MODEL = "gemini-2.5-flash-image";
 const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;

@@ -118,6 +118,15 @@ async function setupFrontend() {
 
 function serveStatic() {
   const publicDir = path.resolve(__dirname, "..", "dist", "public");
+
+  // Serve AI-generated images from persistent volume (survives redeploys)
+  const persistentDir = process.env.PERSISTENT_STORAGE_DIR;
+  if (persistentDir) {
+    app.use("/story-images", express.static(path.join(persistentDir, "story-images")));
+    app.use("/video-thumbnails", express.static(path.join(persistentDir, "video-thumbnails")));
+    console.log(`Serving persistent images from ${persistentDir}`);
+  }
+
   app.use(express.static(publicDir));
   app.get("*", (_req, res) => {
     res.sendFile(path.resolve(publicDir, "index.html"));
