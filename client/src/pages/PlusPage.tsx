@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useLocation } from "wouter";
 import { createCheckoutSession } from "../lib/api";
+import testimonials from "../data/testimonials";
 
 interface PlusFaqItem {
   question: string;
@@ -92,6 +93,7 @@ interface PricingTier {
   price: string;
   period: string;
   icon: React.FC;
+  imageSrc: string;
   highlight: boolean;
   badge?: string;
   ctaLabel: string;
@@ -106,13 +108,14 @@ const tiers: PricingTier[] = [
     price: "$0",
     period: "/month",
     icon: VantageIcon,
+    imageSrc: "/tier-images/vantage.png",
     highlight: false,
     ctaLabel: "Get Started",
     features: [
       { label: "Daily stories & factuality bars" },
       { label: "Source credibility scores" },
       { label: "Basic claim summaries" },
-      { label: "Community access" },
+      { label: "Daily email briefing" },
     ],
   },
   {
@@ -122,6 +125,7 @@ const tiers: PricingTier[] = [
     price: "$4.99",
     period: "/month",
     icon: PremiumIcon,
+    imageSrc: "/tier-images/premium.png",
     highlight: true,
     badge: "Most Popular",
     ctaLabel: "Start Free Trial",
@@ -140,6 +144,7 @@ const tiers: PricingTier[] = [
     price: "$9.99",
     period: "/month",
     icon: ProIcon,
+    imageSrc: "/tier-images/pro.png",
     highlight: false,
     ctaLabel: "Start Free Trial",
     features: [
@@ -190,12 +195,68 @@ const DashIcon: React.FC<{ className?: string }> = ({ className = "" }) => (
   </svg>
 );
 
+// --- Tier image with SVG fallback ---
+
+const TierImage: React.FC<{ tier: PricingTier }> = ({ tier }) => {
+  const [imgFailed, setImgFailed] = useState(false);
+  const Icon = tier.icon;
+
+  if (imgFailed) {
+    return (
+      <div className={`w-full aspect-[4/3] mb-5 rounded-lg flex items-center justify-center ${
+        tier.highlight ? "bg-accent/10" : "bg-surface-card-hover"
+      }`}>
+        <div className={`w-20 h-20 ${tier.highlight ? "text-accent" : "text-content-secondary"}`}>
+          <Icon />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={`w-full aspect-[4/3] mb-5 rounded-lg overflow-hidden ${
+      tier.highlight ? "bg-accent/10" : "bg-surface-card-hover"
+    }`}>
+      <img
+        src={tier.imageSrc}
+        alt={`${tier.name} tier illustration`}
+        className="w-full h-full object-cover"
+        onError={() => setImgFailed(true)}
+      />
+    </div>
+  );
+};
+
 const PlusPage: React.FC = () => {
   const [, setLocation] = useLocation();
   const [openFaqs, setOpenFaqs] = useState<Record<number, boolean>>({});
   const [loadingTier, setLoadingTier] = useState<string | null>(null);
   const [showSuccess, setShowSuccess] = useState(false);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
+  const [carouselPage, setCarouselPage] = useState(0);
+  const carouselTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Pick 12 testimonials for the Plus page carousel (3 per page, 4 pages)
+  const plusTestimonials = testimonials.slice(0, 12);
+  const cardsPerPage = 3;
+  const totalPages = Math.ceil(plusTestimonials.length / cardsPerPage);
+
+  const advanceCarousel = useCallback(() => {
+    setCarouselPage((prev) => (prev + 1) % totalPages);
+  }, [totalPages]);
+
+  useEffect(() => {
+    carouselTimerRef.current = setInterval(advanceCarousel, 6000);
+    return () => {
+      if (carouselTimerRef.current) clearInterval(carouselTimerRef.current);
+    };
+  }, [advanceCarousel]);
+
+  const goToPage = (page: number) => {
+    setCarouselPage(page);
+    if (carouselTimerRef.current) clearInterval(carouselTimerRef.current);
+    carouselTimerRef.current = setInterval(advanceCarousel, 6000);
+  };
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -317,14 +378,8 @@ const PlusPage: React.FC = () => {
                   {/* Tagline */}
                   <p className="text-sm text-content-secondary mb-5 italic">{tier.tagline}</p>
 
-                  {/* Icon illustration */}
-                  <div className={`w-full aspect-[4/3] mb-5 rounded-lg flex items-center justify-center ${
-                    tier.highlight ? "bg-accent/10" : "bg-surface-card-hover"
-                  }`}>
-                    <div className={`w-20 h-20 ${tier.highlight ? "text-accent" : "text-content-secondary"}`}>
-                      <Icon />
-                    </div>
-                  </div>
+                  {/* Tier illustration */}
+                  <TierImage tier={tier} />
 
                   {/* Price */}
                   <div className="flex items-baseline gap-1 mb-5">
@@ -371,7 +426,7 @@ const PlusPage: React.FC = () => {
         </div>
       </section>
 
-      {/* Testimonial */}
+      {/* Testimonials Carousel */}
       <section className="bg-surface-secondary py-20 relative overflow-hidden">
         {/* Decorative background pattern */}
         <div className="absolute inset-0 opacity-[0.03]">
@@ -384,37 +439,108 @@ const PlusPage: React.FC = () => {
             <rect width="100%" height="100%" fill="url(#testimonial-grid)" />
           </svg>
         </div>
-        {/* Radial glow behind quote */}
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[400px] bg-accent/5 rounded-full blur-3xl pointer-events-none" />
 
-        <div className="max-w-4xl mx-auto px-6 md:px-12 text-center relative z-10">
-          <h2 className="text-3xl md:text-4xl font-bold text-content-primary mb-12">
-            See news differently.
-          </h2>
-
-          <div className="relative bg-surface-card/50 backdrop-blur-sm border border-border/50 rounded-2xl p-8 md:p-12">
-            <svg className="w-12 h-12 text-accent mx-auto mb-8 opacity-40" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M14.017 21v-7.391c0-5.704 3.731-9.57 8.983-10.609l.995 2.151c-2.432.917-3.995 3.638-3.995 5.849h4v10h-9.983zm-14.017 0v-7.391c0-5.704 3.748-9.57 9-10.609l.996 2.151c-2.433.917-3.996 3.638-3.996 5.849h3.983v10h-9.983z" />
-            </svg>
-
-            <blockquote className="text-lg md:text-xl text-content-primary leading-relaxed max-w-3xl mx-auto mb-8">
-              Confirmd is an excellent way to stay informed, build truly informed opinions, and expand your understanding.
-              The platform strips away noise and gives you evidence-based clarity on the claims that matter most in crypto.
-            </blockquote>
-
-            <div className="flex items-center justify-center space-x-3">
-              <div className="w-10 h-10 rounded-full bg-accent flex items-center justify-center ring-2 ring-accent/30 ring-offset-2 ring-offset-surface-card">
-                <span className="text-xs font-bold text-accent-text">KF</span>
-              </div>
-              <div className="text-left">
-                <div className="font-bold text-content-primary text-sm">Karol Fitzgerald</div>
-                <div className="text-content-muted text-xs">Executive Director, Digital Asset Research Center</div>
-              </div>
+        <div className="max-w-6xl mx-auto px-6 md:px-12 relative z-10">
+          {/* Hero stat */}
+          <div className="text-center mb-12">
+            <div className="flex items-center justify-center space-x-1 mb-3">
+              {[1, 2, 3, 4, 5].map((i) => (
+                <svg key={i} className="w-5 h-5 text-accent" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                </svg>
+              ))}
             </div>
+            <div className="text-3xl md:text-4xl font-bold text-content-primary mb-2">
+              10,000+ 5-star reviews
+            </div>
+            <p className="text-content-secondary text-sm">
+              See why thousands trust Confirmd for verified crypto news
+            </p>
+          </div>
 
-            <svg className="w-12 h-12 text-accent mx-auto mt-8 opacity-40 rotate-180" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M14.017 21v-7.391c0-5.704 3.731-9.57 8.983-10.609l.995 2.151c-2.432.917-3.995 3.638-3.995 5.849h4v10h-9.983zm-14.017 0v-7.391c0-5.704 3.748-9.57 9-10.609l.996 2.151c-2.433.917-3.996 3.638-3.996 5.849h3.983v10h-9.983z" />
-            </svg>
+          {/* Carousel cards */}
+          <div className="relative overflow-hidden">
+            <div
+              className="flex transition-transform duration-500 ease-in-out"
+              style={{ transform: `translateX(-${carouselPage * 100}%)` }}
+            >
+              {Array.from({ length: totalPages }).map((_, pageIdx) => (
+                <div
+                  key={pageIdx}
+                  className="w-full flex-shrink-0 grid grid-cols-1 md:grid-cols-3 gap-6 px-1"
+                >
+                  {plusTestimonials
+                    .slice(pageIdx * cardsPerPage, pageIdx * cardsPerPage + cardsPerPage)
+                    .map((t) => (
+                      <div
+                        key={t.id}
+                        className="bg-surface-card/60 backdrop-blur-sm border border-border/50 rounded-xl p-6 flex flex-col"
+                      >
+                        {/* Star rating */}
+                        <div className="flex items-center space-x-0.5 mb-4">
+                          {Array.from({ length: 5 }).map((_, i) => (
+                            <svg
+                              key={i}
+                              className={`w-4 h-4 ${
+                                i < t.rating ? "text-accent" : "text-content-muted/30"
+                              }`}
+                              fill="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                            </svg>
+                          ))}
+                        </div>
+
+                        {/* Quote */}
+                        <blockquote className="text-sm text-content-primary leading-relaxed flex-1 mb-5">
+                          "{t.quote}"
+                        </blockquote>
+
+                        {/* Author */}
+                        <div className="flex items-center space-x-3 pt-4 border-t border-border/30">
+                          <div className="w-9 h-9 rounded-full bg-accent/15 flex items-center justify-center flex-shrink-0">
+                            <span className="text-xs font-bold text-accent">
+                              {t.name.charAt(0)}
+                            </span>
+                          </div>
+                          <div>
+                            <div className="font-semibold text-content-primary text-sm">{t.name}</div>
+                            <div className="text-content-muted text-xs">{t.role}</div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Carousel dots */}
+          <div className="flex items-center justify-center space-x-2 mt-8">
+            {Array.from({ length: totalPages }).map((_, i) => (
+              <button
+                key={i}
+                onClick={() => goToPage(i)}
+                className={`w-2 h-2 rounded-full transition-all duration-300 ${
+                  i === carouselPage
+                    ? "bg-accent w-6"
+                    : "bg-content-muted/30 hover:bg-content-muted/50"
+                }`}
+                aria-label={`Go to testimonial page ${i + 1}`}
+              />
+            ))}
+          </div>
+
+          {/* See all link */}
+          <div className="text-center mt-6">
+            <button
+              onClick={() => setLocation("/testimonials")}
+              className="text-accent text-sm font-semibold hover:underline transition-all"
+            >
+              Read all reviews &rarr;
+            </button>
           </div>
         </div>
       </section>

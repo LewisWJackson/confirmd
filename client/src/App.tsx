@@ -33,6 +33,7 @@ import CareersPage from "./pages/CareersPage";
 import ContactPage from "./pages/ContactPage";
 import TermsPage from "./pages/TermsPage";
 import CreatorClaimsPage from "./pages/CreatorClaimsPage";
+import FirmyChat from "./components/FirmyChat";
 
 const App: React.FC = () => {
   return (
@@ -80,6 +81,7 @@ const App: React.FC = () => {
           </Route>
         </Switch>
       </Layout>
+      <FirmyChat />
     </ThemeProvider>
   );
 };

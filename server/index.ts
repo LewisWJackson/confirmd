@@ -124,6 +124,7 @@ function serveStatic() {
   if (persistentDir) {
     app.use("/story-images", express.static(path.join(persistentDir, "story-images")));
     app.use("/video-thumbnails", express.static(path.join(persistentDir, "video-thumbnails")));
+    app.use("/tier-images", express.static(path.join(persistentDir, "tier-images")));
     console.log(`Serving persistent images from ${persistentDir}`);
   }
 

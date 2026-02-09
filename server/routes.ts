@@ -4,7 +4,7 @@ import { storage } from "./storage.js";
 import { validateCommunityEvidence } from "./pipeline.js";
 import { pipeline } from "./pipeline-instance.js";
 import { runCreatorPipeline, evaluateDispute } from "./creator-pipeline.js";
-import { generateSvgFallback, generateStoryImageAI, generateVideoThumbnail, getVideoThumbnailUrl } from "./image-generator.js";
+import { generateSvgFallback, generateStoryImageAI, generateVideoThumbnail, getVideoThumbnailUrl, generateTierImages } from "./image-generator.js";
 import type { Claim, Verdict, EvidenceItem, Resolution, Source, SourceScore, Creator, CreatorVideo, CreatorClaim, CreatorScore, Dispute } from "../shared/schema.js";
 
 declare module "express-session" {
@@ -1274,6 +1274,154 @@ router.post("/admin/regenerate-video-thumbnails", async (req: Request, res: Resp
   } catch (err) {
     console.error("POST /admin/regenerate-video-thumbnails error:", err);
     res.status(500).json({ error: "Failed to regenerate video thumbnails" });
+  }
+});
+
+// ─── POST /admin/generate-tier-images ────────────────────────────────
+// Generates AI images for subscription tier cards (Vantage, Premium, Pro).
+
+router.post("/admin/generate-tier-images", async (_req: Request, res: Response) => {
+  try {
+    const results = await generateTierImages();
+    res.json({
+      message: "Tier image generation complete",
+      results,
+    });
+  } catch (err) {
+    console.error("POST /admin/generate-tier-images error:", err);
+    res.status(500).json({ error: "Failed to generate tier images" });
+  }
+});
+
+// ─── Firmy AI Support Agent ─────────────────────────────────────────
+
+const FIRMY_KNOWLEDGE: Record<string, { keywords: string[]; response: string; action?: string }> = {
+  how_it_works: {
+    keywords: ["how does", "how do", "what is confirmd", "what does confirmd", "how confirmd", "how works", "explain confirmd", "tell me about confirmd", "what is this"],
+    response: "Confirmd is a crypto news verification platform. We track claims made by news sources and crypto influencers, then evaluate them using a rigorous evidence-based methodology.\n\nHere is how it works:\n\n1. **Claim Extraction** — We identify specific, falsifiable claims from crypto news articles, tweets, and YouTube videos.\n2. **Evidence Gathering** — Our pipeline collects supporting and contradicting evidence from multiple sources.\n3. **Verdict Generation** — Each claim receives a verdict (Confirmed, Likely True, Unverified, Likely False, or False) based on the weight of evidence.\n4. **Source Scoring** — We track each source's historical accuracy, building a credibility track record over time.\n5. **Creator Tracking** — We monitor crypto YouTubers and influencers, scoring their prediction accuracy.\n\nThe community can also submit evidence to help refine verdicts. Think of us as a fact-checking layer for the crypto information ecosystem.",
+  },
+  factuality_scoring: {
+    keywords: ["factuality", "scoring", "how are scores", "methodology", "how do you score", "accuracy score", "track record", "credibility", "how is accuracy", "verdict system"],
+    response: "Our factuality scoring system evaluates claims and sources on multiple dimensions:\n\n**Claim Verdicts:**\nEach claim receives a probability score (0-100%) representing the likelihood it is true, plus an evidence strength rating. Verdicts range from \"Confirmed\" to \"False\" based on available evidence.\n\n**Source Scores:**\n- **Track Record** — Historical accuracy across all tracked claims\n- **Method Discipline** — How well-sourced and rigorous the outlet's reporting is\n- **Sample Size** — Number of claims tracked (more data = more reliable score)\n- **Confidence Interval** — Statistical range showing how certain we are of the score\n\n**Creator Accuracy:**\nFor crypto YouTubers and influencers, we track specific predictions and grade them as they resolve. Overall accuracy is calculated as correct predictions divided by resolved predictions.\n\nYou can explore our full methodology at [/methodology](/methodology).",
+  },
+  billing: {
+    keywords: ["billing", "subscription", "payment", "invoice", "charge", "price", "cost", "plan", "upgrade", "downgrade", "cancel", "refund"],
+    response: "Here is what I can help you with regarding your subscription:\n\n- **View plans & upgrade** — Visit our [Plus page](/plus) to see available tiers and upgrade your account\n- **Manage subscription** — You can manage your current subscription, update payment methods, and view invoices from your account settings\n- **Cancel** — You can cancel anytime from your account settings. Your access continues until the end of your billing period\n\nIf you need help with a specific billing issue such as a failed payment or refund request, I would recommend submitting a support ticket so our team can assist you directly.",
+    action: "show_billing_links",
+  },
+  subscription_manage: {
+    keywords: ["manage my subscription", "change plan", "account settings", "my account", "my plan", "current plan"],
+    response: "To manage your subscription:\n\n1. Click your profile icon in the top-right corner\n2. Select **Manage Subscription**\n3. From there you can upgrade, downgrade, or cancel your plan\n\nAlternatively, visit the [Plus page](/plus) to compare plans and make changes.\n\nIf you are not currently logged in, you will need to [sign in](/login) first.",
+    action: "show_billing_links",
+  },
+  report_issue: {
+    keywords: ["report", "issue", "bug", "problem", "broken", "error", "not working", "something wrong", "help me with"],
+    response: "I am sorry to hear you are experiencing an issue. To make sure our team can investigate and resolve it properly, please fill out the form below with details about what you are experiencing.\n\nOur support team typically responds within 24 hours.",
+    action: "show_escalation_form",
+  },
+  creators: {
+    keywords: ["creator", "youtuber", "influencer", "youtube", "prediction", "leaderboard"],
+    response: "Confirmd tracks crypto content creators — YouTubers, influencers, and analysts — by extracting specific predictions from their videos and scoring them as they resolve.\n\n- **Creator Claims** — Browse all tracked predictions at [/creator-claims](/creator-claims)\n- **Leaderboard** — See which creators have the best track records at [/leaderboard](/leaderboard)\n- **Individual Profiles** — Click on any creator to see their full prediction history and accuracy breakdown\n\nThis helps you make informed decisions about which crypto voices to trust.",
+  },
+  sources: {
+    keywords: ["source", "news source", "outlet", "publisher", "media", "who do you track"],
+    response: "We track a wide range of crypto news sources including major outlets, independent journalists, Twitter/X accounts, and research firms.\n\nEach source receives a credibility score based on their historical accuracy. You can browse all tracked sources and their scores at [/sources](/sources).\n\nOur scoring system rewards consistent accuracy and penalizes sources that frequently publish unverified or false claims.",
+  },
+  stories: {
+    keywords: ["story", "stories", "news", "feed", "latest", "headlines", "recent"],
+    response: "Our news feed aggregates crypto stories from multiple sources, showing you how different outlets cover the same events.\n\nEach story includes:\n- **Multi-source coverage** — See which outlets reported on it and their credibility tiers\n- **Associated claims** — Specific verifiable claims extracted from the story\n- **Verdicts** — Evidence-based assessments of each claim\n\nVisit the [home page](/) to browse the latest stories, or use [topic pages](/topics/bitcoin) to filter by specific areas of interest.",
+  },
+  greeting: {
+    keywords: ["hello", "hi", "hey", "greetings", "good morning", "good evening", "good afternoon", "sup", "yo"],
+    response: "Greetings! I am Firmy, your guide to Confirmd. Like the great philosophers of antiquity, I seek truth above all else — though in my case, it is the truth about crypto news.\n\nHow may I assist you today? You can ask me about how Confirmd works, our factuality scoring methodology, your subscription, or anything else related to the platform.",
+  },
+  thanks: {
+    keywords: ["thank", "thanks", "appreciate", "helpful", "great help"],
+    response: "You are most welcome! As Socrates might have said (had he been into crypto): the pursuit of knowledge is its own reward. Do not hesitate to return if you have more questions. I am always here.",
+  },
+  plus_features: {
+    keywords: ["plus", "premium", "features", "what do i get", "benefits", "worth it", "tribune", "oracle"],
+    response: "Confirmd Plus unlocks the full power of the platform:\n\n- **Full Evidence Access** — See all evidence items for every claim, not just summaries\n- **Creator Profiles & Claims** — Deep-dive into any crypto influencer's prediction history\n- **Leaderboard Access** — See the full creator accuracy rankings\n- **Real-time Alerts** — Get notified when claims you follow are updated\n- **Blindspot Reports** — Discover stories and perspectives you might be missing\n- **Data Export & API Access** — For power users and researchers\n\nVisit [/plus](/plus) to explore plans and start your subscription.",
+    action: "show_billing_links",
+  },
+};
+
+function generateFirmyResponse(message: string, history: Array<{ role: string; content: string }>): { reply: string; action?: string } {
+  const lower = message.toLowerCase().trim();
+
+  // Check each knowledge category for keyword matches
+  let bestMatch: { response: string; action?: string; score: number } | null = null;
+
+  for (const [_category, data] of Object.entries(FIRMY_KNOWLEDGE)) {
+    let matchScore = 0;
+    for (const keyword of data.keywords) {
+      if (lower.includes(keyword)) {
+        // Longer keyword matches are more specific, so weight them higher
+        matchScore += keyword.length;
+      }
+    }
+    if (matchScore > 0 && (!bestMatch || matchScore > bestMatch.score)) {
+      bestMatch = { response: data.response, action: data.action, score: matchScore };
+    }
+  }
+
+  if (bestMatch) {
+    return { reply: bestMatch.response, action: bestMatch.action };
+  }
+
+  // Fallback — suggest escalation for anything we can't handle
+  return {
+    reply: "That is an excellent question, though it ventures beyond my current knowledge. I want to make sure you get the help you need.\n\nWould you like to submit a support ticket? Our team can provide a more detailed response. Alternatively, you might find answers in our [FAQ](/faq) or [About](/about) pages.",
+    action: "suggest_escalation",
+  };
+}
+
+router.post("/support/chat", (req: Request, res: Response) => {
+  try {
+    const { message, history } = req.body || {};
+
+    if (!message || typeof message !== "string") {
+      res.status(400).json({ error: "Message is required" });
+      return;
+    }
+
+    const chatHistory = Array.isArray(history) ? history : [];
+    const result = generateFirmyResponse(message, chatHistory);
+
+    res.json(result);
+  } catch (err) {
+    console.error("POST /support/chat error:", err);
+    res.status(500).json({ error: "Failed to process chat message" });
+  }
+});
+
+router.post("/support/escalate", (req: Request, res: Response) => {
+  try {
+    const { email, description, userId } = req.body || {};
+
+    if (!email || typeof email !== "string") {
+      res.status(400).json({ error: "Email is required" });
+      return;
+    }
+
+    if (!description || typeof description !== "string") {
+      res.status(400).json({ error: "Description is required" });
+      return;
+    }
+
+    console.log(`[ESCALATION] New support escalation:`);
+    console.log(`[ESCALATION]   Email: ${email}`);
+    console.log(`[ESCALATION]   User ID: ${userId || "anonymous"}`);
+    console.log(`[ESCALATION]   Description: ${description}`);
+    console.log(`[ESCALATION]   Timestamp: ${new Date().toISOString()}`);
+
+    res.json({
+      success: true,
+      message: "Your issue has been forwarded to our team. We'll respond via email.",
+    });
+  } catch (err) {
+    console.error("POST /support/escalate error:", err);
+    res.status(500).json({ error: "Failed to submit escalation" });
   }
 });
 

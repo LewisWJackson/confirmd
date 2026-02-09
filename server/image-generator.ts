@@ -19,6 +19,7 @@ import { generateStoryImage, type StoryImageParams } from "./story-image.js";
 const STORAGE_ROOT = process.env.PERSISTENT_STORAGE_DIR || path.resolve("dist", "public");
 const IMAGES_DIR = path.join(STORAGE_ROOT, "story-images");
 const VIDEO_THUMBNAILS_DIR = path.join(STORAGE_ROOT, "video-thumbnails");
+const TIER_IMAGES_DIR = path.join(STORAGE_ROOT, "tier-images");
 
 const GEMINI_MODEL = "gemini-2.5-flash-image";
 const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
@@ -248,4 +249,92 @@ export async function generateVideoThumbnail(
     console.error(`[VideoThumb] Failed for "${title.slice(0, 50)}":`, err.message || err);
     return null;
   }
+}
+
+// ── Tier Image Generator ─────────────────────────────────────────────
+
+const TIER_PROMPTS: Record<string, string> = {
+  vantage: `A person looking through binoculars at a landscape, discovering truth. ${STYLE_SUFFIX}`,
+  premium: `A person climbing above clouds, rising above noise to see clearly. ${STYLE_SUFFIX}`,
+  pro: `A person with a telescope on a mountaintop, seeing everything with total clarity. ${STYLE_SUFFIX}`,
+};
+
+function ensureTierImagesDir(): void {
+  if (!fs.existsSync(TIER_IMAGES_DIR)) {
+    fs.mkdirSync(TIER_IMAGES_DIR, { recursive: true });
+  }
+}
+
+/**
+ * Generate AI images for all 3 subscription tiers using Google Gemini.
+ * Returns a record mapping tier id to its public URL path, or null for failures.
+ */
+export async function generateTierImages(): Promise<Record<string, string | null>> {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    console.warn("[TierImages] No GEMINI_API_KEY — skipping tier image generation");
+    return { vantage: null, premium: null, pro: null };
+  }
+
+  ensureTierImagesDir();
+
+  const results: Record<string, string | null> = {};
+
+  for (const [tierId, prompt] of Object.entries(TIER_PROMPTS)) {
+    try {
+      console.log(`[TierImages] Generating image for tier "${tierId}"...`);
+
+      const response = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{
+            parts: [{ text: `Generate an image: ${prompt}` }],
+          }],
+          generationConfig: {
+            responseModalities: ["TEXT", "IMAGE"],
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        console.error(`[TierImages] Gemini API error ${response.status} for "${tierId}":`, errText.slice(0, 200));
+        results[tierId] = null;
+        continue;
+      }
+
+      const data = await response.json() as any;
+
+      const parts = data?.candidates?.[0]?.content?.parts;
+      if (!parts || !Array.isArray(parts)) {
+        console.error(`[TierImages] No parts in Gemini response for "${tierId}"`);
+        results[tierId] = null;
+        continue;
+      }
+
+      const imagePart = parts.find((p: any) => p.inlineData?.data);
+      if (!imagePart) {
+        console.error(`[TierImages] No image data in Gemini response for "${tierId}"`);
+        results[tierId] = null;
+        continue;
+      }
+
+      const b64 = imagePart.inlineData.data;
+      const buffer = Buffer.from(b64, "base64");
+      const filePath = path.join(TIER_IMAGES_DIR, `${tierId}.png`);
+      fs.writeFileSync(filePath, buffer);
+
+      console.log(`[TierImages] Saved ${filePath} (${(buffer.length / 1024).toFixed(0)}KB)`);
+      results[tierId] = `/tier-images/${tierId}.png`;
+
+      // 3 second delay between requests to respect rate limits
+      await new Promise(r => setTimeout(r, 3000));
+    } catch (err: any) {
+      console.error(`[TierImages] Failed for "${tierId}":`, err.message || err);
+      results[tierId] = null;
+    }
+  }
+
+  return results;
 }
