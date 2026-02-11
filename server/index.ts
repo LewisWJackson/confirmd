@@ -176,7 +176,11 @@ async function main() {
   }
 
   // Seed creators if none exist (works for both MemStorage and Drizzle)
-  await seedCreators(storage);
+  try {
+    await seedCreators(storage);
+  } catch (err) {
+    console.warn("[Startup] seedCreators failed (will retry on first creator pipeline run):", (err as Error).message);
+  }
 
   // Set up frontend serving
   await setupFrontend();
