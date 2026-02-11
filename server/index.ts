@@ -9,6 +9,7 @@ import stripeRouter from "./stripe.js";
 import { storage, seedInitialData, MemStorage } from "./storage.js";
 import { pool } from "./db.js";
 import { pipeline } from "./pipeline-instance.js";
+import { runCreatorPipeline, verifyCreatorClaims, recalculateCreatorScores } from "./creator-pipeline.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -185,6 +186,25 @@ async function main() {
       console.log("[Pipeline] Starting auto-run scheduler (6h interval)");
       pipeline.startScheduler(SIX_HOURS_MS);
     }, 30_000);
+
+    // Creator pipeline: run once after 5 min delay, then every 6 hours
+    const CREATOR_DELAY_MS = 5 * 60 * 1000;
+    const runCreatorCycle = async () => {
+      console.log("[CreatorPipeline] Starting scheduled run");
+      try {
+        await runCreatorPipeline(storage);
+        await verifyCreatorClaims(storage);
+        await recalculateCreatorScores(storage);
+        console.log("[CreatorPipeline] Scheduled run complete");
+      } catch (err) {
+        console.error("[CreatorPipeline] Scheduled run failed:", err);
+      }
+    };
+
+    setTimeout(() => {
+      runCreatorCycle();
+      setInterval(runCreatorCycle, SIX_HOURS_MS);
+    }, CREATOR_DELAY_MS);
   });
 }
 

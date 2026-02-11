@@ -35,6 +35,12 @@ const anthropic = process.env.ANTHROPIC_API_KEY ? new Anthropic() : null;
 // TYPES
 // ============================================
 
+interface VideoInfo {
+  videoId: string;
+  title: string;
+  publishedAt: string;
+}
+
 interface TranscriptSegment {
   text: string;
   offset: number;
@@ -101,12 +107,13 @@ function parseTranscriptXml(xml: string): TranscriptSegment[] {
 // ============================================
 
 /**
- * Fetch video IDs from a YouTube channel's RSS feed.
+ * Fetch video info from a YouTube channel's RSS feed.
+ * Returns video IDs, titles, and publish dates from the feed entries.
  */
 export async function getRecentVideoIds(
   channelId: string,
   limit = 5,
-): Promise<string[]> {
+): Promise<VideoInfo[]> {
   const feedUrl = `https://www.youtube.com/feeds/videos.xml?channel_id=${channelId}`;
 
   const res = await fetch(feedUrl, {
@@ -120,16 +127,30 @@ export async function getRecentVideoIds(
 
   const xml = await res.text();
 
-  const videoIdRegex = /<yt:videoId>([^<]+)<\/yt:videoId>/g;
-  const videoIds: string[] = [];
-  let match;
+  // Parse each <entry> block to extract videoId, title, and published date
+  const entryRegex = /<entry>([\s\S]*?)<\/entry>/g;
+  const videos: VideoInfo[] = [];
+  let entryMatch;
 
-  while ((match = videoIdRegex.exec(xml)) !== null) {
-    videoIds.push(match[1]);
-    if (videoIds.length >= limit) break;
+  while ((entryMatch = entryRegex.exec(xml)) !== null) {
+    const entry = entryMatch[1];
+
+    const videoIdMatch = entry.match(/<yt:videoId>([^<]+)<\/yt:videoId>/);
+    const titleMatch = entry.match(/<title>([^<]+)<\/title>/);
+    const publishedMatch = entry.match(/<published>([^<]+)<\/published>/);
+
+    if (videoIdMatch) {
+      videos.push({
+        videoId: videoIdMatch[1],
+        title: titleMatch ? decodeHtmlEntities(titleMatch[1]) : `Video ${videoIdMatch[1]}`,
+        publishedAt: publishedMatch ? publishedMatch[1] : new Date().toISOString(),
+      });
+    }
+
+    if (videos.length >= limit) break;
   }
 
-  return videoIds;
+  return videos;
 }
 
 // ============================================
@@ -348,9 +369,9 @@ export async function processCreatorVideos(
     `[CreatorPipeline] Processing creator: ${channelName} (${creator.youtubeChannelId})`,
   );
 
-  let videoIds: string[];
+  let videos: VideoInfo[];
   try {
-    videoIds = await getRecentVideoIds(creator.youtubeChannelId, 3);
+    videos = await getRecentVideoIds(creator.youtubeChannelId, 3);
   } catch (err) {
     console.error(
       `[CreatorPipeline] Failed to fetch video IDs for ${channelName}:`,
@@ -359,20 +380,20 @@ export async function processCreatorVideos(
     return { videosProcessed: 0, claimsExtracted: 0 };
   }
 
-  if (videoIds.length === 0) {
+  if (videos.length === 0) {
     console.log(`[CreatorPipeline] No videos found for ${channelName}`);
     return { videosProcessed: 0, claimsExtracted: 0 };
   }
 
   console.log(
-    `[CreatorPipeline] Found ${videoIds.length} videos for ${channelName}`,
+    `[CreatorPipeline] Found ${videos.length} videos for ${channelName}`,
   );
 
   let videosProcessed = 0;
   let totalClaims = 0;
 
-  for (let i = 0; i < videoIds.length; i++) {
-    const ytVideoId = videoIds[i];
+  for (let i = 0; i < videos.length; i++) {
+    const { videoId: ytVideoId, title: videoTitle, publishedAt: videoPublishedAt } = videos[i];
 
     // Skip if already processed
     const existing = await storage.getCreatorVideoByYoutubeId(ytVideoId);
@@ -384,7 +405,7 @@ export async function processCreatorVideos(
     }
 
     console.log(
-      `[CreatorPipeline]   Processing video ${i + 1}/${videoIds.length}: ${ytVideoId}`,
+      `[CreatorPipeline]   Processing video ${i + 1}/${videos.length}: ${ytVideoId} "${videoTitle}"`,
     );
 
     try {
@@ -394,7 +415,7 @@ export async function processCreatorVideos(
         video = await storage.createCreatorVideo({
           creatorId,
           youtubeVideoId: ytVideoId,
-          title: `Video ${ytVideoId}`,
+          title: videoTitle,
           transcriptStatus: "pending",
         });
       }
@@ -419,12 +440,12 @@ export async function processCreatorVideos(
       });
 
       // Extract claims
-      const videoDate = new Date().toISOString().split("T")[0];
+      const videoDate = videoPublishedAt.split("T")[0];
       const claims = await extractClaimsFromTranscript(
         transcript.text,
         creatorId,
         ytVideoId,
-        video.title,
+        videoTitle,
         videoDate,
       );
 
@@ -462,7 +483,7 @@ export async function processCreatorVideos(
     }
 
     // Rate limit between videos
-    if (i < videoIds.length - 1) {
+    if (i < videos.length - 1) {
       await delay(DELAY_BETWEEN_CALLS_MS);
     }
   }
@@ -478,34 +499,49 @@ export async function processCreatorVideos(
 // 5. RUN CREATOR PIPELINE
 // ============================================
 
+let isCreatorPipelineRunning = false;
+
 /**
  * Run the creator pipeline for all active creators.
  */
 export async function runCreatorPipeline(
   storage: IStorage,
 ): Promise<{ creatorsProcessed: number; totalClaims: number }> {
-  const creators = await storage.getCreators(true); // active only
-  let creatorsProcessed = 0;
-  let totalClaims = 0;
-
-  console.log(
-    `[CreatorPipeline] Starting pipeline for ${creators.length} active creators`,
-  );
-
-  for (const creator of creators) {
-    const result = await processCreatorVideos(storage, creator.id);
-    creatorsProcessed++;
-    totalClaims += result.claimsExtracted;
-
-    // Delay between creators
-    await delay(DELAY_BETWEEN_CALLS_MS);
+  if (isCreatorPipelineRunning) {
+    console.log("[CreatorPipeline] Already running, skipping");
+    return { creatorsProcessed: 0, totalClaims: 0 };
   }
 
-  console.log(
-    `[CreatorPipeline] Pipeline complete: ${totalClaims} claims from ${creatorsProcessed} creators`,
-  );
+  isCreatorPipelineRunning = true;
 
-  return { creatorsProcessed, totalClaims };
+  try {
+    const creators = await storage.getCreators(true); // active only
+    let creatorsProcessed = 0;
+    let totalClaims = 0;
+    let totalVideos = 0;
+
+    console.log(
+      `[CreatorPipeline] Starting pipeline for ${creators.length} active creators`,
+    );
+
+    for (const creator of creators) {
+      const result = await processCreatorVideos(storage, creator.id);
+      creatorsProcessed++;
+      totalClaims += result.claimsExtracted;
+      totalVideos += result.videosProcessed;
+
+      // Delay between creators
+      await delay(DELAY_BETWEEN_CALLS_MS);
+    }
+
+    console.log(
+      `[CreatorPipeline] SUMMARY: ${creatorsProcessed} creators checked, ${totalVideos} new videos, ${totalClaims} claims extracted`,
+    );
+
+    return { creatorsProcessed, totalClaims };
+  } finally {
+    isCreatorPipelineRunning = false;
+  }
 }
 
 // ============================================
