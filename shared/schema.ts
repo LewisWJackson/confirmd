@@ -23,6 +23,7 @@ export const claimTypeEnum = pgEnum("claim_type", [
 
 export const resolutionTypeEnum = pgEnum("resolution_type", ["immediate", "scheduled", "indefinite"]);
 export const claimStatusEnum = pgEnum("claim_status", ["unreviewed", "needs_evidence", "reviewed", "resolved"]);
+export const storyStatusEnum = pgEnum("story_status", ["processing", "complete", "failed"]);
 export const evidenceStanceEnum = pgEnum("evidence_stance", ["supports", "contradicts", "mentions", "irrelevant"]);
 export const evidenceGradeEnum = pgEnum("evidence_grade", ["A", "B", "C", "D"]);
 export const verdictLabelEnum = pgEnum("verdict_label", ["verified", "plausible_unverified", "speculative", "misleading"]);
@@ -129,6 +130,7 @@ export const stories = pgTable("story", {
   category: text("category"),
   assetSymbols: text("asset_symbols").array().default([]),
   sourceCount: integer("source_count").default(0),
+  status: storyStatusEnum("status").notNull().default("complete"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
   metadata: jsonb("metadata").default({}),

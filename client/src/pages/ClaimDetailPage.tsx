@@ -4,6 +4,7 @@ import { useParams, useLocation } from "wouter";
 import { fetchClaim, submitEvidence, fetchVerdictHistory } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
 import UpgradePrompt from "../components/UpgradePrompt";
+import { FormattedReasoning } from "../components/FormattedReasoning";
 
 const getVerdictStyle = (label: string) => {
   const styles: Record<string, { bg: string; text: string; light: string; border: string; glow: string }> = {
@@ -177,8 +178,10 @@ export default function ClaimDetailPage() {
                   <span className="text-sm text-content-primary font-medium">{evidence.length} evidence source{evidence.length !== 1 ? "s" : ""} analyzed, evidence strength {Math.round((verdict.evidenceStrength ?? 0) * 100)}%</span>
                 </li>
                 <li className="flex items-start gap-3">
-                  <div className="w-2 h-2 rounded-full mt-2 bg-slate-400" />
-                  <span className="text-sm text-content-primary font-medium">{verdict.reasoningSummary}</span>
+                  <div className="w-2 h-2 rounded-full mt-2 bg-slate-400 flex-shrink-0" />
+                  <div className="text-sm text-content-primary font-medium">
+                    <FormattedReasoning text={verdict.reasoningSummary} verdictLabel={verdict.verdictLabel} />
+                  </div>
                 </li>
               </ul>
             </div>
@@ -230,11 +233,13 @@ export default function ClaimDetailPage() {
               <div className="space-y-6">
                 <div>
                   <div className="text-[10px] font-black uppercase tracking-widest text-content-muted mb-3">Analysis Summary</div>
-                  <p className="text-lg text-content-primary leading-relaxed">{verdict.reasoningSummary}</p>
+                  <div className="text-base text-content-primary leading-relaxed">
+                    <FormattedReasoning text={verdict.reasoningSummary} verdictLabel={verdict.verdictLabel} />
+                  </div>
                 </div>
-                <div className="p-6 bg-orange-50 rounded-2xl border border-orange-100">
-                  <div className="text-[10px] font-black uppercase tracking-widest text-orange-600 mb-3">What Would Change This Verdict?</div>
-                  <p className="text-sm text-orange-800">{verdict.invalidationTriggers}</p>
+                <div className="p-6 bg-verdict-speculative/10 rounded-2xl border border-verdict-speculative/20">
+                  <div className="text-[10px] font-black uppercase tracking-widest text-verdict-speculative mb-3">What Would Change This Verdict?</div>
+                  <p className="text-sm text-content-secondary">{verdict.invalidationTriggers}</p>
                 </div>
               </div>
             </div>
@@ -270,9 +275,9 @@ export default function ClaimDetailPage() {
                           {getVerificationTierBadge(entry.verificationTier)}
                         </div>
                         {entry.reasoningSummary && (
-                          <p className="text-sm text-content-secondary mt-2 leading-relaxed line-clamp-2">
-                            "{entry.reasoningSummary}"
-                          </p>
+                          <div className="text-sm text-content-secondary mt-2 leading-relaxed line-clamp-3">
+                            <FormattedReasoning text={entry.reasoningSummary} verdictLabel={entry.verdictLabel} />
+                          </div>
                         )}
                       </div>
                     </div>
@@ -299,7 +304,7 @@ export default function ClaimDetailPage() {
                         {ev.evidenceGrade || ev.grade}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-3 mb-2">
+                        <div className="flex items-center gap-3 mb-2 flex-wrap">
                           <span className="font-bold text-content-primary">{ev.publisher}</span>
                           <span className={`px-2 py-1 ${stanceStyle.bg} ${stanceStyle.text} rounded-lg text-[10px] font-black uppercase tracking-widest`}>
                             {stanceStyle.icon} {ev.stance}
@@ -308,7 +313,20 @@ export default function ClaimDetailPage() {
                             {gradeStyle.label}
                           </span>
                         </div>
-                        <p className="text-sm text-content-secondary leading-relaxed">{ev.excerpt}</p>
+                        <p className="text-sm text-content-secondary leading-relaxed mb-2">{ev.excerpt}</p>
+                        {ev.url && (
+                          <a
+                            href={ev.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 text-[11px] font-bold text-accent hover:text-accent-hover transition-colors"
+                          >
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                            </svg>
+                            View Source
+                          </a>
+                        )}
                       </div>
                     </div>
                   </div>

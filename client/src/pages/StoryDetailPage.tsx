@@ -43,6 +43,23 @@ function FactualityBadge({ tier }: { tier: "high" | "medium" | "low" }) {
 }
 
 function formatReasoning(raw: string, verdictLabel?: string): string {
+  if (!raw) {
+    const fallbacks: Record<string, string> = {
+      verified: "Multiple credible sources confirm this claim.",
+      speculative: "This claim lacks sufficient verification from primary sources.",
+      misleading: "Available evidence contradicts or does not support this claim.",
+      plausible_unverified: "This claim appears plausible but remains unconfirmed.",
+      unreviewed: "This claim has not yet been reviewed.",
+    };
+    return fallbacks[verdictLabel || ""] || fallbacks.unreviewed;
+  }
+
+  // If reasoning contains structured markdown from LLM, preserve it as-is
+  // for FormattedReasoning to handle
+  if (/\*\*[^*]+\*\*\s*:/.test(raw)) {
+    return raw;
+  }
+
   let text = raw;
 
   // Strip "Credibility: X+" prefix (e.g. "Credibility: B+,")
@@ -54,7 +71,7 @@ function formatReasoning(raw: string, verdictLabel?: string): string {
   // Strip grade breakdowns like "5 strong secondary B+", "1 weak secondary C-", "0 primary A", "2 tertiary D"
   text = text.replace(/\d+\s+(strong\s+|weak\s+)?(primary|secondary|tertiary)\s+[A-Z][+-]?[.,;:]?\s*/gi, "");
 
-  // Strip boilerplate phrases that appear in raw output
+  // Strip boilerplate phrases that appear in simulation mode output
   text = text.replace(/Credible indicators suggest this claim may be accurate,?\s*but primary confirmation is missing\.?\s*/gi, "");
   text = text.replace(/Credible indicators suggest\s*/gi, "");
   text = text.replace(/but primary confirmation is missing\.?\s*/gi, "");
@@ -516,7 +533,7 @@ export default function StoryDetailPage() {
             )}
 
             {/* Predictions tab */}
-            {activeTab === "predictions" && story.creatorPredictions && (
+            {activeTab === "predictions" && story.creatorPredictions?.length > 0 && (
               <div className="space-y-3">
                 {story.creatorPredictions.map((pred: any, idx: number) => (
                   <div

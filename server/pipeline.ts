@@ -171,11 +171,23 @@ const CLAIM_EXTRACTION_SYSTEM_PROMPT = `You are a specialized claim extraction a
 RULES:
 1. Claims must be ATOMIC - one testable assertion per claim
 2. Claims must be FALSIFIABLE - can be proven true or false
-3. Claims should be SPECIFIC - include dates, amounts, entities when available
-4. Claims should be TIME-BOUNDED - include deadlines or expected timeframes
+3. Claims must be SPECIFIC - include exact numbers, dollar amounts, dates, percentages, and named entities (companies, people, tokens) directly in the claim_text
+4. Claims should be TIME-BOUNDED - include deadlines or expected timeframes when mentioned
 5. Separate FACTS from PREDICTIONS - use appropriate claim_type
 6. Assign falsifiability_score based on specificity (1.0 = very specific & time-bounded, 0.2 = vague)
 7. Estimate llm_confidence as probability claim is true based on evidence in the article
+8. claim_text must be a STANDALONE sentence — a reader should understand it without seeing the original article. Never use generic prefixes like "ETF-related regulatory development reported:" or "Security incident reported:"
+
+GOOD claim_text examples:
+- "BlackRock's iShares Bitcoin Trust (IBIT) recorded $523M in net inflows on February 10, 2026"
+- "The SEC approved Franklin Templeton's spot Ethereum ETF application on February 8, 2026"
+- "Wormhole bridge was exploited for approximately $12M in wrapped ETH on Solana"
+- "Coinbase will list Jupiter (JUP) for trading starting February 15, 2026"
+
+BAD claim_text examples (DO NOT write claims like these):
+- "ETF-related regulatory development reported: Bitcoin ETF Sees Record Inflows"
+- "Security incident reported: Wormhole Bridge Exploited"
+- "Exchange listing reported: Coinbase Listing"
 
 CLAIM TYPES:
 - filing_submitted, filing_approved_or_denied, regulatory_action
@@ -190,7 +202,7 @@ OUTPUT FORMAT (strict JSON):
 {
   "claims": [
     {
-      "claim_text": "string - the atomic claim",
+      "claim_text": "string - the atomic, standalone claim with specific details",
       "claim_type": "one of the types above",
       "asset_symbols": ["BTC", "ETH"],
       "resolution_type": "immediate | scheduled | indefinite",
@@ -1208,9 +1220,19 @@ async function gatherEvidence(
         const excerptText = result.snippet || result.title;
         const stance = determineStance(excerptText, claim.claimText);
 
+        // Use known feed name if domain matches, otherwise capitalize domain
+        const knownFeed = RSS_FEEDS.find((f) => resultDomain.includes(f.domain));
+        const publisherName = knownFeed
+          ? knownFeed.name
+          : resultDomain
+              .replace(/\.(com|co|io|org|net|gov)$/i, "")
+              .split(".")
+              .pop()!
+              .replace(/^./, (c) => c.toUpperCase());
+
         evidence.push({
           url: result.url,
-          publisher: resultDomain,
+          publisher: publisherName,
           excerpt: excerptText.slice(0, 500),
           grade,
           stance,
@@ -1671,6 +1693,7 @@ async function ensureSource(feed: {
     type: "publisher",
     handleOrDomain: feed.domain,
     displayName: feed.name,
+    logoUrl: `https://www.google.com/s2/favicons?domain=${feed.domain}&sz=64`,
     metadata: { rssSource: true },
   });
 
@@ -2194,11 +2217,12 @@ export class VerificationPipeline {
             summary,
             category: storyCategory,
             imageUrl: null,
+            status: "processing",
             metadata: {
               claimCount: group.claimIds.length,
               createdByPipeline: true,
             },
-          });
+          } as any);
 
           // Kick off async AI image generation (don't block pipeline)
           generateStoryImageAI(story.id, group.title, storyCategory)
@@ -2234,11 +2258,12 @@ export class VerificationPipeline {
             }
           }
 
-          // Update sourceCount and assetSymbols on the story
+          // Update sourceCount, assetSymbols, and mark as complete
           try {
             await this.storage.updateStory(story.id, {
               sourceCount,
               assetSymbols: [...groupAssetSymbols],
+              status: "complete",
             });
           } catch {
             // Non-critical

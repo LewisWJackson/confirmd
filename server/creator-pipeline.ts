@@ -58,6 +58,7 @@ interface ExtractedClaim {
   claimStrength: "strong" | "medium" | "weak";
   statedTimeframe: string | null;
   timestampSeconds: number;
+  assetSymbols: string[];
 }
 
 type CreatorTier = "diamond" | "gold" | "silver" | "bronze" | "unranked";
@@ -275,9 +276,12 @@ Respond with ONLY a valid JSON array of claims:
     "claimCategory": "<category>",
     "claimStrength": "strong" | "medium" | "weak",
     "statedTimeframe": "<timeframe if mentioned, e.g. 'by end of 2025', 'within 6 months'>" | null,
-    "timestampSeconds": <approximate seconds into video>
+    "timestampSeconds": <approximate seconds into video>,
+    "assetSymbols": ["BTC", "ETH", ...]
   }
 ]
+
+For assetSymbols, include the ticker symbols of all cryptocurrencies/assets mentioned in the claim (e.g. "BTC", "ETH", "SOL", "XRP", "ADA", "DOGE", "LINK", "AVAX", "DOT", "MATIC", "UNI", "AAVE", "BNB", "ARB", "OP", "LTC"). Use uppercase ticker symbols only.
 
 Valid categories: "price_prediction", "regulatory", "partnership", "technology", "market_prediction", "technical_analysis", "etf_approval", "partnership_adoption", "market_analysis"
 
@@ -317,6 +321,34 @@ Extract all specific, verifiable claims as a JSON array.`;
   }
 }
 
+function extractAssetSymbols(text: string): string[] {
+  const symbolPatterns: [RegExp, string][] = [
+    [/\bbitcoin\b|\bbtc\b/i, "BTC"],
+    [/\bethereum\b|\beth\b/i, "ETH"],
+    [/\bsolana\b|\bsol\b/i, "SOL"],
+    [/\bcardano\b|\bada\b/i, "ADA"],
+    [/\bpolkadot\b|\bdot\b/i, "DOT"],
+    [/\bavalanche\b|\bavax\b/i, "AVAX"],
+    [/\bchainlink\b|\blink\b/i, "LINK"],
+    [/\bpolygon\b|\bmatic\b/i, "MATIC"],
+    [/\bripple\b|\bxrp\b/i, "XRP"],
+    [/\bdogecoin\b|\bdoge\b/i, "DOGE"],
+    [/\blitecoin\b|\bltc\b/i, "LTC"],
+    [/\buniswap\b|\buni\b/i, "UNI"],
+    [/\baave\b/i, "AAVE"],
+    [/\bbnb\b/i, "BNB"],
+    [/\barbitrum\b|\barb\b/i, "ARB"],
+    [/\boptimism\b|\bop\b/i, "OP"],
+  ];
+  const found: string[] = [];
+  for (const [pattern, symbol] of symbolPatterns) {
+    if (pattern.test(text) && !found.includes(symbol)) {
+      found.push(symbol);
+    }
+  }
+  return found;
+}
+
 function parseClaimsResponse(text: string): ExtractedClaim[] {
   try {
     const jsonMatch = text.match(/\[[\s\S]*\]/);
@@ -327,20 +359,27 @@ function parseClaimsResponse(text: string): ExtractedClaim[] {
 
     return parsed
       .filter((c: any) => c.claimText && typeof c.claimText === "string")
-      .map((c: any) => ({
-        claimText: String(c.claimText),
-        claimCategory: VALID_CATEGORIES.includes(c.claimCategory)
-          ? c.claimCategory
-          : "market_analysis",
-        claimStrength: VALID_STRENGTHS.includes(c.claimStrength)
-          ? c.claimStrength
-          : "medium",
-        statedTimeframe: c.statedTimeframe ? String(c.statedTimeframe) : null,
-        timestampSeconds: Math.max(
-          0,
-          Math.round(Number(c.timestampSeconds) || 0),
-        ),
-      }));
+      .map((c: any) => {
+        const aiSymbols = Array.isArray(c.assetSymbols)
+          ? c.assetSymbols.filter((s: any) => typeof s === "string").map((s: string) => s.toUpperCase())
+          : [];
+        const symbols = aiSymbols.length > 0 ? aiSymbols : extractAssetSymbols(String(c.claimText));
+        return {
+          claimText: String(c.claimText),
+          claimCategory: VALID_CATEGORIES.includes(c.claimCategory)
+            ? c.claimCategory
+            : "market_analysis",
+          claimStrength: VALID_STRENGTHS.includes(c.claimStrength)
+            ? c.claimStrength
+            : "medium",
+          statedTimeframe: c.statedTimeframe ? String(c.statedTimeframe) : null,
+          timestampSeconds: Math.max(
+            0,
+            Math.round(Number(c.timestampSeconds) || 0),
+          ),
+          assetSymbols: symbols,
+        };
+      });
   } catch {
     console.error("[CreatorPipeline] Failed to parse claims from AI response");
     return [];
@@ -461,6 +500,7 @@ export async function processCreatorVideos(
             claim.claimStrength as InsertCreatorClaim["confidenceLanguage"],
           statedTimeframe: claim.statedTimeframe,
           videoTimestampSeconds: claim.timestampSeconds,
+          assetSymbols: claim.assetSymbols,
           status: "pending",
         });
       }

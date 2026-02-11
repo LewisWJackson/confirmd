@@ -285,7 +285,7 @@ export class DrizzleStorage implements IStorage {
     return this.db.select().from(stories);
   }
 
-  async updateStory(id: string, data: Partial<Pick<Story, "title" | "summary" | "imageUrl" | "category" | "assetSymbols" | "sourceCount">>): Promise<void> {
+  async updateStory(id: string, data: Partial<Pick<Story, "title" | "summary" | "imageUrl" | "category" | "assetSymbols" | "sourceCount" | "status">>): Promise<void> {
     await this.db.update(stories).set({ ...data, updatedAt: new Date() }).where(eq(stories.id, id));
   }
 
@@ -350,13 +350,20 @@ export class DrizzleStorage implements IStorage {
     return story ?? null;
   }
 
-  async getStoriesForFeed(limit: number = 50, offset: number = 0): Promise<StoryFeedItem[]> {
-    const allStories = await this.db
+  async getStoriesForFeed(limit: number = 50, offset: number = 0, statusFilter?: string): Promise<StoryFeedItem[]> {
+    let query = this.db
       .select()
       .from(stories)
       .orderBy(desc(stories.updatedAt))
       .limit(limit)
       .offset(offset);
+
+    // Filter to "complete" stories by default; "all" bypasses the filter
+    if (statusFilter !== "all") {
+      query = query.where(eq(stories.status, (statusFilter ?? "complete") as "processing" | "complete" | "failed")) as any;
+    }
+
+    const allStories = await query;
 
     const result: StoryFeedItem[] = [];
 

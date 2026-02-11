@@ -76,13 +76,13 @@ export interface IStorage {
   createStory(data: InsertStory): Promise<Story>;
   getStory(id: string): Promise<Story | undefined>;
   getStories(): Promise<Story[]>;
-  updateStory(id: string, data: Partial<Pick<Story, "title" | "summary" | "imageUrl" | "category" | "assetSymbols" | "sourceCount">>): Promise<void>;
+  updateStory(id: string, data: Partial<Pick<Story, "title" | "summary" | "imageUrl" | "category" | "assetSymbols" | "sourceCount" | "status">>): Promise<void>;
   deleteStory(id: string): Promise<boolean>;
   addClaimToStory(storyId: string, claimId: string): Promise<void>;
   addItemToStory(storyId: string, itemId: string): Promise<void>;
   getStoryWithClaims(storyId: string): Promise<{ story: Story; claims: Claim[] } | undefined>;
   getStoryByClaimId(claimId: string): Promise<Story | null>;
-  getStoriesForFeed(limit?: number, offset?: number): Promise<StoryFeedItem[]>;
+  getStoriesForFeed(limit?: number, offset?: number, statusFilter?: string): Promise<StoryFeedItem[]>;
 
   // Source Scores
   createSourceScore(data: Omit<SourceScore, "id">): Promise<SourceScore>;
@@ -515,6 +515,7 @@ export class MemStorage implements IStorage {
       category: data.category ?? null,
       assetSymbols: (data.assetSymbols as string[] | null) ?? [],
       sourceCount: data.sourceCount ?? 0,
+      status: (data as any).status ?? "complete",
       createdAt: now,
       updatedAt: now,
       metadata: data.metadata ?? {},
@@ -531,7 +532,7 @@ export class MemStorage implements IStorage {
     return Array.from(this.stories.values());
   }
 
-  async updateStory(id: string, data: Partial<Pick<Story, "title" | "summary" | "imageUrl" | "category" | "assetSymbols" | "sourceCount">>): Promise<void> {
+  async updateStory(id: string, data: Partial<Pick<Story, "title" | "summary" | "imageUrl" | "category" | "assetSymbols" | "sourceCount" | "status">>): Promise<void> {
     const story = this.stories.get(id);
     if (!story) return;
     Object.assign(story, data, { updatedAt: new Date() });
@@ -589,9 +590,15 @@ export class MemStorage implements IStorage {
     return this.stories.get(link.storyId) ?? null;
   }
 
-  async getStoriesForFeed(limit: number = 50, offset: number = 0): Promise<StoryFeedItem[]> {
-    const allStories = Array.from(this.stories.values())
+  async getStoriesForFeed(limit: number = 50, offset: number = 0, statusFilter?: string): Promise<StoryFeedItem[]> {
+    let allStories = Array.from(this.stories.values())
       .sort((a, b) => ((b.updatedAt?.getTime() || 0) - (a.updatedAt?.getTime() || 0)));
+
+    // Filter to "complete" stories by default; "all" bypasses the filter
+    if (statusFilter !== "all") {
+      const filterStatus = statusFilter ?? "complete";
+      allStories = allStories.filter(s => (s as any).status === filterStatus);
+    }
 
     const paged = allStories.slice(offset, offset + limit);
     const result: StoryFeedItem[] = [];

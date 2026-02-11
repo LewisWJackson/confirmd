@@ -482,8 +482,9 @@ router.get("/stories", async (req: Request, res: Response) => {
     const offset = parseInt(req.query.offset as string) || 0;
     const category = req.query.category as string | undefined;
     const asset = req.query.asset as string | undefined;
+    const statusFilter = req.query.status as string | undefined;
 
-    let feedItems = await storage.getStoriesForFeed(limit, offset);
+    let feedItems = await storage.getStoriesForFeed(limit, offset, statusFilter);
 
     // Filter by category if provided
     if (category) {
