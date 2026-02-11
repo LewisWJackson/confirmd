@@ -185,11 +185,69 @@ function runYtDlp(videoId: string, outputPath: string): Promise<void> {
 }
 
 /**
- * Fetch the transcript for a YouTube video using yt-dlp.
+ * Fallback: fetch transcript via YouTube's innertube / timedtext API.
+ * Works without yt-dlp by scraping the caption track URL from the video page.
+ */
+async function fetchTranscriptViaInnertube(
+  videoId: string,
+): Promise<TranscriptResult> {
+  // Step 1: Fetch the video page to extract caption track URLs
+  const pageUrl = `https://www.youtube.com/watch?v=${videoId}`;
+  const pageRes = await fetch(pageUrl, {
+    headers: { "User-Agent": USER_AGENT },
+  });
+  if (!pageRes.ok) {
+    throw new Error(`Failed to fetch video page for ${videoId}: ${pageRes.status}`);
+  }
+
+  const html = await pageRes.text();
+
+  // Extract the captions JSON from the page source
+  const captionMatch = html.match(/"captionTracks":\s*(\[[\s\S]*?\])/);
+  if (!captionMatch) {
+    throw new Error(`No caption tracks found for ${videoId}`);
+  }
+
+  let captionTracks: Array<{ baseUrl: string; languageCode: string }>;
+  try {
+    captionTracks = JSON.parse(captionMatch[1]);
+  } catch {
+    throw new Error(`Failed to parse caption tracks for ${videoId}`);
+  }
+
+  // Prefer English captions
+  const enTrack = captionTracks.find((t) => t.languageCode === "en")
+    ?? captionTracks.find((t) => t.languageCode?.startsWith("en"))
+    ?? captionTracks[0];
+
+  if (!enTrack?.baseUrl) {
+    throw new Error(`No usable caption track for ${videoId}`);
+  }
+
+  // Step 2: Fetch the caption XML (srv1 format for timestamps)
+  const captionUrl = enTrack.baseUrl.replace(/&fmt=\w+/, "") + "&fmt=srv1";
+  const captionRes = await fetch(captionUrl, {
+    headers: { "User-Agent": USER_AGENT },
+  });
+  if (!captionRes.ok) {
+    throw new Error(`Failed to fetch captions for ${videoId}: ${captionRes.status}`);
+  }
+
+  const xml = await captionRes.text();
+  const segments = parseTranscriptXml(xml);
+  const text = segments.map((s) => s.text).join(" ");
+
+  return { text, segments };
+}
+
+/**
+ * Fetch the transcript for a YouTube video.
+ * Tries yt-dlp first, falls back to innertube scraping.
  */
 export async function fetchVideoTranscript(
   videoId: string,
 ): Promise<TranscriptResult> {
+  // Try yt-dlp first
   const basePath = join(tmpdir(), `confirmd_${videoId}_${Date.now()}`);
   const subPath = `${basePath}.en.srv1`;
 
@@ -201,11 +259,19 @@ export async function fetchVideoTranscript(
     const text = segments.map((s) => s.text).join(" ");
 
     return { text, segments };
+  } catch (ytDlpErr) {
+    console.warn(
+      `[CreatorPipeline] yt-dlp failed for ${videoId}, trying innertube fallback:`,
+      ytDlpErr instanceof Error ? ytDlpErr.message : ytDlpErr,
+    );
   } finally {
     try {
       await unlink(subPath);
     } catch {}
   }
+
+  // Fallback to innertube
+  return fetchTranscriptViaInnertube(videoId);
 }
 
 // ============================================

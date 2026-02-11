@@ -1558,8 +1558,10 @@ function groupClaimsIntoStories(
 ): { title: string; claimIds: string[] }[] {
   if (claims.length === 0) return [];
 
+  const MAX_CLAIMS_PER_STORY = 8;
+
   // Build adjacency: two claims are related if they share 3+ significant words,
-  // share asset symbols, AND are within 24 hours of each other.
+  // share asset symbols, AND are within 72 hours of each other.
   const groups: Map<number, Set<number>> = new Map();
   for (let i = 0; i < claims.length; i++) {
     groups.set(i, new Set([i]));
@@ -1579,14 +1581,14 @@ function groupClaimsIntoStories(
       const assetsJ = new Set(claims[j].assetSymbols);
       const timeJ = claims[j].publishedAt?.getTime() ?? Date.now();
 
-      // Time proximity: within 24 hours
+      // Time proximity: within 72 hours
       const timeDiffHours =
         Math.abs(timeI - timeJ) / (1000 * 60 * 60);
       if (timeDiffHours > 72) continue;
 
-      // Shared significant words
+      // Shared significant words (require 3+)
       const sharedWords = wordsI.filter((w) => wordsJ.includes(w));
-      const hasWordOverlap = sharedWords.length >= 2;
+      const hasWordOverlap = sharedWords.length >= 3;
 
       // Shared assets
       const hasAssetOverlap =
@@ -1594,9 +1596,18 @@ function groupClaimsIntoStories(
         assetsJ.size > 0 &&
         [...assetsI].some((a) => assetsJ.has(a));
 
-      if (hasWordOverlap || hasAssetOverlap) {
-        // Union-find merge
-        mergeGroups(groups, i, j);
+      // Require BOTH word AND asset overlap to merge
+      if (hasWordOverlap && hasAssetOverlap) {
+        // Enforce max claims-per-story cap before merging
+        const rootI = findRoot(groups, i);
+        const rootJ = findRoot(groups, j);
+        if (rootI !== rootJ) {
+          const sizeI = groups.get(rootI)!.size;
+          const sizeJ = groups.get(rootJ)!.size;
+          if (sizeI + sizeJ <= MAX_CLAIMS_PER_STORY) {
+            mergeGroups(groups, i, j);
+          }
+        }
       }
     }
   }
@@ -2224,21 +2235,22 @@ export class VerificationPipeline {
             },
           } as any);
 
-          // Kick off async AI image generation (don't block pipeline)
-          generateStoryImageAI(story.id, group.title, storyCategory)
-            .then(async (aiImageUrl) => {
-              if (aiImageUrl) {
-                try {
-                  await this.storage.updateStory(story.id, { imageUrl: aiImageUrl });
-                } catch { /* non-critical */ }
-              } else {
-                // Set SVG fallback URL
-                try {
-                  await this.storage.updateStory(story.id, { imageUrl: getStoryImageUrl(story.id) });
-                } catch { /* non-critical */ }
-              }
-            })
-            .catch(() => { /* AI gen failed silently */ });
+          // Generate AI image (awaited so we catch failures)
+          try {
+            const aiImageUrl = await generateStoryImageAI(story.id, group.title, storyCategory);
+            if (aiImageUrl) {
+              await this.storage.updateStory(story.id, { imageUrl: aiImageUrl });
+              console.log(`[Pipeline] AI image generated for story ${story.id}: ${aiImageUrl}`);
+            } else {
+              await this.storage.updateStory(story.id, { imageUrl: getStoryImageUrl(story.id) });
+              console.warn(`[Pipeline] AI image failed for story ${story.id}, using SVG fallback`);
+            }
+          } catch (imgErr: any) {
+            console.error(`[Pipeline] Image generation error for story ${story.id}:`, imgErr.message || imgErr);
+            try {
+              await this.storage.updateStory(story.id, { imageUrl: getStoryImageUrl(story.id) });
+            } catch { /* non-critical */ }
+          }
 
           // Link claims to story
           for (const claimId of group.claimIds) {

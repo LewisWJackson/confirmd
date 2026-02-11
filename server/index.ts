@@ -7,7 +7,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import apiRouter from "./routes.js";
 import stripeRouter from "./stripe.js";
-import { storage, seedInitialData, MemStorage } from "./storage.js";
+import { storage, seedInitialData, seedCreators, MemStorage } from "./storage.js";
 import { pool } from "./db.js";
 import { pipeline } from "./pipeline-instance.js";
 import { runCreatorPipeline, verifyCreatorClaims, recalculateCreatorScores } from "./creator-pipeline.js";
@@ -52,9 +52,10 @@ if (pool) {
 app.use(session(sessionConfig));
 
 // Rate limiting
+const defaultApiMax = process.env.NODE_ENV === "production" ? 100 : 1000;
 const apiLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 minute
-  max: 100,
+  max: parseInt(process.env.RATE_LIMIT_MAX || String(defaultApiMax), 10),
   standardHeaders: true,
   legacyHeaders: false,
 });
@@ -90,6 +91,12 @@ app.use((req, res, next) => {
 
 app.use("/api/stripe", stripeRouter);
 app.use("/api", apiRouter);
+
+// ─── AI-generated image static serving (works in all modes) ─────────
+const imageStorageRoot = process.env.PERSISTENT_STORAGE_DIR || path.resolve("dist", "public");
+app.use("/story-images", express.static(path.join(imageStorageRoot, "story-images")));
+app.use("/video-thumbnails", express.static(path.join(imageStorageRoot, "video-thumbnails")));
+app.use("/tier-images", express.static(path.join(imageStorageRoot, "tier-images")));
 
 // ─── Static / Vite Dev Server ───────────────────────────────────────
 
@@ -167,6 +174,9 @@ async function main() {
   } else {
     console.log("Using PostgreSQL — skipping seed data");
   }
+
+  // Seed creators if none exist (works for both MemStorage and Drizzle)
+  await seedCreators(storage);
 
   // Set up frontend serving
   await setupFrontend();

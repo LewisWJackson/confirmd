@@ -1,9 +1,9 @@
 import { Router, type Request, type Response } from "express";
 import bcrypt from "bcryptjs";
-import { storage } from "./storage.js";
+import { storage, seedCreators } from "./storage.js";
 import { validateCommunityEvidence } from "./pipeline.js";
 import { pipeline } from "./pipeline-instance.js";
-import { runCreatorPipeline, evaluateDispute } from "./creator-pipeline.js";
+import { runCreatorPipeline, verifyCreatorClaims, recalculateCreatorScores, evaluateDispute } from "./creator-pipeline.js";
 import { generateSvgFallback, generateStoryImageAI, generateVideoThumbnail, getVideoThumbnailUrl, generateTierImages } from "./image-generator.js";
 import { analytics } from "./analytics.js";
 import type { Claim, Verdict, EvidenceItem, Resolution, Source, SourceScore, Creator, CreatorVideo, CreatorClaim, CreatorScore, Dispute } from "../shared/schema.js";
@@ -504,7 +504,14 @@ router.get("/stories", async (req: Request, res: Response) => {
       singleSource: s.sourceCount <= 1,
     }));
 
-    res.json({ data });
+    res.json({
+      data,
+      meta: {
+        total: data.length,
+        limit,
+        offset,
+      },
+    });
   } catch (err) {
     console.error("Error fetching stories for feed:", (err as Error).message);
     res.status(500).json({ error: "Failed to fetch stories" });
@@ -663,6 +670,7 @@ router.get("/stories/:id", async (req: Request, res: Response) => {
       credibilityDistribution,
       coverage,
       claims: enrichedClaims,
+      claimCount: enrichedClaims.length,
       verdictDistribution,
       creatorPredictions,
     });
@@ -818,6 +826,90 @@ router.get("/claims/:id/verdict-history", async (req: Request, res: Response) =>
   } catch (err) {
     console.error("Error fetching verdict history:", (err as Error).message);
     res.status(500).json({ error: "Failed to fetch verdict history" });
+  }
+});
+
+// ─── GET /search ────────────────────────────────────────────────────
+
+router.get("/search", async (req: Request, res: Response) => {
+  try {
+    const q = (req.query.q as string || "").trim();
+    if (!q) {
+      res.status(400).json({ error: "Query parameter 'q' is required" });
+      return;
+    }
+
+    const type = (req.query.type as string) || "all";
+    const limit = Math.min(parseInt(req.query.limit as string, 10) || 20, 100);
+    const offset = parseInt(req.query.offset as string, 10) || 0;
+
+    const results = await storage.search(q, { type, limit, offset });
+
+    // Enrich claims with source/verdict info
+    const enrichedClaims = await Promise.all(results.claims.map(enrichClaim));
+
+    // Enrich stories with claim count
+    const enrichedStories = await Promise.all(
+      results.stories.map(async (story) => {
+        const storyWithClaims = await storage.getStoryWithClaims(story.id);
+        return {
+          id: story.id,
+          title: story.title,
+          summary: story.summary,
+          imageUrl: story.imageUrl || `/api/stories/${story.id}/image`,
+          category: story.category,
+          assetSymbols: story.assetSymbols ?? [],
+          createdAt: story.createdAt,
+          claimCount: storyWithClaims?.claims.length ?? 0,
+        };
+      })
+    );
+
+    // Enrich sources with score
+    const enrichedSources = await Promise.all(
+      results.sources.map(async (source) => {
+        const score = await storage.getSourceScore(source.id);
+        const logoAbbrev = source.displayName
+          .split(" ")
+          .map((w) => w[0])
+          .join("")
+          .toUpperCase()
+          .slice(0, 3);
+        return {
+          id: source.id,
+          type: source.type,
+          handleOrDomain: source.handleOrDomain,
+          displayName: source.displayName,
+          logo: logoAbbrev,
+          logoUrl: source.logoUrl,
+          score: score
+            ? {
+                trackRecord: score.trackRecord,
+                methodDiscipline: score.methodDiscipline,
+                sampleSize: score.sampleSize,
+                confidenceInterval: score.confidenceInterval,
+              }
+            : null,
+        };
+      })
+    );
+
+    const total = enrichedClaims.length + enrichedStories.length + enrichedSources.length;
+
+    res.json({
+      data: {
+        claims: enrichedClaims,
+        stories: enrichedStories,
+        sources: enrichedSources,
+      },
+      meta: {
+        total,
+        query: q,
+      },
+    });
+  } catch (err) {
+    console.error("GET /search error:", err);
+    res.status(500).json({ error: "Failed to perform search" });
   }
 });
 
@@ -1243,8 +1335,8 @@ router.get("/disputes/:claimId", requireTier("tribune"), async (req: Request, re
 });
 
 // ─── POST /admin/regenerate-images ─────────────────────────────────
-// Clears old external image URLs and sequentially generates AI images
-// with a delay between each to avoid rate limits.
+// Sequentially generates AI images for stories missing them,
+// with retry logic and delay between requests to avoid rate limits.
 
 let regenRunning = false;
 
@@ -1255,48 +1347,49 @@ router.post("/admin/regenerate-images", async (req: Request, res: Response) => {
       return;
     }
 
+    regenRunning = true;
     const force = req.query.force === "true";
     const stories = await storage.getStories();
     const toProcess = force ? stories : stories.filter(s => !s.imageUrl?.startsWith("/story-images/"));
 
-    // Clear all old URLs immediately so SVG fallbacks show
+    console.log(`[RegenImages] Starting: ${toProcess.length} stories to process (${stories.length} total, ${stories.length - toProcess.length} skipped)`);
+
+    let success = 0;
+    let failed = 0;
     for (const story of toProcess) {
-      await storage.updateStory(story.id, { imageUrl: null as any });
-    }
-
-    // Respond immediately, process in background
-    res.json({
-      message: `Processing ${toProcess.length} stories sequentially in background`,
-      total: stories.length,
-      skipped: stories.length - toProcess.length,
-    });
-
-    // Sequential background processing with delay
-    regenRunning = true;
-    (async () => {
-      let success = 0;
-      let failed = 0;
-      for (const story of toProcess) {
-        try {
-          const aiUrl = await generateStoryImageAI(story.id, story.title, story.category, force);
-          if (aiUrl) {
-            await storage.updateStory(story.id, { imageUrl: aiUrl });
-            success++;
-          } else {
-            await storage.updateStory(story.id, { imageUrl: `/api/stories/${story.id}/image` });
-            failed++;
-          }
-        } catch {
+      try {
+        const aiUrl = await generateStoryImageAI(story.id, story.title, story.category, force);
+        if (aiUrl) {
+          await storage.updateStory(story.id, { imageUrl: aiUrl });
+          success++;
+          console.log(`[RegenImages] ✓ ${story.id}: ${story.title.slice(0, 50)}`);
+        } else {
           await storage.updateStory(story.id, { imageUrl: `/api/stories/${story.id}/image` });
           failed++;
+          console.log(`[RegenImages] ✗ ${story.id}: fell back to SVG`);
         }
-        // 3 second delay between requests to respect rate limits
-        await new Promise(r => setTimeout(r, 3000));
+      } catch (err: any) {
+        await storage.updateStory(story.id, { imageUrl: `/api/stories/${story.id}/image` });
+        failed++;
+        console.error(`[RegenImages] ✗ ${story.id}: ${err.message || err}`);
       }
-      console.log(`[RegenImages] Done: ${success} generated, ${failed} fell back to SVG`);
-      regenRunning = false;
-    })().catch(() => { regenRunning = false; });
+      // 3 second delay between requests to respect rate limits
+      await new Promise(r => setTimeout(r, 3000));
+    }
+
+    regenRunning = false;
+    console.log(`[RegenImages] Done: ${success} generated, ${failed} fell back to SVG`);
+
+    res.json({
+      message: `Regeneration complete`,
+      total: stories.length,
+      processed: toProcess.length,
+      skipped: stories.length - toProcess.length,
+      success,
+      failed,
+    });
   } catch (err) {
+    regenRunning = false;
     console.error("POST /admin/regenerate-images error:", err);
     res.status(500).json({ error: "Failed to regenerate images" });
   }
@@ -1591,6 +1684,42 @@ router.post("/admin/pipeline/run", requireAuth, async (_req: Request, res: Respo
   } catch (err) {
     console.error("POST /admin/pipeline/run error:", err);
     res.status(500).json({ error: "Failed to trigger pipeline" });
+  }
+});
+
+// ─── POST /admin/run-creator-pipeline ─────────────────────────────────
+// Seeds creators if needed, then runs the full creator pipeline cycle.
+
+router.post("/admin/run-creator-pipeline", async (_req: Request, res: Response) => {
+  try {
+    // Ensure seed creators exist
+    await seedCreators(storage);
+
+    // Fire the full cycle asynchronously
+    (async () => {
+      try {
+        const result = await runCreatorPipeline(storage);
+        await verifyCreatorClaims(storage);
+        await recalculateCreatorScores(storage);
+        console.log(`[Admin] Creator pipeline complete: ${result.creatorsProcessed} creators, ${result.totalClaims} claims`);
+      } catch (err) {
+        console.error("[Admin] Creator pipeline run failed:", err);
+      }
+    })();
+
+    const creators = await storage.getCreators();
+    res.status(202).json({
+      message: "Creator pipeline started",
+      creatorsCount: creators.length,
+      creators: creators.map((c) => ({
+        id: c.id,
+        channelName: c.channelName,
+        youtubeChannelId: c.youtubeChannelId,
+      })),
+    });
+  } catch (err) {
+    console.error("POST /admin/run-creator-pipeline error:", err);
+    res.status(500).json({ error: "Failed to trigger creator pipeline" });
   }
 });
 

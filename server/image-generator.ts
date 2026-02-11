@@ -72,60 +72,86 @@ export async function generateStoryImageAI(
     return null;
   }
 
-  try {
-    ensureImagesDir();
+  const MAX_RETRIES = 3;
+  const RETRY_DELAYS = [1000, 3000, 9000]; // exponential backoff
 
-    const prompt = buildPrompt(title, category);
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      ensureImagesDir();
 
-    console.log(`[ImageGen] Generating image for story "${title.slice(0, 50)}..."`);
+      const prompt = buildPrompt(title, category);
 
-    const response = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{
-          parts: [{ text: `Generate an image: ${prompt}` }],
-        }],
-        generationConfig: {
-          responseModalities: ["TEXT", "IMAGE"],
-        },
-      }),
-    });
+      console.log(`[ImageGen] Generating image for story "${title.slice(0, 50)}..." (attempt ${attempt}/${MAX_RETRIES})`);
 
-    if (!response.ok) {
-      const errText = await response.text();
-      console.error(`[ImageGen] Gemini API error ${response.status}:`, errText.slice(0, 200));
+      const response = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{
+            parts: [{ text: `Generate an image: ${prompt}` }],
+          }],
+          generationConfig: {
+            responseModalities: ["TEXT", "IMAGE"],
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        console.error(`[ImageGen] Gemini API error ${response.status} (attempt ${attempt}):`, errText.slice(0, 200));
+        if (attempt < MAX_RETRIES) {
+          console.log(`[ImageGen] Retrying in ${RETRY_DELAYS[attempt - 1]}ms...`);
+          await new Promise(r => setTimeout(r, RETRY_DELAYS[attempt - 1]));
+          continue;
+        }
+        return null;
+      }
+
+      const data = await response.json() as any;
+
+      // Find the image part in the response
+      const parts = data?.candidates?.[0]?.content?.parts;
+      if (!parts || !Array.isArray(parts)) {
+        console.error(`[ImageGen] No parts in Gemini response (attempt ${attempt})`);
+        if (attempt < MAX_RETRIES) {
+          console.log(`[ImageGen] Retrying in ${RETRY_DELAYS[attempt - 1]}ms...`);
+          await new Promise(r => setTimeout(r, RETRY_DELAYS[attempt - 1]));
+          continue;
+        }
+        return null;
+      }
+
+      const imagePart = parts.find((p: any) => p.inlineData?.data);
+      if (!imagePart) {
+        console.error(`[ImageGen] No image data in Gemini response (attempt ${attempt})`);
+        if (attempt < MAX_RETRIES) {
+          console.log(`[ImageGen] Retrying in ${RETRY_DELAYS[attempt - 1]}ms...`);
+          await new Promise(r => setTimeout(r, RETRY_DELAYS[attempt - 1]));
+          continue;
+        }
+        return null;
+      }
+
+      const b64 = imagePart.inlineData.data;
+
+      // Save to file
+      const buffer = Buffer.from(b64, "base64");
+      const filePath = getImagePath(storyId);
+      fs.writeFileSync(filePath, buffer);
+
+      console.log(`[ImageGen] Saved ${filePath} (${(buffer.length / 1024).toFixed(0)}KB)`);
+      return `/story-images/${storyId}.png`;
+    } catch (err: any) {
+      console.error(`[ImageGen] Failed for "${title.slice(0, 50)}" (attempt ${attempt}):`, err.message || err);
+      if (attempt < MAX_RETRIES) {
+        console.log(`[ImageGen] Retrying in ${RETRY_DELAYS[attempt - 1]}ms...`);
+        await new Promise(r => setTimeout(r, RETRY_DELAYS[attempt - 1]));
+        continue;
+      }
       return null;
     }
-
-    const data = await response.json() as any;
-
-    // Find the image part in the response
-    const parts = data?.candidates?.[0]?.content?.parts;
-    if (!parts || !Array.isArray(parts)) {
-      console.error("[ImageGen] No parts in Gemini response");
-      return null;
-    }
-
-    const imagePart = parts.find((p: any) => p.inlineData?.data);
-    if (!imagePart) {
-      console.error("[ImageGen] No image data in Gemini response");
-      return null;
-    }
-
-    const b64 = imagePart.inlineData.data;
-
-    // Save to file
-    const buffer = Buffer.from(b64, "base64");
-    const filePath = getImagePath(storyId);
-    fs.writeFileSync(filePath, buffer);
-
-    console.log(`[ImageGen] Saved ${filePath} (${(buffer.length / 1024).toFixed(0)}KB)`);
-    return `/story-images/${storyId}.png`;
-  } catch (err: any) {
-    console.error(`[ImageGen] Failed for "${title.slice(0, 50)}":`, err.message || err);
-    return null;
   }
+  return null;
 }
 
 /**

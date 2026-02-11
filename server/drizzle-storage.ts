@@ -1,6 +1,6 @@
-import { eq, desc, asc, sql } from "drizzle-orm";
+import { eq, desc, asc, sql, ilike, or } from "drizzle-orm";
 import type { DrizzleDB } from "./db.js";
-import type { IStorage, ClaimFilters, PipelineStats, StoryFeedItem } from "./storage.js";
+import type { IStorage, ClaimFilters, PipelineStats, StoryFeedItem, SearchResults } from "./storage.js";
 import {
   sources,
   items,
@@ -437,6 +437,7 @@ export class DrizzleStorage implements IStorage {
         summary: story.summary,
         imageUrl: story.imageUrl,
         category: story.category,
+        status: story.status ?? "complete",
         createdAt: story.createdAt,
         assetSymbols: story.assetSymbols ?? [],
         sourceCount: sourceMap.size || story.sourceCount || 0,
@@ -701,6 +702,60 @@ export class DrizzleStorage implements IStorage {
   async getActiveNewsletterSubscribers(): Promise<NewsletterSubscriber[]> {
     return this.db.select().from(newsletterSubscribers)
       .where(eq(newsletterSubscribers.isActive, true));
+  }
+
+  // ── Search ─────────────────────────────────────────────────────────
+
+  async search(query: string, options?: { type?: string; limit?: number; offset?: number }): Promise<SearchResults> {
+    const pattern = `%${query}%`;
+    const limit = options?.limit ?? 20;
+    const offset = options?.offset ?? 0;
+    const type = options?.type ?? "all";
+
+    let matchedClaims: Claim[] = [];
+    let matchedStories: Story[] = [];
+    let matchedSources: Source[] = [];
+
+    if (type === "all" || type === "claims") {
+      matchedClaims = await this.db
+        .select()
+        .from(claims)
+        .where(ilike(claims.claimText, pattern))
+        .orderBy(desc(claims.assertedAt))
+        .limit(limit)
+        .offset(offset);
+    }
+
+    if (type === "all" || type === "stories") {
+      matchedStories = await this.db
+        .select()
+        .from(stories)
+        .where(
+          or(
+            ilike(stories.title, pattern),
+            ilike(stories.summary, pattern),
+          )
+        )
+        .orderBy(desc(stories.updatedAt))
+        .limit(limit)
+        .offset(offset);
+    }
+
+    if (type === "all" || type === "sources") {
+      matchedSources = await this.db
+        .select()
+        .from(sources)
+        .where(
+          or(
+            ilike(sources.displayName, pattern),
+            ilike(sources.handleOrDomain, pattern),
+          )
+        )
+        .limit(limit)
+        .offset(offset);
+    }
+
+    return { claims: matchedClaims, stories: matchedStories, sources: matchedSources };
   }
 
   // ── Pipeline Stats ───────────────────────────────────────────────

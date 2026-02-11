@@ -139,6 +139,9 @@ export interface IStorage {
 
   // Pipeline Stats
   getPipelineStats(): Promise<PipelineStats>;
+
+  // Search
+  search(query: string, options?: { type?: string; limit?: number; offset?: number }): Promise<SearchResults>;
 }
 
 export interface ClaimFilters {
@@ -161,12 +164,19 @@ export interface PipelineStats {
   lastRunAt: string | null;
 }
 
+export interface SearchResults {
+  claims: Claim[];
+  stories: Story[];
+  sources: Source[];
+}
+
 export interface StoryFeedItem {
   id: string;
   title: string;
   summary: string | null;
   imageUrl: string | null;
   category: string | null;
+  status: string;
   createdAt: Date | null;
   assetSymbols: string[];
   sourceCount: number;
@@ -670,6 +680,7 @@ export class MemStorage implements IStorage {
         summary: story.summary,
         imageUrl: story.imageUrl,
         category: story.category,
+        status: (story as any).status ?? "complete",
         createdAt: story.createdAt,
         assetSymbols: story.assetSymbols ?? [],
         sourceCount: sourceMap.size || story.sourceCount || 0,
@@ -1084,6 +1095,47 @@ export class MemStorage implements IStorage {
 
   async getActiveNewsletterSubscribers(): Promise<NewsletterSubscriber[]> {
     return Array.from(this.newsletterSubscribersMap.values()).filter((s) => s.isActive);
+  }
+
+  // ── Search ─────────────────────────────────────────────────────────
+
+  async search(query: string, options?: { type?: string; limit?: number; offset?: number }): Promise<SearchResults> {
+    const q = query.toLowerCase();
+    const limit = options?.limit ?? 20;
+    const offset = options?.offset ?? 0;
+    const type = options?.type ?? "all";
+
+    let matchedClaims: Claim[] = [];
+    let matchedStories: Story[] = [];
+    let matchedSources: Source[] = [];
+
+    if (type === "all" || type === "claims") {
+      matchedClaims = Array.from(this.claims.values())
+        .filter((c) => c.claimText.toLowerCase().includes(q))
+        .slice(offset, offset + limit);
+    }
+
+    if (type === "all" || type === "stories") {
+      matchedStories = Array.from(this.stories.values())
+        .filter(
+          (s) =>
+            s.title.toLowerCase().includes(q) ||
+            (s.summary?.toLowerCase().includes(q) ?? false)
+        )
+        .slice(offset, offset + limit);
+    }
+
+    if (type === "all" || type === "sources") {
+      matchedSources = Array.from(this.sources.values())
+        .filter(
+          (s) =>
+            s.displayName.toLowerCase().includes(q) ||
+            s.handleOrDomain.toLowerCase().includes(q)
+        )
+        .slice(offset, offset + limit);
+    }
+
+    return { claims: matchedClaims, stories: matchedStories, sources: matchedSources };
   }
 
   // ── Pipeline Stats ───────────────────────────────────────────────
@@ -1862,6 +1914,77 @@ export async function seedInitialData(storage: MemStorage): Promise<void> {
 
   // Mark initial pipeline run
   storage.setLastPipelineRun(new Date().toISOString());
+}
+
+// ─── Seed Creators (works for ALL storage types) ─────────────────────
+
+const SEED_CREATORS: Array<{
+  youtubeChannelId: string;
+  channelName: string;
+  channelHandle: string;
+  channelUrl: string;
+  description: string;
+}> = [
+  {
+    youtubeChannelId: "UCqK_GSMbpiV8spgD3ZGloSw",
+    channelName: "Coin Bureau",
+    channelHandle: "@CoinBureau",
+    channelUrl: "https://www.youtube.com/@CoinBureau",
+    description: "Crypto education and market analysis",
+  },
+  {
+    youtubeChannelId: "UCRvqjQPSeaWn-uEx-w0XOIg",
+    channelName: "Benjamin Cowen",
+    channelHandle: "@BenjaminCowen",
+    channelUrl: "https://www.youtube.com/@BenjaminCowen",
+    description: "Data-driven crypto analysis and risk management",
+  },
+  {
+    youtubeChannelId: "UCbLhGKVY-bJPcawebgtNfbw",
+    channelName: "Altcoin Daily",
+    channelHandle: "@AltcoinDaily",
+    channelUrl: "https://www.youtube.com/@AltcoinDaily",
+    description: "Daily cryptocurrency news and analysis",
+  },
+  {
+    youtubeChannelId: "UCCatR7nWbYrkVXdxXb4cGXg",
+    channelName: "DataDash",
+    channelHandle: "@DataDash",
+    channelUrl: "https://www.youtube.com/@DataDash",
+    description: "Crypto trading and technical analysis",
+  },
+  {
+    youtubeChannelId: "UCN9Nj4tjXbVTLYWN0EKly_Q",
+    channelName: "Crypto Banter",
+    channelHandle: "@CryptoBanter",
+    channelUrl: "https://www.youtube.com/@CryptoBanter",
+    description: "Live crypto trading shows and market commentary",
+  },
+];
+
+export async function seedCreators(storage: IStorage): Promise<void> {
+  const existing = await storage.getCreators();
+  if (existing.length > 0) {
+    console.log(`[SeedCreators] ${existing.length} creators already exist — skipping`);
+    return;
+  }
+
+  console.log(`[SeedCreators] No creators found — seeding ${SEED_CREATORS.length} channels`);
+
+  for (const seed of SEED_CREATORS) {
+    await storage.createCreator({
+      youtubeChannelId: seed.youtubeChannelId,
+      channelName: seed.channelName,
+      channelHandle: seed.channelHandle,
+      channelUrl: seed.channelUrl,
+      description: seed.description,
+      primaryNiche: "crypto",
+      isActive: true,
+    });
+    console.log(`[SeedCreators]   Created: ${seed.channelName}`);
+  }
+
+  console.log("[SeedCreators] Done");
 }
 
 // ─── Singleton ───────────────────────────────────────────────────────
