@@ -285,7 +285,19 @@ export const disputes = pgTable("dispute", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// ─── Newsletter Tables ───────────────────────────────────────────────
+
+export const newsletterSubscribers = pgTable("newsletter_subscriber", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  email: text("email").notNull().unique(),
+  preferences: jsonb("preferences").default({ dailyBriefing: true, blindspotReport: true, weeklyDigest: true }),
+  isActive: boolean("is_active").default(true),
+  subscribedAt: timestamp("subscribed_at").defaultNow(),
+  unsubscribedAt: timestamp("unsubscribed_at"),
+});
+
 // Insert schemas
+export const insertNewsletterSubscriberSchema = createInsertSchema(newsletterSubscribers).omit({ id: true, subscribedAt: true, unsubscribedAt: true });
 export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true });
 export const insertSourceSchema = createInsertSchema(sources).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertItemSchema = createInsertSchema(items).omit({ id: true, ingestedAt: true });
@@ -332,3 +344,5 @@ export type Dispute = typeof disputes.$inferSelect;
 export type InsertDispute = z.infer<typeof insertDisputeSchema>;
 export type Gift = typeof gifts.$inferSelect;
 export type InsertGift = z.infer<typeof insertGiftSchema>;
+export type NewsletterSubscriber = typeof newsletterSubscribers.$inferSelect;
+export type InsertNewsletterSubscriber = z.infer<typeof insertNewsletterSubscriberSchema>;

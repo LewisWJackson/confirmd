@@ -10,6 +10,7 @@ import { storage, seedInitialData, MemStorage } from "./storage.js";
 import { pool } from "./db.js";
 import { pipeline } from "./pipeline-instance.js";
 import { runCreatorPipeline, verifyCreatorClaims, recalculateCreatorScores } from "./creator-pipeline.js";
+import { analytics } from "./analytics.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -67,21 +68,19 @@ const authLimiter = rateLimit({
 app.use("/api/auth", authLimiter);
 app.use("/api", apiLimiter);
 
-// Request logging
+// Request logging + analytics tracking
 app.use((req, res, next) => {
   const start = Date.now();
-  const originalSend = res.json.bind(res);
 
-  // Intercept json responses to log timing
-  res.json = (body: any) => {
+  res.on("finish", () => {
     const duration = Date.now() - start;
     if (req.path.startsWith("/api")) {
       console.log(
         `${req.method} ${req.path} ${res.statusCode} ${duration}ms`
       );
+      analytics.recordRequest(req.method, req.path, res.statusCode, duration);
     }
-    return originalSend(body);
-  };
+  });
 
   next();
 });

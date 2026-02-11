@@ -26,6 +26,7 @@ import type {
 } from "../shared/schema.js";
 import { storage } from "./storage.js";
 import { generateStoryImageAI } from "./image-generator.js";
+import { analytics } from "./analytics.js";
 
 // ============================================
 // CONFIGURATION
@@ -82,6 +83,82 @@ const RSS_FEEDS: { name: string; url: string; domain: string }[] = [
     url: "https://unchainedcrypto.com/feed/",
     domain: "unchainedcrypto.com",
   },
+  {
+    name: "Bitcoinist",
+    url: "https://bitcoinist.com/feed/",
+    domain: "bitcoinist.com",
+  },
+  {
+    name: "BeInCrypto",
+    url: "https://beincrypto.com/feed/",
+    domain: "beincrypto.com",
+  },
+  {
+    name: "CryptoNews",
+    url: "https://cryptonews.com/news/feed/",
+    domain: "cryptonews.com",
+  },
+  {
+    name: "NewsBTC",
+    url: "https://www.newsbtc.com/feed/",
+    domain: "newsbtc.com",
+  },
+  {
+    name: "CryptoPotato",
+    url: "https://cryptopotato.com/feed/",
+    domain: "cryptopotato.com",
+  },
+  {
+    name: "U.Today",
+    url: "https://u.today/rss",
+    domain: "u.today",
+  },
+  {
+    name: "AMBCrypto",
+    url: "https://ambcrypto.com/feed/",
+    domain: "ambcrypto.com",
+  },
+  {
+    name: "Crypto Briefing",
+    url: "https://cryptobriefing.com/feed/",
+    domain: "cryptobriefing.com",
+  },
+  {
+    name: "Protos",
+    url: "https://protos.com/feed/",
+    domain: "protos.com",
+  },
+  {
+    name: "WuBlockchain",
+    url: "https://wublockchain.com/feed/",
+    domain: "wublockchain.com",
+  },
+];
+
+// Future source types for expansion beyond RSS
+// These stubs define the shape for Twitter/X and Telegram ingestion
+// once API access is configured.
+interface TwitterSource {
+  name: string;
+  handle: string; // e.g. "@whale_alert"
+  type: "x_handle";
+}
+interface TelegramSource {
+  name: string;
+  channelId: string; // e.g. "crypto_insider"
+  type: "telegram";
+}
+
+// Placeholder lists — populate when API keys are available
+const TWITTER_SOURCES: TwitterSource[] = [
+  // { name: "Whale Alert", handle: "@whale_alert", type: "x_handle" },
+  // { name: "ZachXBT", handle: "@zachxbt", type: "x_handle" },
+  // { name: "lookonchain", handle: "@lookonchain", type: "x_handle" },
+  // { name: "DefiLlama", handle: "@DefiLlama", type: "x_handle" },
+];
+const TELEGRAM_SOURCES: TelegramSource[] = [
+  // { name: "Wu Blockchain", channelId: "WuBlockchain", type: "telegram" },
+  // { name: "The Block", channelId: "TheBlock__", type: "telegram" },
 ];
 
 const MAX_ARTICLES_PER_BATCH = 30;
@@ -1698,6 +1775,7 @@ export class VerificationPipeline {
     let batchClaimsExtracted = 0;
 
     console.log("[Pipeline] === Starting daily batch run ===");
+    analytics.recordPipelineStart();
 
     try {
       // Step 1: Fetch all RSS feeds
@@ -1771,11 +1849,14 @@ export class VerificationPipeline {
       console.log(
         `[Pipeline] === Batch complete: ${batchArticlesProcessed} articles, ${batchClaimsExtracted} claims in ${elapsed}s ===`,
       );
+      analytics.recordPipelineEnd(batchArticlesProcessed, batchClaimsExtracted);
     } catch (error) {
       console.error(
         "[Pipeline] Batch run failed:",
         error instanceof Error ? error.message : error,
       );
+      analytics.recordPipelineEnd(batchArticlesProcessed, batchClaimsExtracted,
+        error instanceof Error ? error.message : String(error));
     } finally {
       this.isRunning = false;
     }

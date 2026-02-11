@@ -19,6 +19,7 @@ import {
   creatorScores,
   disputes,
   gifts,
+  newsletterSubscribers,
 } from "../shared/schema.js";
 import type {
   Source,
@@ -48,6 +49,8 @@ import type {
   Dispute,
   InsertDispute,
   Gift,
+  NewsletterSubscriber,
+  InsertNewsletterSubscriber,
 } from "../shared/schema.js";
 
 export class DrizzleStorage implements IStorage {
@@ -654,6 +657,43 @@ export class DrizzleStorage implements IStorage {
       .update(users)
       .set({ subscriptionTier: "premium", subscriptionExpiresAt: expiresAt })
       .where(eq(users.id, userId));
+  }
+
+  // ── Newsletter ──────────────────────────────────────────────────
+
+  async subscribeNewsletter(data: InsertNewsletterSubscriber): Promise<NewsletterSubscriber> {
+    // Check for existing subscriber
+    const [existing] = await this.db.select().from(newsletterSubscribers)
+      .where(eq(newsletterSubscribers.email, data.email));
+    if (existing) {
+      if (!existing.isActive) {
+        await this.db.update(newsletterSubscribers)
+          .set({ isActive: true, unsubscribedAt: null, preferences: data.preferences ?? existing.preferences })
+          .where(eq(newsletterSubscribers.id, existing.id));
+        return { ...existing, isActive: true, unsubscribedAt: null };
+      }
+      return existing;
+    }
+    const [subscriber] = await this.db.insert(newsletterSubscribers).values(data).returning();
+    return subscriber;
+  }
+
+  async unsubscribeNewsletter(email: string): Promise<boolean> {
+    const result = await this.db.update(newsletterSubscribers)
+      .set({ isActive: false, unsubscribedAt: new Date() })
+      .where(eq(newsletterSubscribers.email, email));
+    return (result as any).rowCount > 0;
+  }
+
+  async getNewsletterSubscriber(email: string): Promise<NewsletterSubscriber | undefined> {
+    const [subscriber] = await this.db.select().from(newsletterSubscribers)
+      .where(eq(newsletterSubscribers.email, email));
+    return subscriber;
+  }
+
+  async getActiveNewsletterSubscribers(): Promise<NewsletterSubscriber[]> {
+    return this.db.select().from(newsletterSubscribers)
+      .where(eq(newsletterSubscribers.isActive, true));
   }
 
   // ── Pipeline Stats ───────────────────────────────────────────────

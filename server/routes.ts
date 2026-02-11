@@ -5,6 +5,7 @@ import { validateCommunityEvidence } from "./pipeline.js";
 import { pipeline } from "./pipeline-instance.js";
 import { runCreatorPipeline, evaluateDispute } from "./creator-pipeline.js";
 import { generateSvgFallback, generateStoryImageAI, generateVideoThumbnail, getVideoThumbnailUrl, generateTierImages } from "./image-generator.js";
+import { analytics } from "./analytics.js";
 import type { Claim, Verdict, EvidenceItem, Resolution, Source, SourceScore, Creator, CreatorVideo, CreatorClaim, CreatorScore, Dispute } from "../shared/schema.js";
 
 declare module "express-session" {
@@ -1592,6 +1593,19 @@ router.post("/admin/pipeline/run", requireAuth, async (_req: Request, res: Respo
   }
 });
 
+// ─── GET /admin/metrics ──────────────────────────────────────────────
+// Returns API stats, pipeline health, and system uptime.
+
+router.get("/admin/metrics", async (_req: Request, res: Response) => {
+  try {
+    const metrics = analytics.getMetrics();
+    res.json(metrics);
+  } catch (err) {
+    console.error("GET /admin/metrics error:", err);
+    res.status(500).json({ error: "Failed to fetch metrics" });
+  }
+});
+
 // ─── Firmy AI Support Agent ─────────────────────────────────────────
 
 const FIRMY_KNOWLEDGE: Record<string, { keywords: string[]; response: string; action?: string }> = {
@@ -1721,6 +1735,187 @@ router.post("/support/escalate", (req: Request, res: Response) => {
   } catch (err) {
     console.error("POST /support/escalate error:", err);
     res.status(500).json({ error: "Failed to submit escalation" });
+  }
+});
+
+// ─── Newsletter ─────────────────────────────────────────────────────
+
+router.post("/newsletter/subscribe", async (req: Request, res: Response) => {
+  try {
+    const { email, preferences } = req.body || {};
+
+    if (!email || typeof email !== "string" || !email.includes("@")) {
+      res.status(400).json({ error: "A valid email address is required" });
+      return;
+    }
+
+    const subscriber = await storage.subscribeNewsletter({
+      email: email.trim().toLowerCase(),
+      preferences: preferences ?? { dailyBriefing: true, blindspotReport: true, weeklyDigest: true },
+      isActive: true,
+    });
+
+    res.json({
+      success: true,
+      message: "Successfully subscribed to the newsletter",
+      subscriber: {
+        id: subscriber.id,
+        email: subscriber.email,
+        preferences: subscriber.preferences,
+        subscribedAt: subscriber.subscribedAt,
+      },
+    });
+  } catch (err) {
+    console.error("POST /newsletter/subscribe error:", err);
+    res.status(500).json({ error: "Failed to subscribe" });
+  }
+});
+
+router.post("/newsletter/unsubscribe", async (req: Request, res: Response) => {
+  try {
+    const { email } = req.body || {};
+
+    if (!email || typeof email !== "string") {
+      res.status(400).json({ error: "Email is required" });
+      return;
+    }
+
+    const success = await storage.unsubscribeNewsletter(email.trim().toLowerCase());
+    if (!success) {
+      res.status(404).json({ error: "Email not found in subscriber list" });
+      return;
+    }
+
+    res.json({ success: true, message: "Successfully unsubscribed" });
+  } catch (err) {
+    console.error("POST /newsletter/unsubscribe error:", err);
+    res.status(500).json({ error: "Failed to unsubscribe" });
+  }
+});
+
+// ─── Daily Briefing ─────────────────────────────────────────────────
+
+router.get("/briefing/daily", async (_req: Request, res: Response) => {
+  try {
+    // Get stories for the feed (already sorted by recency)
+    const stories = await storage.getStoriesForFeed(10, 0);
+
+    // Get recent claims from the last 24 hours
+    const allClaims = await storage.getClaims({ sort: "newest", limit: 20 });
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const recentClaims = allClaims.filter(
+      (c) => new Date(c.assertedAt).getTime() >= oneDayAgo.getTime()
+    );
+
+    // Enrich recent claims with verdicts and sources
+    const enrichedClaims = await Promise.all(recentClaims.map(enrichClaim));
+
+    // Compute summary stats
+    const verdictCounts = { verified: 0, plausible_unverified: 0, speculative: 0, misleading: 0 };
+    for (const c of enrichedClaims) {
+      if (c.verdict) {
+        const label = c.verdict.verdictLabel as keyof typeof verdictCounts;
+        if (label in verdictCounts) verdictCounts[label]++;
+      }
+    }
+
+    res.json({
+      date: new Date().toISOString().split("T")[0],
+      generatedAt: new Date().toISOString(),
+      summary: {
+        totalStories: stories.length,
+        totalClaims: enrichedClaims.length,
+        verdictBreakdown: verdictCounts,
+      },
+      topStories: stories.slice(0, 5).map((s) => ({
+        id: s.id,
+        title: s.title,
+        summary: s.summary,
+        category: s.category,
+        sourceCount: s.sourceCount,
+        credibilityDistribution: s.credibilityDistribution,
+        latestItemTimestamp: s.latestItemTimestamp,
+      })),
+      recentClaims: enrichedClaims.slice(0, 10),
+    });
+  } catch (err) {
+    console.error("GET /briefing/daily error:", err);
+    res.status(500).json({ error: "Failed to generate daily briefing" });
+  }
+});
+
+// ─── Signals ────────────────────────────────────────────────────────
+
+router.get("/signals", async (req: Request, res: Response) => {
+  try {
+    const filter = req.query.filter as string | undefined;
+
+    // Get all claims with newest first
+    const allClaims = await storage.getClaims({ sort: "newest", limit: 500 });
+    const enrichedClaims = await Promise.all(allClaims.map(enrichClaim));
+
+    // Group by asset symbol
+    const symbolMap: Record<string, EnrichedClaim[]> = {};
+    for (const claim of enrichedClaims) {
+      const symbols = claim.assetSymbols ?? [];
+      for (const symbol of symbols) {
+        if (!symbolMap[symbol]) symbolMap[symbol] = [];
+        symbolMap[symbol].push(claim);
+      }
+    }
+
+    // Build signal objects
+    let signals = Object.entries(symbolMap).map(([symbol, claims]) => {
+      const dist = { verified: 0, plausible_unverified: 0, speculative: 0, misleading: 0 };
+      let probSum = 0;
+      let probCount = 0;
+
+      for (const c of claims) {
+        if (c.verdict) {
+          const label = c.verdict.verdictLabel as keyof typeof dist;
+          if (label in dist) dist[label]++;
+          probSum += c.verdict.probabilityTrue ?? 0;
+          probCount++;
+        } else {
+          dist.speculative++;
+        }
+      }
+
+      return {
+        symbol,
+        totalClaims: claims.length,
+        verdictDistribution: dist,
+        avgProbability: probCount > 0 ? probSum / probCount : 0,
+        recentClaims: claims.slice(0, 5),
+      };
+    });
+
+    // Sort by total claims descending
+    signals.sort((a, b) => b.totalClaims - a.totalClaims);
+
+    // Apply filter
+    if (filter === "verified") {
+      signals = signals.filter((s) => s.verdictDistribution.verified > 0);
+    } else if (filter === "emerging") {
+      signals = signals.filter(
+        (s) =>
+          s.verdictDistribution.speculative > 0 ||
+          s.recentClaims.some((c) => c.status === "unreviewed" || c.status === "needs_evidence")
+      );
+    }
+
+    res.json({
+      data: signals,
+      summary: {
+        totalAssets: signals.length,
+        totalVerified: signals.reduce((s, a) => s + a.verdictDistribution.verified, 0),
+        totalSpeculative: signals.reduce((s, a) => s + a.verdictDistribution.speculative, 0),
+        totalMisleading: signals.reduce((s, a) => s + a.verdictDistribution.misleading, 0),
+      },
+    });
+  } catch (err) {
+    console.error("GET /signals error:", err);
+    res.status(500).json({ error: "Failed to fetch signals" });
   }
 });
 

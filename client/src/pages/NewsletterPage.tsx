@@ -1,15 +1,27 @@
 import React, { useState } from "react";
+import { subscribeNewsletter } from "../lib/api";
 
 const NewsletterPage: React.FC = () => {
   const [email, setEmail] = useState("");
   const [submitted, setSubmitted] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (email.trim()) {
+    if (!email.trim() || isSubmitting) return;
+
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      await subscribeNewsletter(email.trim());
       setSubmitted(true);
       setEmail("");
       setTimeout(() => setSubmitted(false), 5000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to subscribe. Please try again.");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -43,9 +55,10 @@ const NewsletterPage: React.FC = () => {
                   />
                   <button
                     type="submit"
-                    className="bg-accent text-accent-text text-sm font-black px-8 py-4 rounded-xl hover:bg-accent-hover transition-all uppercase tracking-wider flex-shrink-0"
+                    disabled={isSubmitting}
+                    className="bg-accent text-accent-text text-sm font-black px-8 py-4 rounded-xl hover:bg-accent-hover transition-all uppercase tracking-wider flex-shrink-0 disabled:opacity-50"
                   >
-                    Sign Up
+                    {isSubmitting ? "Signing Up..." : "Sign Up"}
                   </button>
                 </div>
                 <p className="text-xs text-content-muted mt-3">
@@ -62,6 +75,13 @@ const NewsletterPage: React.FC = () => {
                   <span className="text-sm font-bold text-factuality-high">
                     You are subscribed! Check your inbox to confirm.
                   </span>
+                </div>
+              )}
+
+              {/* Error Toast */}
+              {error && (
+                <div className="mt-4 bg-red-500/10 border border-red-500/30 rounded-xl px-5 py-3 inline-flex items-center space-x-2 animate-in">
+                  <span className="text-sm font-bold text-red-500">{error}</span>
                 </div>
               )}
             </div>

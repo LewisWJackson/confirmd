@@ -292,3 +292,25 @@ export function validateGiftCode(code: string) {
 export function redeemGiftCode(code: string) {
   return postJson<{ success: boolean; durationMonths: number; subscriptionTier: string; subscriptionExpiresAt: string }>("/gifts/redeem", { code });
 }
+
+// Newsletter
+export function subscribeNewsletter(email: string, preferences?: Record<string, boolean>) {
+  return postJson<{ success: boolean; message: string }>("/newsletter/subscribe", { email, preferences });
+}
+
+export function unsubscribeNewsletter(email: string) {
+  return postJson<{ success: boolean; message: string }>("/newsletter/unsubscribe", { email });
+}
+
+// Daily Briefing
+export function fetchDailyBriefing() {
+  return fetchJson<any>("/briefing/daily");
+}
+
+// Signals
+export function fetchSignals(params?: { filter?: string }) {
+  const qs = new URLSearchParams();
+  if (params?.filter) qs.set("filter", params.filter);
+  const query = qs.toString();
+  return fetchJson<{ data: any[]; summary: any }>(`/signals${query ? `?${query}` : ""}`);
+}

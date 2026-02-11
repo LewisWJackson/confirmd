@@ -26,6 +26,8 @@ import type {
   Dispute,
   InsertDispute,
   Gift,
+  NewsletterSubscriber,
+  InsertNewsletterSubscriber,
 } from "../shared/schema.js";
 import { db } from "./db.js";
 import { DrizzleStorage } from "./drizzle-storage.js";
@@ -129,6 +131,12 @@ export interface IStorage {
   redeemGift(giftId: string, userId: string): Promise<void>;
   activateGiftSubscription(userId: string, durationMonths: number): Promise<void>;
 
+  // Newsletter
+  subscribeNewsletter(data: InsertNewsletterSubscriber): Promise<NewsletterSubscriber>;
+  unsubscribeNewsletter(email: string): Promise<boolean>;
+  getNewsletterSubscriber(email: string): Promise<NewsletterSubscriber | undefined>;
+  getActiveNewsletterSubscribers(): Promise<NewsletterSubscriber[]>;
+
   // Pipeline Stats
   getPipelineStats(): Promise<PipelineStats>;
 }
@@ -202,6 +210,7 @@ export class MemStorage implements IStorage {
   private creatorScoresMap: Map<string, CreatorScore> = new Map();
   private disputesMap: Map<string, Dispute> = new Map();
   private giftsMap: Map<string, Gift> = new Map();
+  private newsletterSubscribersMap: Map<string, NewsletterSubscriber> = new Map();
   private lastPipelineRun: string | null = null;
 
   // ── Sources ──────────────────────────────────────────────────────
@@ -1019,6 +1028,55 @@ export class MemStorage implements IStorage {
         subscriptionExpiresAt: expiresAt,
       });
     }
+  }
+
+  // ── Newsletter ──────────────────────────────────────────────────
+
+  async subscribeNewsletter(data: InsertNewsletterSubscriber): Promise<NewsletterSubscriber> {
+    // Check if already subscribed
+    const existing = Array.from(this.newsletterSubscribersMap.values()).find(
+      (s) => s.email.toLowerCase() === data.email.toLowerCase()
+    );
+    if (existing) {
+      // Re-activate if previously unsubscribed
+      if (!existing.isActive) {
+        existing.isActive = true;
+        existing.unsubscribedAt = null;
+        existing.preferences = data.preferences ?? existing.preferences;
+      }
+      return existing;
+    }
+    const id = crypto.randomUUID();
+    const subscriber: NewsletterSubscriber = {
+      id,
+      email: data.email,
+      preferences: data.preferences ?? { dailyBriefing: true, blindspotReport: true, weeklyDigest: true },
+      isActive: data.isActive ?? true,
+      subscribedAt: new Date(),
+      unsubscribedAt: null,
+    };
+    this.newsletterSubscribersMap.set(id, subscriber);
+    return subscriber;
+  }
+
+  async unsubscribeNewsletter(email: string): Promise<boolean> {
+    const subscriber = Array.from(this.newsletterSubscribersMap.values()).find(
+      (s) => s.email.toLowerCase() === email.toLowerCase()
+    );
+    if (!subscriber) return false;
+    subscriber.isActive = false;
+    subscriber.unsubscribedAt = new Date();
+    return true;
+  }
+
+  async getNewsletterSubscriber(email: string): Promise<NewsletterSubscriber | undefined> {
+    return Array.from(this.newsletterSubscribersMap.values()).find(
+      (s) => s.email.toLowerCase() === email.toLowerCase()
+    );
+  }
+
+  async getActiveNewsletterSubscribers(): Promise<NewsletterSubscriber[]> {
+    return Array.from(this.newsletterSubscribersMap.values()).filter((s) => s.isActive);
   }
 
   // ── Pipeline Stats ───────────────────────────────────────────────
