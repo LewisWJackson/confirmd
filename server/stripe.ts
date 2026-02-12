@@ -5,7 +5,9 @@ import { storage } from "./storage.js";
 
 const router = Router();
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
+const stripe = process.env.STRIPE_SECRET_KEY
+  ? new Stripe(process.env.STRIPE_SECRET_KEY)
+  : null;
 
 const TIER_PRICES: Record<string, { amount: number; name: string }> = {
   plus: { amount: 999, name: "Confirmd+" },
@@ -32,6 +34,10 @@ router.get("/config", (_req: Request, res: Response) => {
 // ─── POST /create-checkout ───────────────────────────────────────────
 
 router.post("/create-checkout", async (req: Request, res: Response) => {
+  if (!stripe) {
+    res.status(503).json({ error: "Stripe not configured" });
+    return;
+  }
   try {
     const { tier } = req.body;
 
@@ -72,6 +78,10 @@ router.post("/create-checkout", async (req: Request, res: Response) => {
 // ─── POST /create-gift-checkout ──────────────────────────────────────
 
 router.post("/create-gift-checkout", async (req: Request, res: Response) => {
+  if (!stripe) {
+    res.status(503).json({ error: "Stripe not configured" });
+    return;
+  }
   try {
     const { giftTier } = req.body;
     if (!giftTier || !GIFT_PRICES[giftTier]) {
@@ -130,6 +140,11 @@ router.get("/gift/:sessionId", async (req: Request, res: Response) => {
 // ─── POST /webhook ───────────────────────────────────────────────────
 
 router.post("/webhook", async (req: Request, res: Response) => {
+  if (!stripe) {
+    res.status(503).json({ error: "Stripe not configured" });
+    return;
+  }
+
   const sig = req.headers["stripe-signature"] as string;
 
   if (!sig) {
