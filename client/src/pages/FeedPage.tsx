@@ -30,6 +30,13 @@ function getFactualityColor(trackRecord: number): string {
   return "bg-factuality-low";
 }
 
+function isToday(dateStr: string | Date | null): boolean {
+  if (!dateStr) return false;
+  const date = new Date(dateStr);
+  const today = new Date();
+  return date.toDateString() === today.toDateString();
+}
+
 function getFactualityAccentColor(dist: { high: number; medium: number; low: number }): string {
   const total = dist.high + dist.medium + dist.low;
   if (total === 0) return "bg-border";
@@ -208,6 +215,103 @@ function HeroStory({ story, onClick }: { story: any; onClick: () => void }) {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+/* --- Featured Story Card (for Today's #2-3) ------------------- */
+
+function FeaturedStoryCard({ story, onClick }: { story: any; onClick: () => void }) {
+  const dist = story.credibilityDistribution || { high: 0, medium: 0, low: 0 };
+  const topSources = story.topSources || [];
+  const isSingleSource = (story.sourceCount || 0) <= 1;
+
+  return (
+    <div
+      onClick={onClick}
+      className="group cursor-pointer rounded-xl overflow-hidden bg-surface-card border border-border hover:border-accent/30 transition-all"
+    >
+      {story.imageUrl ? (
+        <div className="relative w-full overflow-hidden" style={{ aspectRatio: "16/9" }}>
+          <img
+            src={story.imageUrl}
+            alt={story.title}
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+            onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+          />
+        </div>
+      ) : (
+        <div className="w-full bg-gradient-to-br from-surface-secondary to-surface-card" style={{ aspectRatio: "16/9" }} />
+      )}
+      <div className="p-4">
+        <h3 className="text-[14px] font-bold text-content-primary leading-snug mb-2 group-hover:text-accent transition-colors line-clamp-2">
+          {story.title}
+        </h3>
+        {story.summary && (
+          <p className="text-[12px] text-content-secondary leading-relaxed line-clamp-2 mb-3">
+            {story.summary}
+          </p>
+        )}
+        {isSingleSource && topSources[0] ? (
+          <SourceFactualityLine source={topSources[0]} />
+        ) : (
+          <div>
+            <FactualityBar distribution={dist} size="sm" />
+            <div className="flex items-center gap-2 mt-2">
+              <SourceLogoStack sources={topSources} max={4} />
+              <span className="text-[11px] font-bold text-content-secondary">
+                {story.sourceCount || 0} sources
+              </span>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* --- Today's Top Stories Section ------------------------------ */
+
+function TodaysTopStories({
+  stories,
+  onStoryClick,
+}: {
+  stories: any[];
+  onStoryClick: (id: string) => void;
+}) {
+  if (stories.length === 0) return null;
+
+  const hero = stories[0];
+  const featured = stories.slice(1, 3);
+  const today = new Date();
+  const dateStr = today.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
+
+  return (
+    <div className="mb-8">
+      {/* Section header */}
+      <div className="flex items-center gap-3 mb-5">
+        <h2 className="text-sm font-black uppercase tracking-[0.15em] text-content-primary">
+          Today&rsquo;s Top Stories
+        </h2>
+        <span className="text-[11px] text-content-muted font-medium">{dateStr}</span>
+        <div className="flex-1 h-px bg-border" />
+      </div>
+
+      {/* Hero story #1 */}
+      <HeroStory story={hero} onClick={() => onStoryClick(hero.id)} />
+
+      {/* Stories #2-3 side by side */}
+      {featured.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {featured.map((story: any) => (
+            <FeaturedStoryCard
+              key={story.id}
+              story={story}
+              onClick={() => onStoryClick(story.id)}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -727,6 +831,22 @@ export default function FeedPage() {
       .slice(0, MAX_FEED_STORIES);
   }, [stories, activeCategory]);
 
+  // Partition stories into today's and older
+  const { todaysStories, olderStories } = useMemo(() => {
+    const todays: any[] = [];
+    const older: any[] = [];
+    for (const s of filteredStories) {
+      if (isToday(s.latestItemTimestamp || s.createdAt)) {
+        todays.push(s);
+      } else {
+        older.push(s);
+      }
+    }
+    return { todaysStories: todays, olderStories: older };
+  }, [filteredStories]);
+
+  const hasTodaysStories = todaysStories.length > 0;
+
   // Main Story of the Day: pick the story with the most sources
   const { heroStory, centerStories } = useMemo(() => {
     if (filteredStories.length === 0) return { heroStory: null, centerStories: [] };
@@ -876,60 +996,96 @@ export default function FeedPage() {
 
             {/* CENTER COLUMN */}
             <main className="min-w-0">
-              {heroStory && (
-                <HeroStory
-                  story={heroStory}
-                  onClick={() => handleStoryClick(heroStory.id)}
-                />
-              )}
+              {hasTodaysStories ? (
+                <>
+                  {/* Today's Top Stories (hero + featured cards) */}
+                  <TodaysTopStories stories={todaysStories} onStoryClick={handleStoryClick} />
 
-              {/* Creator Predictions - prominent placement */}
-              <CreatorPredictionsSection
-                predictions={creatorPredictions}
-                isFree={isFree}
-                onPredictionClick={handlePredictionClick}
-                onViewAll={() => setLocation("/creators")}
-              />
-
-              {/* First batch of stories */}
-              <div>
-                {firstStories.map((story: any) => (
-                  <StoryListRow
-                    key={story.id}
-                    story={story}
-                    onClick={() => handleStoryClick(story.id)}
+                  {/* Creator Predictions */}
+                  <CreatorPredictionsSection
+                    predictions={creatorPredictions}
+                    isFree={isFree}
+                    onPredictionClick={handlePredictionClick}
+                    onViewAll={() => setLocation("/creators")}
                   />
-                ))}
-              </div>
 
-              {/* Topic Spotlight Sections */}
-              {topicSections.map(({ category, stories: topicStories }) => (
-                <TopicSpotlight
-                  key={category}
-                  title={topicLabel(category)}
-                  stories={topicStories}
-                  onStoryClick={handleStoryClick}
-                />
-              ))}
+                  {/* Previous Stories */}
+                  {olderStories.length > 0 && (
+                    <div className="mt-8">
+                      <div className="flex items-center gap-2 mb-4">
+                        <h2 className="text-[11px] font-black uppercase tracking-[0.2em] text-content-muted">
+                          Previous Stories
+                        </h2>
+                        <div className="flex-1 h-px bg-border" />
+                      </div>
+                      {olderStories.map((story: any) => (
+                        <StoryListRow
+                          key={story.id}
+                          story={story}
+                          onClick={() => handleStoryClick(story.id)}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <>
+                  {heroStory && (
+                    <HeroStory
+                      story={heroStory}
+                      onClick={() => handleStoryClick(heroStory.id)}
+                    />
+                  )}
 
-              {/* Remaining stories */}
-              {remainingStories.length > 0 && (
-                <div>
-                  {remainingStories.map((story: any) => (
-                    <StoryListRow
-                      key={story.id}
-                      story={story}
-                      onClick={() => handleStoryClick(story.id)}
+                  {/* Creator Predictions - prominent placement */}
+                  <CreatorPredictionsSection
+                    predictions={creatorPredictions}
+                    isFree={isFree}
+                    onPredictionClick={handlePredictionClick}
+                    onViewAll={() => setLocation("/creators")}
+                  />
+
+                  {/* First batch of stories */}
+                  <div>
+                    {firstStories.map((story: any) => (
+                      <StoryListRow
+                        key={story.id}
+                        story={story}
+                        onClick={() => handleStoryClick(story.id)}
+                      />
+                    ))}
+                  </div>
+
+                  {/* Topic Spotlight Sections */}
+                  {topicSections.map(({ category, stories: topicStories }) => (
+                    <TopicSpotlight
+                      key={category}
+                      title={topicLabel(category)}
+                      stories={topicStories}
+                      onStoryClick={handleStoryClick}
                     />
                   ))}
-                </div>
-              )}
 
-              {/* Latest News Stories section at the bottom */}
-              <LatestNewsStories
-                stories={latestStories}
-                onStoryClick={handleStoryClick}
-              />
+                  {/* Remaining stories */}
+                  {remainingStories.length > 0 && (
+                    <div>
+                      {remainingStories.map((story: any) => (
+                        <StoryListRow
+                          key={story.id}
+                          story={story}
+                          onClick={() => handleStoryClick(story.id)}
+                        />
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Latest News Stories section at the bottom */}
+                  <LatestNewsStories
+                    stories={latestStories}
+                    onStoryClick={handleStoryClick}
+                  />
+                </>
+              )}
             </main>
 
             {/* RIGHT SIDEBAR */}

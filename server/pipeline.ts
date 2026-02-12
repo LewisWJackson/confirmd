@@ -165,6 +165,7 @@ const MAX_ARTICLES_PER_BATCH = 30;
 const DEFAULT_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
 const WEB_SEARCH_ENABLED = process.env.WEB_SEARCH_ENABLED !== "false"; // default true
 const WEB_SEARCH_MAX_RESULTS = 5;
+const DAILY_STORY_COUNT = parseInt(process.env.DAILY_STORY_COUNT || "3", 10);
 
 const CLAIM_EXTRACTION_SYSTEM_PROMPT = `You are a specialized claim extraction agent for crypto news analysis. Your task is to extract atomic, falsifiable claims from news content.
 
@@ -319,6 +320,13 @@ interface ParsedArticle {
   publishedAt: Date | null;
   feedName: string;
   feedDomain: string;
+}
+
+interface ArticleCluster {
+  articles: ParsedArticle[];
+  uniqueSources: Set<string>;
+  sharedWords: string[];
+  sharedAssets: string[];
 }
 
 interface PipelineStatus {
@@ -606,6 +614,119 @@ function getSignificantWords(text: string): string[] {
     .replace(/[^a-z0-9\s]/g, "")
     .split(/\s+/)
     .filter((w) => w.length > 2 && !STOP_WORDS.has(w));
+}
+
+// ============================================
+// ARTICLE CLUSTERING (Phase 1 — zero LLM calls)
+// ============================================
+
+/**
+ * Cluster articles by topic using title word overlap and asset symbol matching.
+ * Uses union-find to group articles that share 2+ significant title words,
+ * OR 1+ shared word AND a shared asset symbol.
+ * Returns clusters sorted by unique source count (desc), then article count (desc).
+ */
+function clusterArticlesByTopic(articles: ParsedArticle[]): ArticleCluster[] {
+  if (articles.length === 0) return [];
+
+  // Pre-compute significant words and asset symbols for each article
+  const articleWords: string[][] = [];
+  const articleAssets: string[][] = [];
+  for (const article of articles) {
+    articleWords.push(getSignificantWords(article.title));
+    const text = `${article.title} ${article.content}`.toLowerCase();
+    articleAssets.push(extractAssetSymbols(text));
+  }
+
+  // Union-find: map from root index -> set of member indices
+  const groups: Map<number, Set<number>> = new Map();
+  for (let i = 0; i < articles.length; i++) {
+    groups.set(i, new Set([i]));
+  }
+
+  for (let i = 0; i < articles.length; i++) {
+    const wordsI = articleWords[i];
+    const assetsI = new Set(articleAssets[i]);
+
+    for (let j = i + 1; j < articles.length; j++) {
+      const wordsJ = articleWords[j];
+      const assetsJ = new Set(articleAssets[j]);
+
+      const sharedWords = wordsI.filter((w) => wordsJ.includes(w));
+      const hasAssetOverlap =
+        assetsI.size > 0 &&
+        assetsJ.size > 0 &&
+        articleAssets[i].some((a) => assetsJ.has(a));
+
+      // Merge if: 2+ shared significant words, OR (1+ shared word AND shared asset)
+      const shouldMerge =
+        sharedWords.length >= 2 ||
+        (sharedWords.length >= 1 && hasAssetOverlap);
+
+      if (shouldMerge) {
+        mergeGroups(groups, i, j);
+      }
+    }
+  }
+
+  // Collect unique groups into ArticleCluster objects
+  const uniqueGroups = new Map<number, number[]>();
+  for (let i = 0; i < articles.length; i++) {
+    const root = findRoot(groups, i);
+    if (!uniqueGroups.has(root)) {
+      uniqueGroups.set(root, []);
+    }
+    uniqueGroups.get(root)!.push(i);
+  }
+
+  const clusters: ArticleCluster[] = [];
+  uniqueGroups.forEach((indices) => {
+    const clusterArticles = indices.map((idx) => articles[idx]);
+    const uniqueSources = new Set(clusterArticles.map((a) => a.feedDomain));
+
+    // Compute shared words across all articles in cluster
+    const wordSets = indices.map((idx) => new Set(articleWords[idx]));
+    const allWordsArr: string[] = [];
+    for (const s of wordSets) {
+      s.forEach((w) => allWordsArr.push(w));
+    }
+    const allWords = new Set<string>(allWordsArr);
+    const sharedWords: string[] = [];
+    allWords.forEach((w) => {
+      if (wordSets.filter((s) => s.has(w)).length >= 2) {
+        sharedWords.push(w);
+      }
+    });
+
+    // Compute shared assets
+    const assetCounts = new Map<string, number>();
+    for (const idx of indices) {
+      for (const asset of articleAssets[idx]) {
+        assetCounts.set(asset, (assetCounts.get(asset) || 0) + 1);
+      }
+    }
+    const sharedAssets: string[] = [];
+    assetCounts.forEach((count, asset) => {
+      if (count >= 1) sharedAssets.push(asset);
+    });
+
+    clusters.push({
+      articles: clusterArticles,
+      uniqueSources,
+      sharedWords,
+      sharedAssets,
+    });
+  });
+
+  // Sort: most unique sources first, then most articles
+  clusters.sort((a, b) => {
+    if (b.uniqueSources.size !== a.uniqueSources.size) {
+      return b.uniqueSources.size - a.uniqueSources.size;
+    }
+    return b.articles.length - a.articles.length;
+  });
+
+  return clusters;
 }
 
 // ============================================
@@ -1174,8 +1295,10 @@ function getStoryImageUrl(storyId: string): string {
 async function gatherEvidence(
   claim: ExtractedClaim,
   article: ParsedArticle,
+  options?: { maxWebResults?: number; supplementaryArticles?: ParsedArticle[] },
 ): Promise<GatheredEvidence[]> {
   const evidence: GatheredEvidence[] = [];
+  const maxWebResults = options?.maxWebResults ?? WEB_SEARCH_MAX_RESULTS;
 
   // Evidence item 1: The source article itself (Grade C - weak secondary)
   const articleGrade = gradeByDomain(article.link);
@@ -1193,6 +1316,28 @@ async function gatherEvidence(
     },
   });
 
+  // Evidence from supplementary articles (other articles in the same cluster)
+  if (options?.supplementaryArticles) {
+    for (const supArticle of options.supplementaryArticles) {
+      if (supArticle.link === article.link) continue; // skip the primary article
+      const supGrade = gradeByDomain(supArticle.link);
+      const stance = determineStance(supArticle.content, claim.claimText);
+      evidence.push({
+        url: supArticle.link,
+        publisher: supArticle.feedName,
+        excerpt: supArticle.content.slice(0, 500),
+        grade: supGrade === "A" || supGrade === "B" ? supGrade : "C",
+        stance,
+        primaryFlag: false,
+        publishedAt: supArticle.publishedAt,
+        metadata: {
+          sourceType: "cluster_article",
+          feedDomain: supArticle.feedDomain,
+        },
+      });
+    }
+  }
+
   // Evidence from web search: search for corroborating / contradicting sources
   if (WEB_SEARCH_ENABLED) {
     try {
@@ -1209,7 +1354,7 @@ async function gatherEvidence(
       // Add a small delay to avoid rate limiting
       await delay(500);
 
-      const webResults = await searchWeb(searchQuery);
+      const webResults = await searchWeb(searchQuery, maxWebResults);
 
       for (const result of webResults) {
         // Skip if the result URL is the same as the source article
@@ -1729,6 +1874,60 @@ function generateStorySummary(title: string, claimTexts: string[]): string {
   return `${truncated} This story includes ${claimTexts.length} related claims from multiple sources.`;
 }
 
+/**
+ * Generate a summary for a cluster of articles using LLM if available.
+ * Falls back to generateStorySummary() if no Anthropic key.
+ */
+async function generateClusterSummary(
+  cluster: ArticleCluster,
+  claimTexts: string[],
+): Promise<string> {
+  const title = cluster.articles[0]?.title || "Untitled Story";
+
+  if (!anthropic) {
+    return generateStorySummary(title, claimTexts);
+  }
+
+  try {
+    const articleSummaries = cluster.articles
+      .slice(0, 5) // Limit to avoid token overflow
+      .map((a) => `- [${a.feedName}] ${a.title}`)
+      .join("\n");
+
+    const claimList = claimTexts
+      .slice(0, 8)
+      .map((c) => `- ${c}`)
+      .join("\n");
+
+    const response = await anthropic.messages.create({
+      model: "claude-sonnet-4-5-20250929",
+      max_tokens: 512,
+      temperature: 0.3,
+      system:
+        "You are a news summarizer. Write a concise 2-3 sentence summary of this developing story based on the articles and verified claims below. Be factual and neutral. Output only the summary text, no JSON or markdown.",
+      messages: [
+        {
+          role: "user",
+          content: `ARTICLES:\n${articleSummaries}\n\nKEY CLAIMS:\n${claimList}`,
+        },
+      ],
+    });
+
+    const text =
+      response.content[0].type === "text" ? response.content[0].text : "";
+    if (text && text.length > 20) {
+      return text.trim();
+    }
+  } catch (error) {
+    console.warn(
+      "[Pipeline] Cluster summary LLM failed, using fallback:",
+      error instanceof Error ? error.message : error,
+    );
+  }
+
+  return generateStorySummary(title, claimTexts);
+}
+
 // ============================================
 // PIPELINE ORCHESTRATOR
 // ============================================
@@ -1794,8 +1993,388 @@ export class VerificationPipeline {
   }
 
   /**
-   * Run a full daily batch: fetch all feeds, process articles, extract claims,
-   * generate verdicts, and group into stories.
+   * Check how many stories with status "complete" were created in the last 24 hours.
+   */
+  private async getTodaysCompletedStories(): Promise<Story[]> {
+    try {
+      const allStories = await this.storage.getStories();
+      const twentyFourHoursAgo = Date.now() - 24 * 60 * 60 * 1000;
+      return allStories.filter((s) => {
+        const isComplete = (s as any).status === "complete";
+        const createdRecently =
+          s.createdAt && new Date(s.createdAt).getTime() > twentyFourHoursAgo;
+        return isComplete && createdRecently;
+      });
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Refresh evidence for existing stories: re-gather web evidence for each claim
+   * and regenerate the verdict if evidence has changed.
+   */
+  private async refreshEvidenceForStories(stories: Story[]): Promise<void> {
+    console.log(
+      `[Pipeline] Refreshing evidence for ${stories.length} existing stories`,
+    );
+
+    for (const story of stories) {
+      try {
+        const storyWithClaims = await this.storage.getStoryWithClaims(story.id);
+        if (!storyWithClaims) continue;
+
+        for (const claim of storyWithClaims.claims) {
+          try {
+            const existingEvidence = await this.storage.getEvidenceByClaim(
+              claim.id,
+            );
+            const existingCount = existingEvidence.length;
+
+            // Re-gather evidence via web search
+            const extractedClaim: ExtractedClaim = {
+              claimText: claim.claimText,
+              claimType: claim.claimType as ClaimType,
+              assetSymbols: (claim.assetSymbols || []) as string[],
+              resolutionType: (claim.resolutionType || "indefinite") as
+                | "immediate"
+                | "scheduled"
+                | "indefinite",
+              resolveBy: claim.resolveBy
+                ? new Date(claim.resolveBy).toISOString()
+                : null,
+              falsifiabilityScore: claim.falsifiabilityScore ?? 0.5,
+              llmConfidence: claim.llmConfidence ?? 0.5,
+            };
+
+            // Use a dummy article from existing evidence URL
+            const sourceUrl =
+              existingEvidence.find(
+                (e) =>
+                  (e.metadata as Record<string, unknown>)?.sourceType ===
+                  "rss_article",
+              )?.url || "";
+            const dummyArticle: ParsedArticle = {
+              title: claim.claimText.slice(0, 100),
+              content: claim.claimText,
+              link: sourceUrl,
+              publishedAt: claim.assertedAt
+                ? new Date(claim.assertedAt)
+                : null,
+              feedName: "Refresh",
+              feedDomain: sourceUrl ? extractDomain(sourceUrl) : "",
+            };
+
+            const freshEvidence = await gatherEvidence(
+              extractedClaim,
+              dummyArticle,
+              { maxWebResults: 10 },
+            );
+
+            // Store any new evidence items (check URL dedup)
+            const existingUrls = new Set(existingEvidence.map((e) => e.url));
+            let newCount = 0;
+            const allEvidenceForVerdict: GatheredEvidence[] = freshEvidence;
+
+            for (const ev of freshEvidence) {
+              if (!existingUrls.has(ev.url)) {
+                try {
+                  await this.storage.createEvidence({
+                    claimId: claim.id,
+                    url: ev.url,
+                    publisher: ev.publisher,
+                    publishedAt: ev.publishedAt,
+                    excerpt: ev.excerpt,
+                    stance: ev.stance,
+                    evidenceGrade: ev.grade,
+                    primaryFlag: ev.primaryFlag,
+                    metadata: ev.metadata || {},
+                  });
+                  newCount++;
+                } catch {
+                  // Skip duplicates
+                }
+              }
+            }
+
+            // Regenerate verdict if we found new evidence
+            if (newCount > 0) {
+              console.log(
+                `[Pipeline]   Claim "${claim.claimText.slice(0, 60)}...": ${newCount} new evidence items`,
+              );
+
+              const newVerdict = await generateVerdict(
+                extractedClaim,
+                allEvidenceForVerdict,
+              );
+
+              try {
+                await this.storage.createVerdict({
+                  claimId: claim.id,
+                  model: anthropic
+                    ? "claude-sonnet-4-5-20250929"
+                    : "simulation",
+                  promptVersion: "v1.0.0-refresh",
+                  verdictLabel: newVerdict.verdictLabel,
+                  probabilityTrue: newVerdict.probabilityTrue,
+                  evidenceStrength: newVerdict.evidenceStrength,
+                  keyEvidenceIds: [],
+                  reasoningSummary: newVerdict.reasoningSummary,
+                  invalidationTriggers: newVerdict.invalidationTriggers,
+                });
+              } catch {
+                // Non-critical
+              }
+            }
+          } catch (claimErr) {
+            console.warn(
+              `[Pipeline]   Evidence refresh failed for claim ${claim.id}:`,
+              claimErr instanceof Error ? claimErr.message : claimErr,
+            );
+          }
+        }
+      } catch (storyErr) {
+        console.warn(
+          `[Pipeline]   Evidence refresh failed for story ${story.id}:`,
+          storyErr instanceof Error ? storyErr.message : storyErr,
+        );
+      }
+    }
+  }
+
+  /**
+   * Process a cluster of related articles through deep verification:
+   * 1. Store all articles as Items
+   * 2. Extract claims from each via LLM
+   * 3. Deduplicate claims across articles
+   * 4. Gather evidence with increased budget + supplementary articles
+   * 5. Generate verdicts for each unique claim
+   */
+  async processCluster(
+    cluster: ArticleCluster,
+  ): Promise<{
+    claimIds: string[];
+    claimTexts: string[];
+    assetSymbols: string[][];
+    itemIds: string[];
+  }> {
+    console.log(
+      `[Pipeline] Processing cluster: ${cluster.articles.length} articles, ${cluster.uniqueSources.size} sources`,
+    );
+    console.log(
+      `[Pipeline]   Topics: [${cluster.sharedWords.slice(0, 5).join(", ")}] Assets: [${cluster.sharedAssets.join(", ")}]`,
+    );
+
+    const itemIds: string[] = [];
+    const allExtracted: { claim: ExtractedClaim; article: ParsedArticle }[] =
+      [];
+
+    // Phase 1: Store articles and extract claims
+    for (const article of cluster.articles) {
+      try {
+        // Ensure source + create item (reuse from processArticle logic)
+        const sourceId = await ensureSource({
+          name: article.feedName,
+          domain: article.feedDomain,
+        });
+
+        const contentHash = hashContent(article.link + article.title);
+        let item;
+        try {
+          const existing = await this.storage.getItemByUrl(article.link);
+          if (existing) {
+            item = existing;
+          } else {
+            item = await this.storage.createItem({
+              sourceId,
+              url: article.link,
+              publishedAt: article.publishedAt,
+              rawText: article.content,
+              title: article.title,
+              contentHash,
+              itemType: "article",
+              metadata: {
+                feedName: article.feedName,
+                feedDomain: article.feedDomain,
+              },
+            });
+          }
+        } catch {
+          item = await this.storage.createItem({
+            sourceId,
+            url: article.link,
+            publishedAt: article.publishedAt,
+            rawText: article.content,
+            title: article.title,
+            contentHash,
+            itemType: "article",
+            metadata: {
+              feedName: article.feedName,
+              feedDomain: article.feedDomain,
+            },
+          });
+        }
+
+        itemIds.push(item.id);
+
+        // Extract claims via LLM
+        const extracted = await extractClaimsWithLLM(article);
+        for (const ec of extracted) {
+          allExtracted.push({ claim: ec, article });
+        }
+
+        console.log(
+          `[Pipeline]   "${article.title.slice(0, 60)}..." => ${extracted.length} claims`,
+        );
+      } catch (err) {
+        console.error(
+          `[Pipeline]   Failed to process cluster article "${article.title}":`,
+          err instanceof Error ? err.message : err,
+        );
+      }
+    }
+
+    // Phase 2: Deduplicate claims across articles
+    // If 3+ shared significant words AND same assets, keep the one with higher falsifiabilityScore
+    const uniqueClaims: { claim: ExtractedClaim; article: ParsedArticle }[] =
+      [];
+
+    for (const entry of allExtracted) {
+      const entryWords = getSignificantWords(entry.claim.claimText);
+      const entryAssets = new Set(entry.claim.assetSymbols);
+
+      let isDuplicate = false;
+      for (let i = 0; i < uniqueClaims.length; i++) {
+        const existing = uniqueClaims[i];
+        const existingWords = getSignificantWords(existing.claim.claimText);
+        const existingAssets = new Set(existing.claim.assetSymbols);
+
+        const sharedWords = entryWords.filter((w) =>
+          existingWords.includes(w),
+        );
+        const sameAssets =
+          entryAssets.size > 0 &&
+          existingAssets.size > 0 &&
+          [...entryAssets].some((a) => existingAssets.has(a));
+
+        if (sharedWords.length >= 3 && sameAssets) {
+          isDuplicate = true;
+          // Keep the one with higher falsifiability score
+          if (
+            entry.claim.falsifiabilityScore >
+            existing.claim.falsifiabilityScore
+          ) {
+            uniqueClaims[i] = entry;
+          }
+          break;
+        }
+      }
+
+      if (!isDuplicate) {
+        uniqueClaims.push(entry);
+      }
+    }
+
+    console.log(
+      `[Pipeline]   ${allExtracted.length} total claims => ${uniqueClaims.length} unique after dedup`,
+    );
+
+    // Phase 3: Deep evidence gathering + verdict for each unique claim
+    const claimIds: string[] = [];
+    const claimTexts: string[] = [];
+    const assetSymbolsArr: string[][] = [];
+
+    for (const { claim: ec, article } of uniqueClaims) {
+      try {
+        const sourceId = await ensureSource({
+          name: article.feedName,
+          domain: article.feedDomain,
+        });
+
+        // Store the claim
+        const claim = await this.storage.createClaim({
+          sourceId,
+          itemId: itemIds[0], // Link to first item in cluster
+          claimText: ec.claimText,
+          claimType: ec.claimType,
+          assetSymbols: ec.assetSymbols,
+          assertedAt: article.publishedAt || new Date(),
+          resolveBy: ec.resolveBy ? new Date(ec.resolveBy) : null,
+          resolutionType: ec.resolutionType,
+          falsifiabilityScore: ec.falsifiabilityScore,
+          llmConfidence: ec.llmConfidence,
+          status: "unreviewed",
+          metadata: {},
+        });
+
+        claimIds.push(claim.id);
+        claimTexts.push(ec.claimText);
+        assetSymbolsArr.push(ec.assetSymbols);
+
+        // Gather evidence with increased budget + supplementary articles
+        const evidence = await gatherEvidence(ec, article, {
+          maxWebResults: 10,
+          supplementaryArticles: cluster.articles,
+        });
+
+        const storedEvidenceIds: string[] = [];
+        for (const ev of evidence) {
+          try {
+            const stored = await this.storage.createEvidence({
+              claimId: claim.id,
+              url: ev.url,
+              publisher: ev.publisher,
+              publishedAt: ev.publishedAt,
+              excerpt: ev.excerpt,
+              stance: ev.stance,
+              evidenceGrade: ev.grade,
+              primaryFlag: ev.primaryFlag,
+              metadata: ev.metadata || {},
+            });
+            storedEvidenceIds.push(stored.id);
+          } catch {
+            // Skip duplicate evidence
+          }
+        }
+
+        // Generate verdict
+        const verdict = await generateVerdict(ec, evidence);
+
+        try {
+          await this.storage.createVerdict({
+            claimId: claim.id,
+            model: anthropic ? "claude-sonnet-4-5-20250929" : "simulation",
+            promptVersion: "v1.0.0",
+            verdictLabel: verdict.verdictLabel,
+            probabilityTrue: verdict.probabilityTrue,
+            evidenceStrength: verdict.evidenceStrength,
+            keyEvidenceIds: storedEvidenceIds,
+            reasoningSummary: verdict.reasoningSummary,
+            invalidationTriggers: verdict.invalidationTriggers,
+          });
+        } catch {
+          // Non-critical
+        }
+
+        console.log(
+          `[Pipeline]   Claim: "${ec.claimText.slice(0, 80)}..." => ${verdict.verdictLabel} (p=${verdict.probabilityTrue.toFixed(2)}, ${evidence.length} evidence)`,
+        );
+      } catch (claimErr) {
+        console.error(
+          `[Pipeline]   Failed to process cluster claim:`,
+          claimErr instanceof Error ? claimErr.message : claimErr,
+        );
+      }
+    }
+
+    return { claimIds, claimTexts, assetSymbols: assetSymbolsArr, itemIds };
+  }
+
+  /**
+   * Two-phase daily batch:
+   * Phase 1: Cluster ALL articles by topic (zero LLM calls), pick top N by coverage.
+   * Phase 2: Deep-verify only the top clusters with LLM extraction + evidence.
+   * Daily gating: if enough stories already exist today, only refresh evidence.
    */
   async runDailyBatch(): Promise<void> {
     if (this.isRunning) {
@@ -1809,13 +2388,35 @@ export class VerificationPipeline {
     let batchClaimsExtracted = 0;
 
     console.log("[Pipeline] === Starting daily batch run ===");
+    console.log(`[Pipeline] Target: ${DAILY_STORY_COUNT} quality stories per day`);
     analytics.recordPipelineStart();
 
     try {
-      // Step 1: Fetch all RSS feeds
+      // Daily gating: check if we already have enough stories today
+      const todaysStories = await this.getTodaysCompletedStories();
+      if (todaysStories.length >= DAILY_STORY_COUNT) {
+        console.log(
+          `[Pipeline] ${todaysStories.length} stories already created today (target: ${DAILY_STORY_COUNT}). Running evidence refresh only.`,
+        );
+        await this.refreshEvidenceForStories(todaysStories);
+        this.lastRunAt = new Date();
+        const elapsed = ((Date.now() - batchStart) / 1000).toFixed(1);
+        console.log(
+          `[Pipeline] === Evidence refresh complete in ${elapsed}s ===`,
+        );
+        analytics.recordPipelineEnd(0, 0);
+        return;
+      }
+
+      const storiesNeeded = DAILY_STORY_COUNT - todaysStories.length;
+      console.log(
+        `[Pipeline] ${todaysStories.length} stories today, need ${storiesNeeded} more`,
+      );
+
+      // Phase 1: Fetch all feeds and cluster by topic (zero LLM calls)
       const articles = await fetchAllFeeds();
 
-      // Step 2: Filter out already-processed articles (dedup by URL)
+      // Filter out already-processed articles
       const newArticles: ParsedArticle[] = [];
       for (const article of articles) {
         try {
@@ -1824,7 +2425,6 @@ export class VerificationPipeline {
             newArticles.push(article);
           }
         } catch {
-          // If getItemByUrl throws (e.g., method not implemented), include the article
           newArticles.push(article);
         }
       }
@@ -1833,40 +2433,64 @@ export class VerificationPipeline {
         `[Pipeline] ${newArticles.length} new articles (${articles.length - newArticles.length} already processed)`,
       );
 
-      // Step 3: Limit to MAX_ARTICLES_PER_BATCH
-      const toProcess = newArticles.slice(0, MAX_ARTICLES_PER_BATCH);
-      console.log(`[Pipeline] Processing ${toProcess.length} articles`);
+      if (newArticles.length === 0) {
+        console.log("[Pipeline] No new articles to process");
+        this.lastRunAt = new Date();
+        analytics.recordPipelineEnd(0, 0);
+        return;
+      }
 
-      // Step 4: Process each article through the full pipeline
+      // Cluster ALL new articles by topic
+      const clusters = clusterArticlesByTopic(newArticles);
+
+      console.log(`[Pipeline] Discovered ${clusters.length} topic clusters:`);
+      for (let i = 0; i < Math.min(clusters.length, 10); i++) {
+        const c = clusters[i];
+        console.log(
+          `[Pipeline]   #${i + 1}: ${c.uniqueSources.size} sources, ${c.articles.length} articles — [${c.sharedWords.slice(0, 4).join(", ")}] (${c.sharedAssets.join(", ") || "no assets"})`,
+        );
+      }
+
+      // Select top N clusters for deep verification
+      const topClusters = clusters.slice(0, storiesNeeded);
+      console.log(
+        `[Pipeline] Selected top ${topClusters.length} clusters for deep verification`,
+      );
+
+      // Phase 2: Deep-verify each selected cluster
       const allClaimsForGrouping: ClaimForGrouping[] = [];
 
-      for (const article of toProcess) {
+      for (let i = 0; i < topClusters.length; i++) {
+        const cluster = topClusters[i];
+        console.log(
+          `[Pipeline] --- Processing cluster ${i + 1}/${topClusters.length} ---`,
+        );
+
         try {
-          const result = await this.processArticle(article);
-          batchArticlesProcessed++;
+          const result = await this.processCluster(cluster);
+          batchArticlesProcessed += cluster.articles.length;
           batchClaimsExtracted += result.claimIds.length;
 
           // Collect for story grouping
-          for (const claimId of result.claimIds) {
+          for (let j = 0; j < result.claimIds.length; j++) {
             allClaimsForGrouping.push({
-              claimId,
-              claimText: result.claimTexts[result.claimIds.indexOf(claimId)] || "",
-              assetSymbols: result.assetSymbols[result.claimIds.indexOf(claimId)] || [],
-              publishedAt: article.publishedAt,
-              title: article.title,
-              itemId: result.itemId,
+              claimId: result.claimIds[j],
+              claimText: result.claimTexts[j] || "",
+              assetSymbols: result.assetSymbols[j] || [],
+              publishedAt: cluster.articles[0]?.publishedAt || null,
+              title: cluster.articles[0]?.title || "",
+              itemId: result.itemIds[0] || "",
             });
           }
         } catch (error) {
           console.error(
-            `[Pipeline] Failed to process article "${article.title}":`,
+            `[Pipeline] Failed to process cluster:`,
             error instanceof Error ? error.message : error,
           );
-          // Continue with remaining articles
         }
       }
 
-      // Step 5: Group claims into stories
+      // Group claims into stories and persist
       if (allClaimsForGrouping.length > 0) {
         console.log(
           `[Pipeline] Grouping ${allClaimsForGrouping.length} claims into stories`,
@@ -1881,7 +2505,7 @@ export class VerificationPipeline {
 
       const elapsed = ((Date.now() - batchStart) / 1000).toFixed(1);
       console.log(
-        `[Pipeline] === Batch complete: ${batchArticlesProcessed} articles, ${batchClaimsExtracted} claims in ${elapsed}s ===`,
+        `[Pipeline] === Batch complete: ${topClusters.length} clusters, ${batchArticlesProcessed} articles, ${batchClaimsExtracted} claims in ${elapsed}s ===`,
       );
       analytics.recordPipelineEnd(batchArticlesProcessed, batchClaimsExtracted);
     } catch (error) {
