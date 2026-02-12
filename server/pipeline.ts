@@ -658,13 +658,21 @@ function clusterArticlesByTopic(articles: ParsedArticle[]): ArticleCluster[] {
         assetsJ.size > 0 &&
         articleAssets[i].some((a) => assetsJ.has(a));
 
-      // Merge if: 2+ shared significant words, OR (1+ shared word AND shared asset)
+      // Merge if: 3+ shared significant words AND shared asset symbol
+      // This is intentionally strict to prevent mega-clusters in crypto news
+      const MAX_CLUSTER_SIZE = 12;
       const shouldMerge =
-        sharedWords.length >= 2 ||
-        (sharedWords.length >= 1 && hasAssetOverlap);
+        sharedWords.length >= 3 && hasAssetOverlap;
 
       if (shouldMerge) {
-        mergeGroups(groups, i, j);
+        // Don't merge if combined cluster would be too large
+        const rootI = findRoot(groups, i);
+        const rootJ = findRoot(groups, j);
+        const sizeI = groups.get(rootI)?.size || 1;
+        const sizeJ = groups.get(rootJ)?.size || 1;
+        if (rootI !== rootJ && sizeI + sizeJ <= MAX_CLUSTER_SIZE) {
+          mergeGroups(groups, i, j);
+        }
       }
     }
   }
@@ -2001,9 +2009,10 @@ export class VerificationPipeline {
       const twentyFourHoursAgo = Date.now() - 24 * 60 * 60 * 1000;
       return allStories.filter((s) => {
         const isComplete = (s as any).status === "complete";
+        const isMultiSource = (s as any).sourceCount >= 2;
         const createdRecently =
           s.createdAt && new Date(s.createdAt).getTime() > twentyFourHoursAgo;
-        return isComplete && createdRecently;
+        return isComplete && isMultiSource && createdRecently;
       });
     } catch {
       return [];
@@ -2169,8 +2178,18 @@ export class VerificationPipeline {
     const allExtracted: { claim: ExtractedClaim; article: ParsedArticle }[] =
       [];
 
+    // Cap articles per cluster to limit LLM calls (process most recent)
+    const MAX_ARTICLES_PER_CLUSTER = 8;
+    const articlesToProcess = cluster.articles
+      .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime())
+      .slice(0, MAX_ARTICLES_PER_CLUSTER);
+
+    console.log(
+      `[Pipeline]   Processing ${articlesToProcess.length} of ${cluster.articles.length} articles (capped at ${MAX_ARTICLES_PER_CLUSTER})`,
+    );
+
     // Phase 1: Store articles and extract claims
-    for (const article of cluster.articles) {
+    for (const article of articlesToProcess) {
       try {
         // Ensure source + create item (reuse from processArticle logic)
         const sourceId = await ensureSource({
