@@ -164,9 +164,52 @@ app.use(
   }
 );
 
+// ─── Auto-migration (adds missing columns to PostgreSQL) ─────────
+
+async function runStartupMigrations() {
+  if (!pool) return;
+  console.log("[Migration] Checking for pending schema changes...");
+  const client = await pool.connect();
+  try {
+    // Add story_status enum if it doesn't exist
+    await client.query(`
+      DO $$ BEGIN
+        CREATE TYPE story_status AS ENUM ('processing', 'complete', 'failed');
+      EXCEPTION WHEN duplicate_object THEN NULL;
+      END $$;
+    `);
+
+    // Add status column to story table if missing
+    await client.query(`
+      ALTER TABLE story ADD COLUMN IF NOT EXISTS status story_status NOT NULL DEFAULT 'complete';
+    `);
+
+    // Add newsletter_subscriber table if missing
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS newsletter_subscriber (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        email TEXT NOT NULL UNIQUE,
+        preferences JSONB DEFAULT '{"dailyBriefing":true,"blindspotReport":true,"weeklyDigest":true}',
+        is_active BOOLEAN DEFAULT true,
+        subscribed_at TIMESTAMP DEFAULT NOW(),
+        unsubscribed_at TIMESTAMP
+      );
+    `);
+
+    console.log("[Migration] Schema up to date");
+  } catch (err) {
+    console.error("[Migration] Failed:", (err as Error).message);
+  } finally {
+    client.release();
+  }
+}
+
 // ─── Start ──────────────────────────────────────────────────────────
 
 async function main() {
+  // Run migrations before anything else
+  await runStartupMigrations();
+
   // Seed data only for in-memory storage (DB persists its own data)
   if (storage instanceof MemStorage) {
     await seedInitialData(storage);
