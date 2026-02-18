@@ -82,6 +82,8 @@ interface EnrichedClaim {
     reasoningSummary: string | null;
     invalidationTriggers: string | null;
   } | null;
+  factualityStatus: "factual" | "not_factual" | "undetermined" | "unreviewed";
+  factualityDescription: string;
   evidenceCount: number;
   resolution: {
     outcome: string;
@@ -89,6 +91,17 @@ interface EnrichedClaim {
     notes: string | null;
     evidenceUrl: string | null;
   } | null;
+}
+
+function getFactualityStatus(verdictLabel: string | null): { status: "factual" | "not_factual" | "undetermined" | "unreviewed"; description: string } {
+  const defaults: Record<string, { status: "factual" | "not_factual" | "undetermined" | "unreviewed"; description: string }> = {
+    verified: { status: "factual", description: "This claim is verified by credible primary evidence." },
+    misleading: { status: "not_factual", description: "Available evidence contradicts or does not support this claim." },
+    speculative: { status: "undetermined", description: "Insufficient evidence to confirm or deny this claim." },
+    plausible_unverified: { status: "undetermined", description: "This claim appears plausible but remains unconfirmed by primary sources." },
+  };
+  if (!verdictLabel) return { status: "unreviewed", description: "This claim has not yet been reviewed." };
+  return defaults[verdictLabel] || { status: "unreviewed", description: "This claim has not yet been reviewed." };
 }
 
 async function enrichClaim(claim: Claim): Promise<EnrichedClaim> {
@@ -101,6 +114,17 @@ async function enrichClaim(claim: Claim): Promise<EnrichedClaim> {
       s ? storage.getSourceScore(s.id) : undefined
     ),
   ]);
+
+  const factuality = getFactualityStatus(verdict?.verdictLabel || null);
+  // Use reasoning for description only if it's real LLM output (contains structured markdown).
+  // Simulation mode produces junk like "Analysis of 1 evidence items: 0 primary (A)..." — skip it.
+  const hasRealReasoning = verdict?.reasoningSummary
+    && /\*\*[^*]+\*\*\s*:/.test(verdict.reasoningSummary)
+    && !/^Analysis of \d+ evidence/i.test(verdict.reasoningSummary)
+    && !/^Credibility:/i.test(verdict.reasoningSummary);
+  const factualityDescription = hasRealReasoning
+    ? (verdict!.reasoningSummary!.replace(/\*\*/g, "").split(/\.\s/)[0] + ".").replace(/\.\.$/, ".")
+    : factuality.description;
 
   // Derive a logo abbreviation from the source name
   const logoAbbrev = source
@@ -151,6 +175,8 @@ async function enrichClaim(claim: Claim): Promise<EnrichedClaim> {
           invalidationTriggers: verdict.invalidationTriggers,
         }
       : null,
+    factualityStatus: factuality.status,
+    factualityDescription: factualityDescription,
     evidenceCount: evidence.length,
     resolution: resolution
       ? {
@@ -910,6 +936,24 @@ router.get("/search", async (req: Request, res: Response) => {
   } catch (err) {
     console.error("GET /search error:", err);
     res.status(500).json({ error: "Failed to perform search" });
+  }
+});
+
+// ─── POST /admin/reset-stories — Clear all stories so pipeline generates fresh ones ──
+
+router.post("/admin/reset-stories", async (_req: Request, res: Response) => {
+  try {
+    const allStories = await storage.getStories();
+    let deleted = 0;
+    for (const story of allStories) {
+      await storage.deleteStory(story.id);
+      deleted++;
+    }
+    console.log(`[Admin] Deleted ${deleted} stories`);
+    res.json({ deleted, message: `Cleared ${deleted} stories. Trigger /pipeline/run to generate fresh ones.` });
+  } catch (err: any) {
+    console.error("[Admin] Reset stories failed:", err.message);
+    res.status(500).json({ error: err.message });
   }
 });
 

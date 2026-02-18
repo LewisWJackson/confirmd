@@ -1865,6 +1865,51 @@ async function ensureSource(feed: {
 }
 
 /**
+ * Classify a story into a frontend category based on its claim types via majority vote.
+ */
+function classifyStoryCategory(claimTypes: string[]): string {
+  const categoryMap: Record<string, string> = {
+    filing_submitted: "Regulation",
+    filing_approved_or_denied: "Regulation",
+    regulatory_action: "Regulation",
+    exploit_or_hack: "Security",
+    audit_result: "Security",
+    mainnet_launch: "Technology",
+    testnet_launch: "Technology",
+    upgrade_released: "Technology",
+    partnership_announced: "DeFi",
+    investment_or_acquisition: "DeFi",
+    listing_announced: "Markets",
+    listing_live: "Markets",
+    delisting_announced: "Markets",
+    trading_halt: "Markets",
+    large_transfer_or_whale: "Markets",
+    mint_or_burn: "Markets",
+    wallet_attribution: "Markets",
+    price_prediction: "Markets",
+    timeline_prediction: "Markets",
+    rumor: "Markets",
+    misc_claim: "Markets",
+  };
+
+  const counts: Record<string, number> = {};
+  for (const ct of claimTypes) {
+    const cat = categoryMap[ct] || "Markets";
+    counts[cat] = (counts[cat] || 0) + 1;
+  }
+
+  let best = "Markets";
+  let bestCount = 0;
+  for (const [cat, count] of Object.entries(counts)) {
+    if (count > bestCount) {
+      bestCount = count;
+      best = cat;
+    }
+  }
+  return best;
+}
+
+/**
  * Generate a meaningful summary for a story from its claim texts.
  */
 function generateStorySummary(title: string, claimTexts: string[]): string {
@@ -1880,6 +1925,47 @@ function generateStorySummary(title: string, claimTexts: string[]): string {
   // Multiple claims: summarize the scope
   const truncated = primaryClaim.length > 150 ? primaryClaim.slice(0, 147) + "..." : primaryClaim;
   return `${truncated} This story includes ${claimTexts.length} related claims from multiple sources.`;
+}
+
+/**
+ * Generate a story summary using LLM if available, otherwise fallback.
+ */
+async function generateStorySummaryWithLLM(title: string, claimTexts: string[]): Promise<string> {
+  if (!anthropic) {
+    return generateStorySummary(title, claimTexts);
+  }
+
+  try {
+    const claimList = claimTexts
+      .slice(0, 8)
+      .map((c) => `- ${c}`)
+      .join("\n");
+
+    const response = await anthropic.messages.create({
+      model: "claude-sonnet-4-5-20250929",
+      max_tokens: 512,
+      temperature: 0.3,
+      system: "You are a news summarizer. Write a concise 2-3 sentence summary of this developing story based on the headline and verified claims below. Be factual and neutral. Output only the summary text, no JSON or markdown.",
+      messages: [
+        {
+          role: "user",
+          content: `HEADLINE: ${title}\n\nKEY CLAIMS:\n${claimList}`,
+        },
+      ],
+    });
+
+    const text = response.content[0].type === "text" ? response.content[0].text : "";
+    if (text && text.length > 20) {
+      return text.trim();
+    }
+  } catch (error) {
+    console.warn(
+      "[Pipeline] Story summary LLM failed, using fallback:",
+      error instanceof Error ? error.message : error,
+    );
+  }
+
+  return generateStorySummary(title, claimTexts);
 }
 
 /**
@@ -2856,15 +2942,22 @@ export class VerificationPipeline {
             `[Pipeline]   Updated story "${group.title}" with ${group.claimIds.length} claims, ${groupItemIds.size} items, ${sourceCount} sources`,
           );
         } else {
-          // Create new story
-          const storyCategory = "crypto";
+          // Create new story — classify category from claim types
+          const claimTypes: string[] = [];
+          for (const claimId of group.claimIds) {
+            try {
+              const storedClaim = await this.storage.getClaim(claimId);
+              if (storedClaim) claimTypes.push(storedClaim.claimType);
+            } catch { /* skip */ }
+          }
+          const storyCategory = classifyStoryCategory(claimTypes);
 
           // Collect claim texts for summary
           const claimTexts = group.claimIds
             .map(cid => claims.find(c => c.claimId === cid)?.claimText)
             .filter((t): t is string => !!t);
 
-          const summary = generateStorySummary(group.title, claimTexts);
+          const summary = await generateStorySummaryWithLLM(group.title, claimTexts);
 
           const story = await this.storage.createStory({
             title: group.title,

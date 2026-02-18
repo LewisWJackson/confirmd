@@ -54,10 +54,24 @@ function formatReasoning(raw: string, verdictLabel?: string): string {
     return fallbacks[verdictLabel || ""] || fallbacks.unreviewed;
   }
 
-  // If reasoning contains structured markdown from LLM, preserve it as-is
-  // for FormattedReasoning to handle
-  if (/\*\*[^*]+\*\*\s*:/.test(raw)) {
+  // If reasoning contains structured markdown from LLM, check if it's real
+  // analysis or simulation-mode junk (which contains grade counts like "0 primary (A)")
+  const isSimulationJunk = /\d+\s+(primary|strong secondary|weak secondary|speculative)\s+\([A-D]\)/i.test(raw)
+    || /^\*\*Evidence Summary\*\*:\s*\d+ evidence items analyzed/i.test(raw);
+  if (/\*\*[^*]+\*\*\s*:/.test(raw) && !isSimulationJunk) {
     return raw;
+  }
+
+  // Simulation mode structured junk — return clean fallback instead
+  if (isSimulationJunk) {
+    const fallbacks: Record<string, string> = {
+      verified: "Multiple credible sources confirm this claim.",
+      speculative: "This claim lacks sufficient verification from primary sources.",
+      misleading: "Available evidence contradicts or does not support this claim.",
+      plausible_unverified: "This claim appears plausible but remains unconfirmed.",
+      unreviewed: "This claim has not yet been reviewed.",
+    };
+    return fallbacks[verdictLabel || ""] || fallbacks.unreviewed;
   }
 
   let text = raw;
@@ -348,42 +362,45 @@ export default function StoryDetailPage() {
                     const verdictLabel = claim.verdict?.verdictLabel || "unreviewed";
                     const probability = claim.verdict?.probabilityTrue;
                     const reasoning = claim.verdict?.reasoningSummary;
-                    const accentColors: Record<string, string> = {
-                      verified: "border-l-verdict-verified",
-                      speculative: "border-l-verdict-speculative",
-                      misleading: "border-l-verdict-misleading",
-                      plausible_unverified: "border-l-verdict-plausible",
+                    const factStatus = claim.factualityStatus || "unreviewed";
+                    const factualityColors: Record<string, string> = {
+                      factual: "border-l-factuality-high",
+                      not_factual: "border-l-factuality-low",
+                      undetermined: "border-l-factuality-mixed",
                       unreviewed: "border-l-border",
                     };
-                    const badgeStyles: Record<string, string> = {
-                      verified: "bg-verdict-verified text-white",
-                      speculative: "bg-verdict-speculative text-white",
-                      misleading: "bg-verdict-misleading text-white",
-                      plausible_unverified: "bg-verdict-plausible text-white",
+                    const factualityBadgeStyles: Record<string, string> = {
+                      factual: "bg-factuality-high text-white",
+                      not_factual: "bg-factuality-low text-white",
+                      undetermined: "bg-factuality-mixed text-white",
                       unreviewed: "bg-surface-card-hover text-content-muted",
                     };
-                    const badgeLabels: Record<string, string> = {
-                      verified: "Verified",
-                      speculative: "Speculative",
-                      misleading: "Misleading",
-                      plausible_unverified: "Plausible",
+                    const factualityBadgeLabels: Record<string, string> = {
+                      factual: "Factual",
+                      not_factual: "Not Factual",
+                      undetermined: "Undetermined",
                       unreviewed: "Unreviewed",
                     };
                     return (
                       <div
                         key={claim.id}
-                        className={`rounded-lg border border-border bg-surface-card border-l-[3px] ${accentColors[verdictLabel] || accentColors.unreviewed}`}
+                        className={`rounded-lg border border-border bg-surface-card border-l-[3px] ${factualityColors[factStatus] || factualityColors.unreviewed}`}
                       >
                         <div className="p-4">
-                          {/* Verdict badge + claim text row */}
+                          {/* Factuality badge + claim text row */}
                           <div className="flex items-start gap-3">
-                            <span className={`px-2.5 py-1 text-[9px] font-black uppercase tracking-widest rounded flex-shrink-0 mt-0.5 ${badgeStyles[verdictLabel] || badgeStyles.unreviewed}`}>
-                              {badgeLabels[verdictLabel] || verdictLabel}
+                            <span className={`px-2.5 py-1 text-[9px] font-black uppercase tracking-widest rounded flex-shrink-0 mt-0.5 ${factualityBadgeStyles[factStatus] || factualityBadgeStyles.unreviewed}`}>
+                              {factualityBadgeLabels[factStatus] || factStatus}
                             </span>
                             <div className="flex-1 min-w-0">
                               <p className="text-[14px] font-bold text-content-primary leading-snug">
                                 {claim.claimText}
                               </p>
+                              {claim.factualityDescription && (
+                                <p className="text-[12px] text-content-muted leading-relaxed mt-1.5 italic">
+                                  {claim.factualityDescription}
+                                </p>
+                              )}
                               {/* Probability bar */}
                               {probability != null && (
                                 <div className="flex items-center gap-2 mt-2.5">
