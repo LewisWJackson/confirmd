@@ -139,11 +139,17 @@ export async function getRecentVideoIds(
     const videoIdMatch = entry.match(/<yt:videoId>([^<]+)<\/yt:videoId>/);
     const titleMatch = entry.match(/<title>([^<]+)<\/title>/);
     const publishedMatch = entry.match(/<published>([^<]+)<\/published>/);
+    const linkMatch = entry.match(/<link[^>]+href="([^"]+)"/);
+
+    // Skip YouTube Shorts (identified by /shorts/ in the URL or #shorts in title)
+    const videoUrl = linkMatch ? linkMatch[1] : "";
+    const videoTitle = titleMatch ? decodeHtmlEntities(titleMatch[1]) : "";
+    if (videoUrl.includes("/shorts/") || /\bshorts?\b/i.test(videoTitle)) continue;
 
     if (videoIdMatch) {
       videos.push({
         videoId: videoIdMatch[1],
-        title: titleMatch ? decodeHtmlEntities(titleMatch[1]) : `Video ${videoIdMatch[1]}`,
+        title: videoTitle || `Video ${videoIdMatch[1]}`,
         publishedAt: publishedMatch ? publishedMatch[1] : new Date().toISOString(),
       });
     }
