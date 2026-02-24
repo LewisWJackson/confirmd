@@ -394,6 +394,21 @@ async function main() {
       runCreatorCycle();
       setInterval(runCreatorCycle, THREE_HOURS_MS);
     }, CREATOR_DELAY_MS);
+
+    // Verification-only cycle: runs every 60 minutes, starting 5 min after server start
+    // This clears the pending claim backlog faster between full pipeline runs
+    const runVerificationCycle = async () => {
+      try {
+        await verifyCreatorClaims(storage);
+        await recalculateCreatorScores(storage);
+      } catch (err) {
+        console.error("[CreatorPipeline] Verification cycle failed:", err);
+      }
+    };
+
+    setTimeout(() => {
+      setInterval(runVerificationCycle, 60 * 60 * 1000);
+    }, 5 * 60 * 1000);
   });
 }
 

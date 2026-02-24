@@ -117,7 +117,7 @@ export interface IStorage {
   // Creator Claims
   createCreatorClaim(data: InsertCreatorClaim): Promise<CreatorClaim>;
   getCreatorClaim(id: string): Promise<CreatorClaim | undefined>;
-  getCreatorClaims(filters?: { creatorId?: string; status?: string; category?: string; limit?: number; offset?: number }): Promise<CreatorClaim[]>;
+  getCreatorClaims(filters?: { creatorId?: string; videoId?: string; status?: string; category?: string; limit?: number; offset?: number }): Promise<CreatorClaim[]>;
   updateCreatorClaim(id: string, data: Partial<CreatorClaim>): Promise<void>;
 
   // Creator Scores
@@ -932,10 +932,13 @@ export class MemStorage implements IStorage {
     return this.creatorClaimsMap.get(id);
   }
 
-  async getCreatorClaims(filters?: { creatorId?: string; status?: string; category?: string; limit?: number; offset?: number }): Promise<CreatorClaim[]> {
+  async getCreatorClaims(filters?: { creatorId?: string; videoId?: string; status?: string; category?: string; limit?: number; offset?: number }): Promise<CreatorClaim[]> {
     let results = Array.from(this.creatorClaimsMap.values());
     if (filters?.creatorId) {
       results = results.filter((c) => c.creatorId === filters.creatorId);
+    }
+    if (filters?.videoId) {
+      results = results.filter((c) => c.videoId === filters.videoId);
     }
     if (filters?.status) {
       results = results.filter((c) => c.status === filters.status);

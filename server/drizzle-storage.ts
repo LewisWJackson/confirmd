@@ -583,10 +583,13 @@ export class DrizzleStorage implements IStorage {
     return claim;
   }
 
-  async getCreatorClaims(filters?: { creatorId?: string; status?: string; category?: string; limit?: number; offset?: number }): Promise<CreatorClaim[]> {
+  async getCreatorClaims(filters?: { creatorId?: string; videoId?: string; status?: string; category?: string; limit?: number; offset?: number }): Promise<CreatorClaim[]> {
     let query = this.db.select().from(creatorClaims).$dynamic();
     if (filters?.creatorId) {
       query = query.where(eq(creatorClaims.creatorId, filters.creatorId));
+    }
+    if (filters?.videoId) {
+      query = query.where(eq(creatorClaims.videoId, filters.videoId));
     }
     if (filters?.status) {
       query = query.where(eq(creatorClaims.status, filters.status as any));

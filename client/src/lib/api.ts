@@ -207,6 +207,17 @@ export function fetchCreatorClaims(id: string, params?: {
   return fetchJson<{ data: any[] }>(`/creators/${id}/claims${query ? `?${query}` : ""}`).then(r => r.data);
 }
 
+// Creator Videos feed
+export async function fetchCreatorVideos(params?: { limit?: number; offset?: number; creatorId?: string }): Promise<any> {
+  const qs = new URLSearchParams();
+  if (params?.limit) qs.set("limit", String(params.limit));
+  if (params?.offset) qs.set("offset", String(params.offset));
+  if (params?.creatorId) qs.set("creatorId", params.creatorId);
+  const res = await fetch(`/api/creators/videos?${qs}`);
+  if (!res.ok) throw new Error("Failed to fetch creator videos");
+  return res.json();
+}
+
 // Creator Feed
 export function fetchCreatorFeed(params?: { limit?: number; offset?: number }) {
   const qs = new URLSearchParams();

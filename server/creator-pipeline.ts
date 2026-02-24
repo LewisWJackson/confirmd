@@ -790,7 +790,7 @@ export async function runCreatorPipeline(
 export async function verifyCreatorClaims(storage: IStorage): Promise<void> {
   const pendingClaims = await storage.getCreatorClaims({
     status: "pending",
-    limit: 50,
+    limit: 300,
   });
 
   console.log(

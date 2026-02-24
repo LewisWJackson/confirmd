@@ -2,19 +2,16 @@ import React, { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
-import { fetchCreatorFeed, fetchCreatorLeaderboard } from "../lib/api";
+import { fetchCreatorVideos, fetchCreatorLeaderboard } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
 
 const FREE_VISIBLE = 8;
 const FREE_BLURRED = 8;
 
-const CATEGORIES = ["All", "Markets", "Regulation", "DeFi", "Security", "Technology"];
-
 const SORT_OPTIONS = [
-  { key: "latest",          label: "Latest" },
+  { key: "latest",           label: "Latest" },
   { key: "highest_accuracy", label: "Highest Accuracy" },
-  { key: "most_verified",   label: "Most Verified" },
-  { key: "most_claims",     label: "Most Claims" },
+  { key: "most_claims",      label: "Most Claims" },
 ] as const;
 type SortKey = typeof SORT_OPTIONS[number]["key"];
 
@@ -68,21 +65,31 @@ function ConsistencyPill({ consistency }: { consistency: string }) {
 /* YouTube-style Video Card                                             */
 /* ------------------------------------------------------------------ */
 
+function claimAccuracyColor(pct: number, hasVerified: boolean): string {
+  if (!hasVerified) return "text-content-muted";
+  if (pct >= 75) return "text-factuality-high";
+  if (pct >= 50) return "text-factuality-mixed";
+  return "text-factuality-low";
+}
+
 function VideoCard({
-  prediction,
+  video,
   onCreatorClick,
 }: {
-  prediction: any;
+  video: any;
   onCreatorClick: () => void;
 }) {
-  const creator = prediction.creator;
-  const video = prediction.video;
-  const youtubeId = video?.youtubeVideoId;
-  const thumbnailUrl = video?.thumbnailUrl
+  const creator = video.creator;
+  const youtubeId = video.youtubeVideoId;
+  const thumbnailUrl = video.thumbnailUrl
     ? video.thumbnailUrl
     : youtubeId
-      ? `https://img.youtube.com/vi/${youtubeId}/hqdefault.jpg`
+      ? `https://img.youtube.com/vi/${youtubeId}/mqdefault.jpg`
       : null;
+
+  const stats = video.claimStats ?? { total: 0, verifiedTrue: 0, verifiedFalse: 0, pending: 0, accuracyPct: 0 };
+  const totalVerified = stats.verifiedTrue + stats.verifiedFalse;
+  const hasVerified = totalVerified > 0;
 
   return (
     <div className="group">
@@ -98,7 +105,7 @@ function VideoCard({
         {thumbnailUrl ? (
           <img
             src={thumbnailUrl}
-            alt={video?.title || "Video thumbnail"}
+            alt={video.title || "Video thumbnail"}
             className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
             loading="lazy"
           />
@@ -135,31 +142,26 @@ function VideoCard({
             onClick={(e) => { e.stopPropagation(); onCreatorClick(); }}
             className="text-sm font-semibold text-content-primary leading-snug line-clamp-2 hover:text-accent transition-colors cursor-pointer"
           >
-            {prediction.claimText}
+            {video.title || "Untitled video"}
           </h3>
-          {/* Consistency badge inline under claim text */}
-          {prediction.consistency && prediction.consistency !== "first_occurrence" && (
-            <div className="mt-1">
-              <ConsistencyPill consistency={prediction.consistency} />
-            </div>
-          )}
           <p
             onClick={(e) => { e.stopPropagation(); onCreatorClick(); }}
             className="text-[13px] text-content-muted mt-1 hover:text-content-secondary transition-colors cursor-pointer"
           >
             {creator?.channelName || "Unknown"}
           </p>
-          <p className="text-[12px] text-content-muted">
-            {creator?.overallAccuracy != null && (
-              <span className={accuracyColor(creator.overallAccuracy)}>
-                {Math.round(creator.overallAccuracy)}% accuracy
-              </span>
+          <p className="text-[12px] text-content-muted mt-0.5 flex items-center gap-1.5 flex-wrap">
+            {video.publishedAt && (
+              <span>{timeAgo(video.publishedAt)}</span>
             )}
-            {creator?.overallAccuracy != null && prediction.createdAt && (
-              <span className="mx-1">&middot;</span>
-            )}
-            {prediction.createdAt && (
-              <span>{timeAgo(prediction.createdAt)}</span>
+            {stats.total > 0 && (
+              <>
+                <span className="opacity-40">&middot;</span>
+                <span className={claimAccuracyColor(stats.accuracyPct, hasVerified)}>
+                  {stats.total} claim{stats.total !== 1 ? "s" : ""}
+                  {hasVerified ? ` \u00b7 ${stats.accuracyPct}% accurate` : " \u00b7 Unverified"}
+                </span>
+              </>
             )}
           </p>
         </div>
@@ -312,16 +314,16 @@ export default function CreatorClaimsPage() {
   const [, setLocation] = useLocation();
   const { tier } = useAuth();
   const isPaid = tier !== "free";
-  const [activeCategory, setActiveCategory] = useState("All");
   const [sortKey, setSortKey] = useState<SortKey>("latest");
   const [showExplainer, setShowExplainer] = useState(() => {
     try { return localStorage.getItem("confirmd_claims_tutorial_dismissed") !== "1"; } catch { return true; }
   });
 
-  const { data: predictions = [], isLoading: feedLoading } = useQuery({
-    queryKey: ["creator-feed", "claims-page"],
-    queryFn: () => fetchCreatorFeed({ limit: 50 }),
+  const { data: videosResponse, isLoading: feedLoading } = useQuery({
+    queryKey: ["creator-videos", "claims-page"],
+    queryFn: () => fetchCreatorVideos({ limit: 80 }),
   });
+  const predictions: any[] = videosResponse?.data ?? [];
 
   const { data: leaderboard = [], isLoading: lbLoading } = useQuery({
     queryKey: ["creators-leaderboard"],
@@ -329,32 +331,27 @@ export default function CreatorClaimsPage() {
   });
 
   const allPredictions = useMemo(() => {
-    // Deduplicate by video — one card per video (showing most recent claim per video)
-    const seen = new Set<string>();
-    const unique: any[] = [];
-    for (const p of predictions) {
-      const vid = p.video?.id || p.video?.youtubeVideoId || p.id || "";
-      if (seen.has(vid)) continue;
-      seen.add(vid);
-      unique.push(p);
-    }
-    // Category filter
-    let items = activeCategory !== "All"
-      ? unique.filter((p: any) => p.category === activeCategory)
-      : unique;
+    // Videos are already deduplicated (one entry per video from the API)
+    let items = [...predictions];
 
     // Sort
     if (sortKey === "highest_accuracy") {
-      items = [...items].sort((a, b) => (b.creator?.overallAccuracy ?? 0) - (a.creator?.overallAccuracy ?? 0));
-    } else if (sortKey === "most_verified") {
-      items = [...items].sort((a, b) => (b.creator?.verifiedTrue ?? 0) - (a.creator?.verifiedTrue ?? 0));
+      // Only rank videos with verified claims; push unverified to end
+      items = items.sort((a, b) => {
+        const aV = (a.claimStats?.verifiedTrue ?? 0) + (a.claimStats?.verifiedFalse ?? 0);
+        const bV = (b.claimStats?.verifiedTrue ?? 0) + (b.claimStats?.verifiedFalse ?? 0);
+        if (aV === 0 && bV === 0) return 0;
+        if (aV === 0) return 1;
+        if (bV === 0) return -1;
+        return (b.claimStats?.accuracyPct ?? 0) - (a.claimStats?.accuracyPct ?? 0);
+      });
     } else if (sortKey === "most_claims") {
-      items = [...items].sort((a, b) => (b.creator?.totalClaims ?? 0) - (a.creator?.totalClaims ?? 0));
+      items = items.sort((a, b) => (b.claimStats?.total ?? 0) - (a.claimStats?.total ?? 0));
     }
-    // "latest" = default insertion order (already sorted by API)
+    // "latest" = default insertion order (already sorted by publishedAt DESC from API)
 
     return items;
-  }, [predictions, activeCategory, sortKey]);
+  }, [predictions, sortKey]);
 
   const visibleClaims = isPaid ? allPredictions : allPredictions.slice(0, FREE_VISIBLE);
   const blurredClaims = isPaid ? [] : allPredictions.slice(FREE_VISIBLE, FREE_VISIBLE + FREE_BLURRED);
@@ -367,27 +364,6 @@ export default function CreatorClaimsPage() {
 
   return (
     <div className="animate-in fade-in duration-700 min-h-screen bg-surface-primary">
-      {/* Category filter chips — sticky bar */}
-      <div className="sticky top-0 z-20 bg-surface-primary border-b border-border">
-        <div className="max-w-[1400px] mx-auto px-4 md:px-6 py-3">
-          <div className="flex gap-2 overflow-x-auto scrollbar-hide" style={{ scrollbarWidth: "none" }}>
-            {CATEGORIES.map((cat) => (
-              <button
-                key={cat}
-                onClick={() => setActiveCategory(cat)}
-                className={`px-4 py-1.5 rounded-full text-[13px] font-semibold whitespace-nowrap transition-all border ${
-                  activeCategory === cat
-                    ? "bg-accent text-white border-accent shadow-[0_0_12px_rgba(var(--color-accent-rgb,139,92,246),0.35)]"
-                    : "bg-surface-card text-content-secondary border-border hover:border-accent/40 hover:text-content-primary"
-                }`}
-              >
-                {cat}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-
       {/* Main content */}
       <div className="max-w-[1400px] mx-auto px-4 md:px-6 py-6">
         <div className="flex gap-6">
@@ -420,9 +396,7 @@ export default function CreatorClaimsPage() {
                 </svg>
                 <h3 className="text-lg font-bold text-content-primary">No creator claims yet</h3>
                 <p className="text-sm text-content-muted mt-1">
-                  {activeCategory !== "All"
-                    ? `No claims in ${activeCategory}. Try a different category.`
-                    : "Creator predictions will appear here once data is available."}
+                  Creator videos will appear here once data is available.
                 </p>
               </div>
             ) : (
@@ -436,18 +410,18 @@ export default function CreatorClaimsPage() {
 
                 {/* Animated feed grid */}
                 <motion.div
-                  key={`${activeCategory}-${sortKey}`}
+                  key={sortKey}
                   variants={feedVariants}
                   initial="hidden"
                   animate="visible"
                   className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-4 gap-y-8"
                 >
-                  {visibleClaims.map((prediction: any) => (
-                    <motion.div key={prediction.id} variants={cardVariants}>
+                  {visibleClaims.map((video: any) => (
+                    <motion.div key={video.videoId} variants={cardVariants}>
                       <VideoCard
-                        prediction={prediction}
+                        video={video}
                         onCreatorClick={() =>
-                          setLocation(`/creators/${prediction.creator?.id || prediction.id}`)
+                          setLocation(`/creators/${video.creator?.id}`)
                         }
                       />
                     </motion.div>
@@ -464,11 +438,11 @@ export default function CreatorClaimsPage() {
                     }}
                   >
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-4 gap-y-8 pointer-events-none select-none">
-                      {blurredClaims.map((prediction: any, idx: number) => {
+                      {blurredClaims.map((video: any, idx: number) => {
                         const blurPx = 2 + idx * 2;
                         return (
-                          <div key={prediction.id} style={{ filter: `blur(${blurPx}px)` }}>
-                            <VideoCard prediction={prediction} onCreatorClick={() => {}} />
+                          <div key={video.videoId} style={{ filter: `blur(${blurPx}px)` }}>
+                            <VideoCard video={video} onCreatorClick={() => {}} />
                           </div>
                         );
                       })}

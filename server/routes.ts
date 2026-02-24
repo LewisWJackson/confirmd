@@ -1209,6 +1209,83 @@ router.get("/creators/feed", async (req: Request, res: Response) => {
   }
 });
 
+// ─── GET /creators/videos ────────────────────────────────────────────
+
+router.get("/creators/videos", async (req: Request, res: Response) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit as string) || 40, 100);
+    const offset = parseInt(req.query.offset as string) || 0;
+    const creatorIdFilter = req.query.creatorId as string | undefined;
+
+    // Get all videos, filter to processed ones
+    let videos = await storage.getAllCreatorVideos();
+    videos = videos.filter((v) => v.claimsExtracted === true);
+
+    // Optional creatorId filter
+    if (creatorIdFilter) {
+      videos = videos.filter((v) => v.creatorId === creatorIdFilter);
+    }
+
+    // Sort by publishedAt DESC
+    videos.sort((a, b) => {
+      const ta = a.publishedAt ? new Date(a.publishedAt).getTime() : 0;
+      const tb = b.publishedAt ? new Date(b.publishedAt).getTime() : 0;
+      return tb - ta;
+    });
+
+    const total = videos.length;
+    const paged = videos.slice(offset, offset + limit);
+
+    // Enrich with creator info + claim stats in parallel
+    const data = await Promise.all(
+      paged.map(async (video) => {
+        const [creator, claims] = await Promise.all([
+          storage.getCreator(video.creatorId),
+          storage.getCreatorClaims({ videoId: video.id }),
+        ]);
+
+        if (!creator) return null;
+
+        const verifiedTrue  = claims.filter((c) => c.status === "verified_true").length;
+        const verifiedFalse = claims.filter((c) => c.status === "verified_false").length;
+        const pending       = claims.filter((c) => c.status === "pending").length;
+        const totalVerified = verifiedTrue + verifiedFalse;
+        const accuracyPct   = totalVerified > 0 ? Math.round((verifiedTrue / totalVerified) * 100) : 0;
+
+        return {
+          videoId: video.id,
+          youtubeVideoId: video.youtubeVideoId,
+          title: video.title,
+          thumbnailUrl: video.thumbnailUrl ?? null,
+          publishedAt: video.publishedAt ? new Date(video.publishedAt).toISOString() : null,
+          viewCount: video.viewCount ?? 0,
+          durationSeconds: video.durationSeconds ?? 0,
+          creator: {
+            id: creator.id,
+            channelName: creator.channelName,
+            channelHandle: creator.channelHandle ?? null,
+            avatarUrl: creator.avatarUrl ?? null,
+            tier: creator.tier,
+            overallAccuracy: creator.overallAccuracy ?? 0,
+          },
+          claimStats: {
+            total: claims.length,
+            verifiedTrue,
+            verifiedFalse,
+            pending,
+            accuracyPct,
+          },
+        };
+      })
+    );
+
+    res.json({ data: data.filter(Boolean), total });
+  } catch (err) {
+    console.error("GET /creators/videos error:", err);
+    res.status(500).json({ error: "Failed to fetch creator videos" });
+  }
+});
+
 // ─── GET /creators ──────────────────────────────────────────────────
 
 router.get("/creators", requireTier("tribune"), async (req: Request, res: Response) => {
