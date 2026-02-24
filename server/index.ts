@@ -198,6 +198,83 @@ async function runStartupMigrations() {
       );
     `);
 
+    // ── Creator Leaderboard v2 migrations ──────────────────────────
+
+    // New enums for claim consistency and poll system
+    await client.query(`
+      DO $$ BEGIN
+        CREATE TYPE creator_claim_consistency AS ENUM ('first_occurrence', 'repeated', 'evolved', 'reversed');
+      EXCEPTION WHEN duplicate_object THEN NULL;
+      END $$;
+    `);
+    await client.query(`
+      DO $$ BEGIN
+        CREATE TYPE poll_status AS ENUM ('active', 'completed');
+      EXCEPTION WHEN duplicate_object THEN NULL;
+      END $$;
+    `);
+    await client.query(`
+      DO $$ BEGIN
+        CREATE TYPE suggestion_status AS ENUM ('pending', 'in_poll', 'added', 'rejected');
+      EXCEPTION WHEN duplicate_object THEN NULL;
+      END $$;
+    `);
+
+    // Add claim reflection columns to creator_claim
+    await client.query(`
+      ALTER TABLE creator_claim
+        ADD COLUMN IF NOT EXISTS prior_claim_id UUID,
+        ADD COLUMN IF NOT EXISTS consistency creator_claim_consistency DEFAULT 'first_occurrence',
+        ADD COLUMN IF NOT EXISTS consistency_note TEXT;
+    `);
+
+    // Creator suggestion table (community-submitted channels to track)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS creator_suggestion (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        channel_name TEXT NOT NULL,
+        channel_handle TEXT NOT NULL,
+        youtube_channel_id TEXT,
+        suggested_by TEXT,
+        vote_count INTEGER DEFAULT 0,
+        status suggestion_status NOT NULL DEFAULT 'pending',
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+    `);
+
+    // Creator poll table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS creator_poll (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        status poll_status NOT NULL DEFAULT 'active',
+        starts_at TIMESTAMP DEFAULT NOW(),
+        ends_at TIMESTAMP,
+        winner_suggestion_id UUID,
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+    `);
+
+    // Poll options (links poll → suggestion)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS creator_poll_option (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        poll_id UUID NOT NULL REFERENCES creator_poll(id),
+        suggestion_id UUID NOT NULL REFERENCES creator_suggestion(id),
+        vote_count INTEGER DEFAULT 0
+      );
+    `);
+
+    // Poll votes (IP-deduplicated)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS creator_poll_vote (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        poll_id UUID NOT NULL REFERENCES creator_poll(id),
+        option_id UUID NOT NULL REFERENCES creator_poll_option(id),
+        voter_fingerprint TEXT NOT NULL,
+        voted_at TIMESTAMP DEFAULT NOW()
+      );
+    `);
+
     console.log("[Migration] Schema up to date");
   } catch (err) {
     console.error("[Migration] Failed:", (err as Error).message);
