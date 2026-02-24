@@ -575,9 +575,14 @@ export async function processCreatorVideos(
     `[CreatorPipeline] Processing creator: ${channelName} (${creator.youtubeChannelId})`,
   );
 
+  // First-time backlog: fetch up to 15 videos when creator has no history.
+  // Subsequent runs: trailing window of 5 most recent only.
+  const existingVideoCount = (await storage.getCreatorVideos(creatorId)).length;
+  const fetchLimit = existingVideoCount === 0 ? 15 : 5;
+
   let videos: VideoInfo[];
   try {
-    videos = await getRecentVideoIds(creator.youtubeChannelId, 5);
+    videos = await getRecentVideoIds(creator.youtubeChannelId, fetchLimit);
   } catch (err) {
     console.error(
       `[CreatorPipeline] Failed to fetch video IDs for ${channelName}:`,
