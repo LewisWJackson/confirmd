@@ -325,6 +325,30 @@ async function runStartupMigrations() {
       console.log(`[Migration] Deactivated ${deactivated.rowCount} stale creators: ${names}`);
     }
 
+    // Purge YouTube Shorts: delete claims first (FK), then videos
+    // Detects Shorts by title containing #shorts or duration under 90s
+    const deletedClaims = await client.query(`
+      DELETE FROM creator_claim
+      WHERE video_id IN (
+        SELECT id FROM creator_video
+        WHERE title ILIKE '%#short%'
+           OR (duration_seconds > 0 AND duration_seconds < 90)
+      )
+      RETURNING id
+    `);
+    const deletedVideos = await client.query(`
+      DELETE FROM creator_video
+      WHERE title ILIKE '%#short%'
+         OR (duration_seconds > 0 AND duration_seconds < 90)
+      RETURNING youtube_video_id, title
+    `);
+    if (deletedVideos.rowCount && deletedVideos.rowCount > 0) {
+      console.log(`[Migration] Purged ${deletedVideos.rowCount} Shorts videos and ${deletedClaims.rowCount} associated claims`);
+      deletedVideos.rows.slice(0, 5).forEach((r: { youtube_video_id: string; title: string }) =>
+        console.log(`  - ${r.title} (${r.youtube_video_id})`)
+      );
+    }
+
     console.log("[Migration] Schema up to date");
   } catch (err) {
     console.error("[Migration] Failed:", (err as Error).message);
