@@ -25,7 +25,7 @@ import type {
   Story,
 } from "../shared/schema.js";
 import { storage } from "./storage.js";
-import { generateStoryImageAI } from "./image-generator.js";
+import { generateStoryImageAI, queueImageRetry } from "./image-generator.js";
 import { analytics } from "./analytics.js";
 
 // ============================================
@@ -2979,12 +2979,14 @@ export class VerificationPipeline {
               console.log(`[Pipeline] AI image generated for story ${story.id}: ${aiImageUrl}`);
             } else {
               await this.storage.updateStory(story.id, { imageUrl: getStoryImageUrl(story.id) });
-              console.warn(`[Pipeline] AI image failed for story ${story.id}, using SVG fallback`);
+              queueImageRetry(story.id, group.title, storyCategory);
+              console.warn(`[Pipeline] AI image failed for story ${story.id}, using SVG fallback (queued for retry)`);
             }
           } catch (imgErr: any) {
             console.error(`[Pipeline] Image generation error for story ${story.id}:`, imgErr.message || imgErr);
             try {
               await this.storage.updateStory(story.id, { imageUrl: getStoryImageUrl(story.id) });
+              queueImageRetry(story.id, group.title, storyCategory);
             } catch { /* non-critical */ }
           }
 

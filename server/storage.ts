@@ -1367,18 +1367,57 @@ const SEED_CREATORS: Array<{
     channelUrl: "https://www.youtube.com/@CryptoBanter",
     description: "Live crypto trading shows and market commentary",
   },
+  {
+    youtubeChannelId: "UCl2oCaw8hdR_kbqyqd2klIA",
+    channelName: "Lark Davis",
+    channelHandle: "@TheCryptoLark",
+    channelUrl: "https://www.youtube.com/@TheCryptoLark",
+    description: "Daily crypto predictions and altcoin calls",
+  },
+  {
+    youtubeChannelId: "UCviqt5aaucA1jP3qFmorZLQ",
+    channelName: "Crypto Jebb",
+    channelHandle: "@CryptoJebb",
+    channelUrl: "https://www.youtube.com/@CryptoJebb",
+    description: "Technical analysis and price targets",
+  },
+  {
+    youtubeChannelId: "UClgJyzwGs-GyaNxUHcLZrkg",
+    channelName: "InvestAnswers",
+    channelHandle: "@InvestAnswers",
+    channelUrl: "https://www.youtube.com/@InvestAnswers",
+    description: "Data-driven macro and crypto analysis",
+  },
+  {
+    youtubeChannelId: "UCrYmtJBtLdtm2ov84ulV-yg",
+    channelName: "Ivan on Tech",
+    channelHandle: "@IvanOnTech",
+    channelUrl: "https://www.youtube.com/@IvanOnTech",
+    description: "High frequency crypto news and predictions",
+  },
+  {
+    youtubeChannelId: "UCZ3fejCy_P5xhv9QF-V6-YA",
+    channelName: "Sheldon Evans",
+    channelHandle: "@SheldonEvans",
+    channelUrl: "https://www.youtube.com/@SheldonEvans",
+    description: "Crypto investing and market calls",
+  },
 ];
 
 export async function seedCreators(storage: IStorage): Promise<void> {
   const existing = await storage.getCreators();
-  if (existing.length > 0) {
-    console.log(`[SeedCreators] ${existing.length} creators already exist — skipping`);
+  const existingIds = new Set(existing.map((c) => c.youtubeChannelId));
+
+  const toSeed = SEED_CREATORS.filter((s) => !existingIds.has(s.youtubeChannelId));
+
+  if (toSeed.length === 0) {
+    console.log(`[SeedCreators] All ${SEED_CREATORS.length} creators already exist — skipping`);
     return;
   }
 
-  console.log(`[SeedCreators] No creators found — seeding ${SEED_CREATORS.length} channels`);
+  console.log(`[SeedCreators] ${existing.length} existing, seeding ${toSeed.length} new creators`);
 
-  for (const seed of SEED_CREATORS) {
+  for (const seed of toSeed) {
     await storage.createCreator({
       youtubeChannelId: seed.youtubeChannelId,
       channelName: seed.channelName,

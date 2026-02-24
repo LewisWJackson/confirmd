@@ -10,6 +10,7 @@ import stripeRouter from "./stripe.js";
 import { storage, seedInitialData, seedCreators, MemStorage } from "./storage.js";
 import { pool } from "./db.js";
 import { pipeline } from "./pipeline-instance.js";
+import { startImageRetryLoop } from "./image-generator.js";
 import { runCreatorPipeline, verifyCreatorClaims, recalculateCreatorScores } from "./creator-pipeline.js";
 import { analytics } from "./analytics.js";
 
@@ -20,6 +21,7 @@ const app = express();
 const PORT = parseInt(process.env.PORT || "3000", 10);
 
 const SIX_HOURS_MS = 6 * 60 * 60 * 1000;
+const THREE_HOURS_MS = 3 * 60 * 60 * 1000;
 
 // ─── Middleware ──────────────────────────────────────────────────────
 
@@ -238,14 +240,17 @@ async function main() {
     console.log("=========================================");
     console.log("");
 
+    // Start background image retry queue
+    startImageRetryLoop(storage);
+
     // Delay the first pipeline run by 30 seconds so the server is fully ready
     setTimeout(() => {
       console.log("[Pipeline] Starting auto-run scheduler (6h interval)");
       pipeline.startScheduler(SIX_HOURS_MS);
     }, 30_000);
 
-    // Creator pipeline: run once after 5 min delay, then every 6 hours
-    const CREATOR_DELAY_MS = 5 * 60 * 1000;
+    // Creator pipeline: run once after 2 min delay, then every 3 hours
+    const CREATOR_DELAY_MS = 2 * 60 * 1000;
     const runCreatorCycle = async () => {
       console.log("[CreatorPipeline] Starting scheduled run");
       try {
@@ -260,7 +265,7 @@ async function main() {
 
     setTimeout(() => {
       runCreatorCycle();
-      setInterval(runCreatorCycle, SIX_HOURS_MS);
+      setInterval(runCreatorCycle, THREE_HOURS_MS);
     }, CREATOR_DELAY_MS);
   });
 }

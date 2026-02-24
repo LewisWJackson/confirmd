@@ -172,6 +172,83 @@ export function generateSvgFallback(params: StoryImageParams): string {
   return generateStoryImage(params);
 }
 
+// ── Background Retry Queue ───────────────────────────────────────────
+
+interface RetryEntry {
+  storyId: string;
+  title: string;
+  category: string | null;
+  attempts: number;
+  nextRetryAt: number;
+}
+
+const RETRY_DELAYS_MS = [
+  5 * 60 * 1000,    // attempt 1: 5 minutes
+  30 * 60 * 1000,   // attempt 2: 30 minutes
+  2 * 60 * 60 * 1000, // attempt 3: 2 hours
+];
+const MAX_RETRY_ATTEMPTS = 3;
+
+const retryQueue = new Map<string, RetryEntry>();
+
+/**
+ * Queue a failed image generation for background retry.
+ */
+export function queueImageRetry(storyId: string, title: string, category: string | null): void {
+  if (retryQueue.has(storyId)) return; // already queued
+  const entry: RetryEntry = {
+    storyId,
+    title,
+    category,
+    attempts: 0,
+    nextRetryAt: Date.now() + RETRY_DELAYS_MS[0],
+  };
+  retryQueue.set(storyId, entry);
+  console.log(`[ImageRetryQueue] Queued story ${storyId} for retry in 5 min ("${title.slice(0, 50)}...")`);
+}
+
+/**
+ * Start the background retry loop. Checks every 60s for due retries.
+ * On success, updates the story's imageUrl via storage.updateStory().
+ */
+export function startImageRetryLoop(storage: { updateStory: (id: string, data: { imageUrl: string }) => Promise<void> }): void {
+  const POLL_INTERVAL = 60 * 1000; // 60s
+
+  setInterval(async () => {
+    const now = Date.now();
+    for (const [storyId, entry] of retryQueue) {
+      if (now < entry.nextRetryAt) continue;
+
+      entry.attempts++;
+      console.log(`[ImageRetryQueue] Retrying story ${storyId} (attempt ${entry.attempts}/${MAX_RETRY_ATTEMPTS})`);
+
+      try {
+        const aiImageUrl = await generateStoryImageAI(storyId, entry.title, entry.category, true);
+        if (aiImageUrl) {
+          await storage.updateStory(storyId, { imageUrl: aiImageUrl });
+          retryQueue.delete(storyId);
+          console.log(`[ImageRetryQueue] Success for story ${storyId}: ${aiImageUrl}`);
+          continue;
+        }
+      } catch (err: any) {
+        console.error(`[ImageRetryQueue] Error retrying story ${storyId}:`, err.message || err);
+      }
+
+      // Still failed — re-queue or give up
+      if (entry.attempts >= MAX_RETRY_ATTEMPTS) {
+        retryQueue.delete(storyId);
+        console.warn(`[ImageRetryQueue] Giving up on story ${storyId} after ${MAX_RETRY_ATTEMPTS} retries`);
+      } else {
+        entry.nextRetryAt = now + RETRY_DELAYS_MS[entry.attempts];
+        const delayMin = Math.round(RETRY_DELAYS_MS[entry.attempts] / 60000);
+        console.log(`[ImageRetryQueue] Story ${storyId} will retry again in ${delayMin} min`);
+      }
+    }
+  }, POLL_INTERVAL);
+
+  console.log("[ImageRetryQueue] Background retry loop started (60s poll interval)");
+}
+
 // ── Video Thumbnail Generator ────────────────────────────────────────
 
 function ensureVideoThumbnailsDir(): void {

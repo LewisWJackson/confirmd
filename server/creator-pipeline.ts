@@ -476,7 +476,7 @@ export async function processCreatorVideos(
 
   let videos: VideoInfo[];
   try {
-    videos = await getRecentVideoIds(creator.youtubeChannelId, 3);
+    videos = await getRecentVideoIds(creator.youtubeChannelId, 5);
   } catch (err) {
     console.error(
       `[CreatorPipeline] Failed to fetch video IDs for ${channelName}:`,
