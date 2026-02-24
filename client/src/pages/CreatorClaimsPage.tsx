@@ -329,13 +329,13 @@ export default function CreatorClaimsPage() {
   });
 
   const allPredictions = useMemo(() => {
-    // Deduplicate by creator
+    // Deduplicate by video — one card per video (showing most recent claim per video)
     const seen = new Set<string>();
     const unique: any[] = [];
     for (const p of predictions) {
-      const cid = p.creator?.id || p.creator?.channelName || "";
-      if (seen.has(cid)) continue;
-      seen.add(cid);
+      const vid = p.video?.id || p.video?.youtubeVideoId || p.id || "";
+      if (seen.has(vid)) continue;
+      seen.add(vid);
       unique.push(p);
     }
     // Category filter

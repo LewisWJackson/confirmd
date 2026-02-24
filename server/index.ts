@@ -198,6 +198,13 @@ async function runStartupMigrations() {
       );
     `);
 
+    // Add missing user columns
+    await client.query(`
+      ALTER TABLE "user"
+        ADD COLUMN IF NOT EXISTS subscription_expires_at TIMESTAMP,
+        ADD COLUMN IF NOT EXISTS display_name TEXT NOT NULL DEFAULT '';
+    `);
+
     // ── Creator Leaderboard v2 migrations ──────────────────────────
 
     // New enums for claim consistency and poll system
