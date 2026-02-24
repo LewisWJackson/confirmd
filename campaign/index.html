@@ -1,0 +1,758 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Confirmd — Launch Campaign Dashboard</title>
+<style>
+  :root {
+    --bg: #0f0f1a;
+    --surface: #1a1a2e;
+    --surface-hover: #222240;
+    --border: #2a2a4a;
+    --text: #e8e8f0;
+    --text-muted: #8888aa;
+    --accent: #6366f1;
+    --accent-light: #818cf8;
+    --accent-glow: rgba(99,102,241,0.15);
+    --green: #22c55e;
+    --green-muted: rgba(34,197,94,0.15);
+    --amber: #f59e0b;
+    --red: #ef4444;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    line-height: 1.5;
+  }
+
+  .container {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 24px 16px 80px;
+  }
+
+  /* Header */
+  .header {
+    text-align: center;
+    margin-bottom: 32px;
+  }
+  .header h1 {
+    font-size: 28px;
+    font-weight: 700;
+    background: linear-gradient(135deg, var(--accent-light), #a78bfa);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 4px;
+  }
+  .header p {
+    color: var(--text-muted);
+    font-size: 14px;
+  }
+
+  /* Date picker row */
+  .date-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+  }
+  .date-row label {
+    font-size: 14px;
+    color: var(--text-muted);
+  }
+  .date-row input[type="date"] {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-size: 14px;
+    cursor: pointer;
+  }
+  .date-row input[type="date"]::-webkit-calendar-picker-indicator {
+    filter: invert(0.7);
+  }
+
+  /* Progress bar */
+  .progress-section {
+    margin-bottom: 32px;
+  }
+  .progress-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+  }
+  .progress-bar {
+    height: 8px;
+    background: var(--surface);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), #a78bfa);
+    border-radius: 4px;
+    transition: width 0.4s ease;
+  }
+
+  /* Filter tabs */
+  .filters {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+  }
+  .filter-btn {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .filter-btn:hover { border-color: var(--accent); color: var(--text); }
+  .filter-btn.active {
+    background: var(--accent-glow);
+    border-color: var(--accent);
+    color: var(--accent-light);
+  }
+
+  /* Timeline */
+  .timeline {
+    position: relative;
+    padding-left: 24px;
+  }
+  .timeline::before {
+    content: '';
+    position: absolute;
+    left: 7px;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: var(--border);
+  }
+
+  .day-card {
+    position: relative;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 16px;
+    transition: all 0.2s;
+  }
+  .day-card:hover {
+    border-color: var(--accent);
+    background: var(--surface-hover);
+  }
+  .day-card.today {
+    border-color: var(--accent);
+    box-shadow: 0 0 20px var(--accent-glow), inset 0 0 20px var(--accent-glow);
+  }
+  .day-card.posted {
+    opacity: 0.6;
+  }
+  .day-card.posted:hover { opacity: 0.85; }
+
+  /* Timeline dot */
+  .day-card::before {
+    content: '';
+    position: absolute;
+    left: -21px;
+    top: 24px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--border);
+    border: 2px solid var(--bg);
+  }
+  .day-card.today::before {
+    background: var(--accent);
+    box-shadow: 0 0 8px var(--accent);
+  }
+  .day-card.posted::before {
+    background: var(--green);
+  }
+
+  /* Card header */
+  .card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .card-header-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .day-label {
+    font-weight: 700;
+    font-size: 15px;
+  }
+  .day-date {
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+  .badge {
+    font-size: 11px;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .badge-teaser { background: rgba(99,102,241,0.15); color: var(--accent-light); }
+  .badge-hype { background: rgba(245,158,11,0.15); color: var(--amber); }
+  .badge-launch { background: rgba(239,68,68,0.15); color: var(--red); }
+  .badge-social-proof { background: rgba(34,197,94,0.15); color: var(--green); }
+  .badge-content { background: rgba(139,92,246,0.15); color: #a78bfa; }
+  .badge-cta { background: rgba(236,72,153,0.15); color: #f472b6; }
+
+  .today-badge {
+    font-size: 11px;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-weight: 600;
+    background: var(--accent);
+    color: white;
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+  }
+
+  /* Tweet text */
+  .tweet-text {
+    background: rgba(0,0,0,0.3);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px;
+    font-size: 14px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    margin-bottom: 12px;
+    position: relative;
+  }
+
+  /* Media/tips row */
+  .meta-row {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
+  }
+  .meta-item {
+    font-size: 12px;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .meta-item strong {
+    color: var(--text);
+    font-weight: 500;
+  }
+
+  /* Actions */
+  .card-actions {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    border: none;
+    transition: all 0.2s;
+  }
+  .btn-copy {
+    background: var(--accent);
+    color: white;
+  }
+  .btn-copy:hover { background: var(--accent-light); }
+  .btn-copy.copied {
+    background: var(--green);
+  }
+
+  .posted-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--text-muted);
+    cursor: pointer;
+    user-select: none;
+  }
+  .posted-toggle input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--green);
+    cursor: pointer;
+  }
+  .posted-toggle.is-posted {
+    color: var(--green);
+  }
+
+  /* Responsive */
+  @media (max-width: 500px) {
+    .container { padding: 16px 12px 60px; }
+    .header h1 { font-size: 22px; }
+    .day-card { padding: 16px; }
+    .meta-row { flex-direction: column; gap: 6px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <div class="header">
+    <h1>Confirmd Launch Campaign</h1>
+    <p>14-day campaign tracker — 7 pre-launch + launch + 6 post-launch</p>
+  </div>
+
+  <div class="date-row">
+    <label for="launch-date">Launch Date:</label>
+    <input type="date" id="launch-date">
+  </div>
+
+  <div class="progress-section">
+    <div class="progress-label">
+      <span id="progress-text">0 / 14 posted</span>
+      <span id="progress-pct">0%</span>
+    </div>
+    <div class="progress-bar">
+      <div class="progress-fill" id="progress-fill" style="width: 0%"></div>
+    </div>
+  </div>
+
+  <div class="filters">
+    <button class="filter-btn active" data-filter="all">All</button>
+    <button class="filter-btn" data-filter="teaser">Teaser</button>
+    <button class="filter-btn" data-filter="hype">Hype</button>
+    <button class="filter-btn" data-filter="launch">Launch</button>
+    <button class="filter-btn" data-filter="social-proof">Social Proof</button>
+    <button class="filter-btn" data-filter="content">Content</button>
+    <button class="filter-btn" data-filter="cta">CTA</button>
+  </div>
+
+  <div class="timeline" id="timeline"></div>
+</div>
+
+<script>
+const CAMPAIGN = [
+  {
+    day: -7,
+    label: "Day -7",
+    type: "teaser",
+    typeName: "Teaser",
+    tweet: `Every day, crypto Twitter tells you something is "confirmed."
+
+But is it?
+
+Building something to fix that. More soon.`,
+    media: "None — text only, mysterious",
+    tip: "Post in the morning. Let curiosity do the work. Don't reply to questions yet."
+  },
+  {
+    day: -6,
+    label: "Day -6",
+    type: "content",
+    typeName: "Content",
+    tweet: `The problem with crypto news:
+
+- Anonymous accounts break "news" with zero sources
+- CT amplifies it before anyone checks
+- By the time it's debunked, the damage is done
+
+We need a trust layer for crypto information.`,
+    media: "None — thread-style numbered list",
+    tip: "This is the 'problem' post. Gets people nodding along. Good for engagement — ask 'what would you add?' in a reply."
+  },
+  {
+    day: -5,
+    label: "Day -5",
+    type: "teaser",
+    typeName: "Teaser",
+    tweet: `What if every crypto headline came with a factuality score?
+
+Not opinion. Not vibes.
+
+AI-verified claims cross-referenced against on-chain data, official sources, and track records.
+
+That's what we're building.`,
+    media: "Optional: mockup screenshot of a factuality bar (blurred/teased)",
+    tip: "First time mentioning the concept. Still no name drop. Build intrigue."
+  },
+  {
+    day: -4,
+    label: "Day -4",
+    type: "hype",
+    typeName: "Hype",
+    tweet: `Ground News showed that media bias is measurable.
+
+We're doing the same thing for crypto.
+
+Every claim. Every source. Every track record. Scored and transparent.
+
+Launching in 4 days.`,
+    media: "None — the Ground News comparison does the heavy lifting",
+    tip: "The analogy makes it instantly understandable. 'Ground News for crypto' is your one-liner."
+  },
+  {
+    day: -3,
+    label: "Day -3",
+    type: "content",
+    typeName: "Content",
+    tweet: `Here's how our verification pipeline works:
+
+1. Ingest claims from 50+ crypto news sources
+2. AI extracts specific factual claims
+3. Cross-reference against on-chain data & official sources
+4. Score source track records over time
+5. Generate a verdict: Confirmed, Misleading, or Unverified
+
+No human bias. No editorial agenda. Just data.`,
+    media: "Attach: pipeline diagram or infographic if available",
+    tip: "The 'how it works' post. People love seeing the process. Save as a bookmark/pin."
+  },
+  {
+    day: -2,
+    label: "Day -2",
+    type: "hype",
+    typeName: "Hype",
+    tweet: `Confirmd is almost ready.
+
+Think of it as your bullshit detector for crypto news.
+
+Every headline fact-checked. Every source scored. Every claim tracked.
+
+Launching in 2 days. Free to use.
+
+Who wants early access? 👇`,
+    media: "Optional: screenshot of the dashboard UI",
+    tip: "First name drop! 'Who wants early access' drives replies. Reply to everyone who comments."
+  },
+  {
+    day: -1,
+    label: "Day -1",
+    type: "hype",
+    typeName: "Hype",
+    tweet: `Tomorrow.
+
+Confirmd goes live.
+
+Stop trusting. Start verifying.`,
+    media: "Optional: countdown graphic or short video teaser",
+    tip: "Keep it short and punchy. The brevity creates tension. Post in the evening for max anticipation."
+  },
+  {
+    day: 0,
+    label: "LAUNCH DAY",
+    type: "launch",
+    typeName: "Launch",
+    tweet: `Confirmd is live. 🟢
+
+The bullshit detector crypto needed.
+
+Every headline fact-checked by AI.
+Every source scored on track record.
+Every claim — Confirmed, Misleading, or Unverified.
+
+Think Ground News, but for crypto.
+
+Free to use. Link below 👇
+
+[LINK]`,
+    media: "Attach: polished screenshot or 30-sec demo video. Pin this tweet.",
+    tip: "POST EARLY (8-9am). Pin it. Reply with the link. Quote-tweet it from your own account with a personal note. Ask friends to RT."
+  },
+  {
+    day: 1,
+    label: "Day +1",
+    type: "social-proof",
+    typeName: "Social Proof",
+    tweet: `24 hours since Confirmd launched.
+
+Here's what happened:
+- [X] claims verified
+- [X] sources scored
+- [X] users checking facts instead of trusting blindly
+
+The early response has been incredible. Thank you.
+
+If you haven't tried it yet: [LINK]`,
+    media: "Screenshot of real stats from the dashboard if available",
+    tip: "Fill in real numbers. Even small numbers work — '47 claims verified' sounds impressive for day 1."
+  },
+  {
+    day: 2,
+    label: "Day +2",
+    type: "content",
+    typeName: "Content",
+    tweet: `Real example from Confirmd today:
+
+Headline: "[Insert real headline from the feed]"
+
+Our verdict: [Confirmed/Misleading/Unverified]
+
+Why: [1-2 sentence explanation]
+
+This is what crypto news should look like. Every claim checked, not just amplified.
+
+Try it free → [LINK]`,
+    media: "Screenshot of the actual claim verdict page",
+    tip: "Use a REAL example from the live feed. Pick something surprising or counterintuitive."
+  },
+  {
+    day: 3,
+    label: "Day +3",
+    type: "social-proof",
+    typeName: "Social Proof",
+    tweet: `People keep asking: "How is this free?"
+
+Because trust shouldn't be paywalled.
+
+Confirmd is free because everyone deserves to know if what they're reading is true.
+
+Premium features coming later. But the core — fact-checking every crypto headline — will always be free.
+
+[LINK]`,
+    media: "None",
+    tip: "This handles the 'what's the catch' objection. Builds trust and goodwill."
+  },
+  {
+    day: 4,
+    label: "Day +4",
+    type: "content",
+    typeName: "Content",
+    tweet: `The most misleading crypto sources this week, according to Confirmd:
+
+We track every source's accuracy over time. Some "trusted" names are wrong more than they're right.
+
+Here are the track records 👇
+
+[Screenshot of source leaderboard]
+
+Check any source's score at [LINK]`,
+    media: "Screenshot of source scores/leaderboard from the app",
+    tip: "Controversial = engagement. Name names if the data supports it. People will share this."
+  },
+  {
+    day: 5,
+    label: "Day +5",
+    type: "cta",
+    typeName: "CTA",
+    tweet: `I built Confirmd because I was mass-fed crypto misinformation during the last cycle.
+
+Bought into hype. Ignored red flags. Lost money on claims that were never verified.
+
+Never again.
+
+Now every headline I read gets fact-checked automatically.
+
+If you're tired of the noise → [LINK]`,
+    media: "None — personal story, raw and authentic",
+    tip: "Personal story = highest engagement. Be genuine. This is your 'why I built this' moment."
+  },
+  {
+    day: 6,
+    label: "Day +6",
+    type: "cta",
+    typeName: "CTA",
+    tweet: `One week of Confirmd:
+
+✅ [X] claims fact-checked
+✅ [X] misleading headlines caught
+✅ [X] sources tracked
+
+And we're just getting started.
+
+Upcoming:
+→ Newsletter digest (daily verified news)
+→ Source reputation badges
+→ Community fact-checking
+
+Join now while it's free → [LINK]`,
+    media: "Optional: week-1 stats graphic",
+    tip: "Week recap + roadmap teaser. Shows momentum and vision. Good time to ask for newsletter signups too."
+  }
+];
+
+// --- State ---
+const LS_KEY = 'confirmd-campaign';
+let state = JSON.parse(localStorage.getItem(LS_KEY) || '{}');
+if (!state.posted) state.posted = {};
+if (!state.launchDate) state.launchDate = getDefaultLaunchDate();
+let activeFilter = 'all';
+
+function getDefaultLaunchDate() {
+  const d = new Date();
+  d.setDate(d.getDate() + 7);
+  return d.toISOString().split('T')[0];
+}
+
+function save() {
+  localStorage.setItem(LS_KEY, JSON.stringify(state));
+}
+
+// --- Date handling ---
+function getDayDate(dayOffset) {
+  const launch = new Date(state.launchDate + 'T00:00:00');
+  const d = new Date(launch);
+  d.setDate(d.getDate() + dayOffset);
+  return d;
+}
+
+function formatDate(d) {
+  return d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+}
+
+function isToday(d) {
+  const now = new Date();
+  return d.getFullYear() === now.getFullYear() &&
+         d.getMonth() === now.getMonth() &&
+         d.getDate() === now.getDate();
+}
+
+// --- Render ---
+function render() {
+  const timeline = document.getElementById('timeline');
+  timeline.innerHTML = '';
+
+  let postedCount = 0;
+
+  CAMPAIGN.forEach((item, i) => {
+    const isPosted = !!state.posted[i];
+    if (isPosted) postedCount++;
+
+    const dayDate = getDayDate(item.day);
+    const today = isToday(dayDate);
+
+    // Filter
+    if (activeFilter !== 'all' && item.type !== activeFilter) return;
+
+    const card = document.createElement('div');
+    card.className = 'day-card' + (today ? ' today' : '') + (isPosted ? ' posted' : '');
+
+    card.innerHTML = `
+      <div class="card-header">
+        <div class="card-header-left">
+          <span class="day-label">${item.label}</span>
+          <span class="day-date">${formatDate(dayDate)}</span>
+          <span class="badge badge-${item.type}">${item.typeName}</span>
+          ${today ? '<span class="today-badge">TODAY</span>' : ''}
+        </div>
+      </div>
+      <div class="tweet-text">${escapeHtml(item.tweet)}</div>
+      <div class="meta-row">
+        <div class="meta-item">📎 <strong>Media:</strong> ${escapeHtml(item.media)}</div>
+        <div class="meta-item">💡 <strong>Tip:</strong> ${escapeHtml(item.tip)}</div>
+      </div>
+      <div class="card-actions">
+        <button class="btn btn-copy" data-index="${i}">📋 Copy Tweet</button>
+        <label class="posted-toggle ${isPosted ? 'is-posted' : ''}">
+          <input type="checkbox" ${isPosted ? 'checked' : ''} data-index="${i}">
+          ${isPosted ? 'Posted ✓' : 'Mark as posted'}
+        </label>
+      </div>
+    `;
+
+    timeline.appendChild(card);
+  });
+
+  // Progress
+  updateProgress(postedCount);
+
+  // Scroll to today if exists
+  const todayCard = document.querySelector('.day-card.today');
+  if (todayCard && !window._scrolledOnce) {
+    setTimeout(() => todayCard.scrollIntoView({ behavior: 'smooth', block: 'center' }), 300);
+    window._scrolledOnce = true;
+  }
+}
+
+function updateProgress(count) {
+  const total = CAMPAIGN.length;
+  const pct = Math.round((count / total) * 100);
+  document.getElementById('progress-text').textContent = `${count} / ${total} posted`;
+  document.getElementById('progress-pct').textContent = `${pct}%`;
+  document.getElementById('progress-fill').style.width = `${pct}%`;
+}
+
+function escapeHtml(str) {
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// --- Events ---
+
+// Copy button
+document.getElementById('timeline').addEventListener('click', (e) => {
+  const btn = e.target.closest('.btn-copy');
+  if (!btn) return;
+  const idx = parseInt(btn.dataset.index);
+  navigator.clipboard.writeText(CAMPAIGN[idx].tweet).then(() => {
+    btn.textContent = '✅ Copied!';
+    btn.classList.add('copied');
+    setTimeout(() => {
+      btn.textContent = '📋 Copy Tweet';
+      btn.classList.remove('copied');
+    }, 2000);
+  });
+});
+
+// Posted checkbox
+document.getElementById('timeline').addEventListener('change', (e) => {
+  if (e.target.type !== 'checkbox') return;
+  const idx = parseInt(e.target.dataset.index);
+  state.posted[idx] = e.target.checked;
+  save();
+  render();
+});
+
+// Date picker
+const datePicker = document.getElementById('launch-date');
+datePicker.value = state.launchDate;
+datePicker.addEventListener('change', (e) => {
+  state.launchDate = e.target.value;
+  save();
+  render();
+});
+
+// Filter tabs
+document.querySelectorAll('.filter-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    activeFilter = btn.dataset.filter;
+    render();
+  });
+});
+
+// Initial render
+render();
+</script>
+</body>
+</html>

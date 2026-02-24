@@ -366,7 +366,7 @@ Extract all specific, verifiable claims as a JSON array.`;
 
   try {
     const response = await anthropic.messages.create({
-      model: "claude-sonnet-4-5-20250929",
+      model: "claude-haiku-4-5-20251001",
       max_tokens: 4096,
       system: systemPrompt,
       messages: [{ role: "user", content: userMessage }],
@@ -453,7 +453,108 @@ function parseClaimsResponse(text: string): ExtractedClaim[] {
 }
 
 // ============================================
-// 4. PROCESS CREATOR VIDEOS
+// 4. REFLECT ON CLAIM CONSISTENCY
+// ============================================
+
+type ConsistencyResult = {
+  claimText: string;
+  consistency: "first_occurrence" | "repeated" | "evolved" | "reversed";
+  priorClaimId?: string;
+  consistencyNote?: string;
+};
+
+/**
+ * Use Claude Haiku to classify new claims against a creator's existing claim history.
+ * Returns consistency results for each new claim (defaults to first_occurrence on any failure).
+ */
+async function reflectOnClaims(
+  newClaims: ExtractedClaim[],
+  existingClaims: { id: string; claimText: string; status: string; createdAt: Date }[]
+): Promise<ConsistencyResult[]> {
+  if (!anthropic || existingClaims.length === 0 || newClaims.length === 0) {
+    return newClaims.map((c) => ({ claimText: c.claimText, consistency: "first_occurrence" as const }));
+  }
+
+  // Cap to 30 most recent existing claims, truncate text to stay within token budget
+  const recentExisting = existingClaims
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    .slice(0, 30);
+
+  // Build existing claims list, capping total chars at 4000
+  let existingText = "";
+  for (const c of recentExisting) {
+    const line = `[${c.id}] ${c.claimText}\n`;
+    if (existingText.length + line.length > 4000) break;
+    existingText += line;
+  }
+
+  const newClaimsText = newClaims.map((c, i) => `${i + 1}. ${c.claimText}`).join("\n");
+
+  const prompt = `You are analyzing a crypto YouTube creator's claim history to detect consistency patterns.
+
+EXISTING CLAIMS (format: [id] claim text):
+${existingText}
+
+NEW CLAIMS TO CLASSIFY:
+${newClaimsText}
+
+For each new claim, classify it as:
+- "first_occurrence": genuinely new topic not covered by existing claims
+- "repeated": essentially the same claim made before (same asset, same direction, same timeframe)
+- "evolved": related claim but updated/more specific (same topic, new data or timeframe)
+- "reversed": directly contradicts a prior claim (predicted up, now predicts down, etc.)
+
+Return ONLY a valid JSON array with one entry per new claim, in the same order:
+[
+  {
+    "claimText": "<exact claim text from new claims list>",
+    "consistency": "first_occurrence" | "repeated" | "evolved" | "reversed",
+    "priorClaimId": "<id of the most relevant existing claim>" | null,
+    "consistencyNote": "<brief explanation, 1 sentence>" | null
+  }
+]`;
+
+  try {
+    const response = await anthropic.messages.create({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 2048,
+      messages: [{ role: "user", content: prompt }],
+    });
+
+    let responseText = "";
+    for (const block of response.content) {
+      if (block.type === "text") responseText += block.text;
+    }
+
+    const jsonMatch = responseText.match(/\[[\s\S]*\]/);
+    if (!jsonMatch) throw new Error("No JSON array found in response");
+
+    const parsed = JSON.parse(jsonMatch[0]);
+    if (!Array.isArray(parsed)) throw new Error("Response is not an array");
+
+    const validConsistencies = ["first_occurrence", "repeated", "evolved", "reversed"] as const;
+
+    return newClaims.map((c, i) => {
+      const entry = parsed[i];
+      if (!entry) return { claimText: c.claimText, consistency: "first_occurrence" as const };
+      return {
+        claimText: c.claimText,
+        consistency: validConsistencies.includes(entry.consistency) ? entry.consistency : "first_occurrence",
+        priorClaimId: entry.priorClaimId ?? undefined,
+        consistencyNote: entry.consistencyNote ?? undefined,
+      };
+    });
+  } catch (err) {
+    console.warn(
+      "[CreatorPipeline] reflectOnClaims failed, defaulting to first_occurrence:",
+      err instanceof Error ? err.message : err,
+    );
+    return newClaims.map((c) => ({ claimText: c.claimText, consistency: "first_occurrence" as const }));
+  }
+}
+
+// ============================================
+// 5. PROCESS CREATOR VIDEOS
 // ============================================
 
 /**
@@ -554,8 +655,27 @@ export async function processCreatorVideos(
         videoDate,
       );
 
+      // Reflect on consistency against existing creator claims
+      const existingClaims = await storage.getCreatorClaims({ creatorId, limit: 50 });
+      const consistencyResults = await reflectOnClaims(
+        claims,
+        existingClaims.map((c) => ({
+          id: c.id,
+          claimText: c.claimText,
+          status: c.status,
+          createdAt: c.createdAt!,
+        }))
+      );
+
+      // Build a map from claimText → ConsistencyResult for fast lookup
+      const consistencyMap = new Map<string, ConsistencyResult>();
+      for (const r of consistencyResults) {
+        consistencyMap.set(r.claimText, r);
+      }
+
       // Save claims to DB
       for (const claim of claims) {
+        const consistency = consistencyMap.get(claim.claimText);
         await storage.createCreatorClaim({
           creatorId,
           videoId: video.id,
@@ -568,6 +688,11 @@ export async function processCreatorVideos(
           videoTimestampSeconds: claim.timestampSeconds,
           assetSymbols: claim.assetSymbols,
           status: "pending",
+          ...(consistency && {
+            consistency: consistency.consistency as InsertCreatorClaim["consistency"],
+            priorClaimId: consistency.priorClaimId ?? null,
+            consistencyNote: consistency.consistencyNote ?? null,
+          }),
         });
       }
 
@@ -602,7 +727,7 @@ export async function processCreatorVideos(
 }
 
 // ============================================
-// 5. RUN CREATOR PIPELINE
+// 6. RUN CREATOR PIPELINE
 // ============================================
 
 let isCreatorPipelineRunning = false;
@@ -651,7 +776,7 @@ export async function runCreatorPipeline(
 }
 
 // ============================================
-// 6. VERIFY CREATOR CLAIMS
+// 7. VERIFY CREATOR CLAIMS
 // ============================================
 
 /**
@@ -762,7 +887,7 @@ Respond with JSON only:
 }
 
 // ============================================
-// 7. RECALCULATE CREATOR SCORES
+// 8. RECALCULATE CREATOR SCORES
 // ============================================
 
 const CATEGORY_GROUPS: Record<string, string[]> = {
@@ -942,7 +1067,7 @@ export async function recalculateCreatorScores(
 }
 
 // ============================================
-// 8. EVALUATE DISPUTE
+// 9. EVALUATE DISPUTE
 // ============================================
 
 /**

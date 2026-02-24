@@ -6,7 +6,7 @@ import { pipeline } from "./pipeline-instance.js";
 import { runCreatorPipeline, verifyCreatorClaims, recalculateCreatorScores, evaluateDispute } from "./creator-pipeline.js";
 import { generateSvgFallback, generateStoryImageAI, generateVideoThumbnail, getVideoThumbnailUrl, generateTierImages } from "./image-generator.js";
 import { analytics } from "./analytics.js";
-import type { Claim, Verdict, EvidenceItem, Resolution, Source, SourceScore, Creator, CreatorVideo, CreatorClaim, CreatorScore, Dispute } from "../shared/schema.js";
+import type { Claim, Verdict, EvidenceItem, Resolution, Source, SourceScore, Creator, CreatorVideo, CreatorClaim, CreatorScore, Dispute, CreatorSuggestion, CreatorPoll, CreatorPollOption } from "../shared/schema.js";
 
 declare module "express-session" {
   interface SessionData {
@@ -1325,6 +1325,109 @@ router.post("/creators/pipeline/run", async (_req: Request, res: Response) => {
   } catch (err) {
     console.error("POST /creators/pipeline/run error:", err);
     res.status(500).json({ error: "Failed to trigger creator pipeline" });
+  }
+});
+
+// ─── POST /creators/suggest ─────────────────────────────────────────
+
+router.post("/creators/suggest", async (req: Request, res: Response) => {
+  try {
+    const { channelName, channelHandle, youtubeChannelId } = req.body || {};
+
+    if (!channelName || !channelHandle) {
+      res.status(400).json({ error: "channelName and channelHandle are required" });
+      return;
+    }
+
+    const suggestion = await storage.createCreatorSuggestion({
+      channelName,
+      channelHandle,
+      youtubeChannelId: youtubeChannelId ?? null,
+      suggestedBy: null,
+      voteCount: 0,
+      status: "pending",
+    });
+
+    res.status(201).json({ data: suggestion });
+  } catch (err) {
+    console.error("POST /creators/suggest error:", err);
+    res.status(500).json({ error: "Failed to submit creator suggestion" });
+  }
+});
+
+// ─── GET /creators/suggestions ──────────────────────────────────────
+
+router.get("/creators/suggestions", async (req: Request, res: Response) => {
+  try {
+    const status = typeof req.query.status === "string" ? req.query.status : undefined;
+    const suggestions = await storage.getCreatorSuggestions(status);
+    res.json({ data: suggestions });
+  } catch (err) {
+    console.error("GET /creators/suggestions error:", err);
+    res.status(500).json({ error: "Failed to fetch creator suggestions" });
+  }
+});
+
+// ─── GET /creators/polls/active ─────────────────────────────────────
+
+router.get("/creators/polls/active", async (_req: Request, res: Response) => {
+  try {
+    const result = await storage.getActivePoll();
+    if (!result) {
+      res.json({ data: null });
+      return;
+    }
+    res.json({ data: result });
+  } catch (err) {
+    console.error("GET /creators/polls/active error:", err);
+    res.status(500).json({ error: "Failed to fetch active poll" });
+  }
+});
+
+// ─── POST /creators/polls/:pollId/vote ──────────────────────────────
+
+router.post("/creators/polls/:pollId/vote", async (req: Request, res: Response) => {
+  try {
+    const pollId = param(req, "pollId");
+    const { optionId } = req.body || {};
+
+    if (!optionId) {
+      res.status(400).json({ error: "optionId is required" });
+      return;
+    }
+
+    const forwardedFor = req.headers["x-forwarded-for"];
+    const voterFingerprint = req.ip || (Array.isArray(forwardedFor) ? forwardedFor[0] : forwardedFor) || "anonymous";
+    const result = await storage.votePoll(optionId as string, pollId, voterFingerprint);
+
+    if (!result.success) {
+      res.status(409).json({ error: result.message });
+      return;
+    }
+
+    res.json({ data: { message: result.message } });
+  } catch (err) {
+    console.error("POST /creators/polls/:pollId/vote error:", err);
+    res.status(500).json({ error: "Failed to record vote" });
+  }
+});
+
+// ─── POST /creators/polls/admin/complete/:pollId ─────────────────────
+
+router.post("/creators/polls/admin/complete/:pollId", async (req: Request, res: Response) => {
+  try {
+    const pollId = param(req, "pollId");
+    const winner = await storage.completePoll(pollId);
+
+    res.json({
+      data: {
+        message: winner ? "Poll completed. Winner: " + winner.channelName : "Poll completed with no winner.",
+        winner: winner ?? null,
+      },
+    });
+  } catch (err) {
+    console.error("POST /creators/polls/admin/complete/:pollId error:", err);
+    res.status(500).json({ error: "Failed to complete poll" });
   }
 });
 

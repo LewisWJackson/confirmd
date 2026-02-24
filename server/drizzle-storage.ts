@@ -51,6 +51,10 @@ import type {
   Gift,
   NewsletterSubscriber,
   InsertNewsletterSubscriber,
+  CreatorSuggestion,
+  InsertCreatorSuggestion,
+  CreatorPoll,
+  CreatorPollOption,
 } from "../shared/schema.js";
 
 export class DrizzleStorage implements IStorage {
@@ -783,5 +787,39 @@ export class DrizzleStorage implements IStorage {
 
   setLastPipelineRun(ts: string): void {
     this.lastPipelineRun = ts;
+  }
+
+  // ── Creator Suggestions (stubs — not yet wired to DB tables) ──────
+
+  async createCreatorSuggestion(_data: Omit<InsertCreatorSuggestion, 'id'>): Promise<CreatorSuggestion> {
+    throw new Error("createCreatorSuggestion: not implemented in DrizzleStorage — use MemStorage or migrate schema first");
+  }
+
+  async getCreatorSuggestions(_status?: string): Promise<CreatorSuggestion[]> {
+    return [];
+  }
+
+  async updateCreatorSuggestion(_id: string, _data: Partial<CreatorSuggestion>): Promise<void> {
+    // no-op until DB tables exist
+  }
+
+  async createCreatorPoll(_data: { endsAt?: Date }): Promise<CreatorPoll> {
+    throw new Error("createCreatorPoll: not implemented in DrizzleStorage — use MemStorage or migrate schema first");
+  }
+
+  async getActivePoll(): Promise<{ poll: CreatorPoll; options: Array<CreatorPollOption & { suggestion: CreatorSuggestion }> } | null> {
+    return null;
+  }
+
+  async createPollOption(_pollId: string, _suggestionId: string): Promise<CreatorPollOption> {
+    throw new Error("createPollOption: not implemented in DrizzleStorage — use MemStorage or migrate schema first");
+  }
+
+  async votePoll(_optionId: string, _pollId: string, _voterFingerprint: string): Promise<{ success: boolean; message: string }> {
+    return { success: false, message: "Polls not yet available in production DB" };
+  }
+
+  async completePoll(_pollId: string): Promise<CreatorSuggestion | null> {
+    return null;
   }
 }

@@ -42,6 +42,11 @@ export const creatorClaimCategoryEnum = pgEnum("creator_claim_category", [
 export const creatorClaimStrengthEnum = pgEnum("creator_claim_strength", ["strong", "medium", "weak"]);
 export const disputeTypeEnum = pgEnum("dispute_type", ["never_said", "misquoted", "out_of_context", "wrong_creator"]);
 export const disputeStatusEnum = pgEnum("dispute_status", ["pending", "upheld", "rejected", "under_investigation"]);
+export const creatorClaimConsistencyEnum = pgEnum("creator_claim_consistency", [
+  "first_occurrence", "repeated", "evolved", "reversed"
+]);
+export const pollStatusEnum = pgEnum("poll_status", ["active", "completed"]);
+export const suggestionStatusEnum = pgEnum("suggestion_status", ["pending", "in_poll", "added", "rejected"]);
 
 // Tables
 export const sources = pgTable("source", {
@@ -253,6 +258,9 @@ export const creatorClaims = pgTable("creator_claim", {
   verificationNotes: text("verification_notes"),
   aiExtractionConfidence: real("ai_extraction_confidence").default(0.8),
   assetSymbols: text("asset_symbols").array().default([]),
+  priorClaimId: uuid("prior_claim_id"),  // no FK to avoid circular issues
+  consistency: creatorClaimConsistencyEnum("consistency").default("first_occurrence"),
+  consistencyNote: text("consistency_note"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -287,6 +295,41 @@ export const disputes = pgTable("dispute", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+export const creatorSuggestions = pgTable("creator_suggestion", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  channelName: text("channel_name").notNull(),
+  channelHandle: text("channel_handle").notNull(),
+  youtubeChannelId: text("youtube_channel_id"),
+  suggestedBy: text("suggested_by"),
+  voteCount: integer("vote_count").default(0),
+  status: suggestionStatusEnum("status").notNull().default("pending"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const creatorPolls = pgTable("creator_poll", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  status: pollStatusEnum("status").notNull().default("active"),
+  startsAt: timestamp("starts_at").defaultNow(),
+  endsAt: timestamp("ends_at"),
+  winnerSuggestionId: uuid("winner_suggestion_id"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const creatorPollOptions = pgTable("creator_poll_option", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  pollId: uuid("poll_id").notNull().references(() => creatorPolls.id),
+  suggestionId: uuid("suggestion_id").notNull().references(() => creatorSuggestions.id),
+  voteCount: integer("vote_count").default(0),
+});
+
+export const creatorPollVotes = pgTable("creator_poll_vote", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  pollId: uuid("poll_id").notNull().references(() => creatorPolls.id),
+  optionId: uuid("option_id").notNull().references(() => creatorPollOptions.id),
+  voterFingerprint: text("voter_fingerprint").notNull(),
+  votedAt: timestamp("voted_at").defaultNow(),
+});
+
 // ─── Newsletter Tables ───────────────────────────────────────────────
 
 export const newsletterSubscribers = pgTable("newsletter_subscriber", {
@@ -314,6 +357,9 @@ export const insertCreatorClaimSchema = createInsertSchema(creatorClaims).omit({
 export const insertCreatorScoreSchema = createInsertSchema(creatorScores).omit({ id: true });
 export const insertDisputeSchema = createInsertSchema(disputes).omit({ id: true, createdAt: true });
 export const insertGiftSchema = createInsertSchema(gifts).omit({ id: true, createdAt: true });
+export const insertCreatorSuggestionSchema = createInsertSchema(creatorSuggestions).omit({ id: true, createdAt: true });
+export const insertCreatorPollSchema = createInsertSchema(creatorPolls).omit({ id: true, createdAt: true });
+export const insertCreatorPollOptionSchema = createInsertSchema(creatorPollOptions).omit({ id: true });
 
 // Types
 export type Source = typeof sources.$inferSelect;
@@ -348,3 +394,9 @@ export type Gift = typeof gifts.$inferSelect;
 export type InsertGift = z.infer<typeof insertGiftSchema>;
 export type NewsletterSubscriber = typeof newsletterSubscribers.$inferSelect;
 export type InsertNewsletterSubscriber = z.infer<typeof insertNewsletterSubscriberSchema>;
+export type CreatorSuggestion = typeof creatorSuggestions.$inferSelect;
+export type InsertCreatorSuggestion = z.infer<typeof insertCreatorSuggestionSchema>;
+export type CreatorPoll = typeof creatorPolls.$inferSelect;
+export type InsertCreatorPoll = z.infer<typeof insertCreatorPollSchema>;
+export type CreatorPollOption = typeof creatorPollOptions.$inferSelect;
+export type CreatorPollVote = typeof creatorPollVotes.$inferSelect;

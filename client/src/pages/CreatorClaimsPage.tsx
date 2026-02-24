@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
+import { motion, AnimatePresence } from "framer-motion";
 import { fetchCreatorFeed, fetchCreatorLeaderboard } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
 
@@ -9,7 +10,17 @@ const FREE_BLURRED = 8;
 
 const CATEGORIES = ["All", "Markets", "Regulation", "DeFi", "Security", "Technology"];
 
-/* --- Helpers -------------------------------------------------- */
+const SORT_OPTIONS = [
+  { key: "latest",          label: "Latest" },
+  { key: "highest_accuracy", label: "Highest Accuracy" },
+  { key: "most_verified",   label: "Most Verified" },
+  { key: "most_claims",     label: "Most Claims" },
+] as const;
+type SortKey = typeof SORT_OPTIONS[number]["key"];
+
+/* ------------------------------------------------------------------ */
+/* Helpers                                                              */
+/* ------------------------------------------------------------------ */
 
 function timeAgo(dateStr: string): string {
   const now = Date.now();
@@ -33,7 +44,29 @@ function accuracyColor(pct: number): string {
   return "text-factuality-low";
 }
 
-/* --- YouTube-style Video Card --------------------------------- */
+/* ------------------------------------------------------------------ */
+/* Consistency badge                                                    */
+/* ------------------------------------------------------------------ */
+
+function ConsistencyPill({ consistency }: { consistency: string }) {
+  if (!consistency || consistency === "first_occurrence") return null;
+  const map: Record<string, { label: string; classes: string }> = {
+    repeated: { label: "Repeated", classes: "bg-amber-500/10 text-amber-400 border-amber-500/20" },
+    evolved:  { label: "Evolved",  classes: "bg-blue-500/10  text-blue-400  border-blue-500/20"  },
+    reversed: { label: "Reversed", classes: "bg-red-500/10   text-red-400   border-red-500/20"   },
+  };
+  const cfg = map[consistency];
+  if (!cfg) return null;
+  return (
+    <span className={`inline-block text-[9px] font-bold px-1.5 py-0.5 rounded-full border ${cfg.classes}`}>
+      {cfg.label}
+    </span>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* YouTube-style Video Card                                             */
+/* ------------------------------------------------------------------ */
 
 function VideoCard({
   prediction,
@@ -44,10 +77,7 @@ function VideoCard({
 }) {
   const creator = prediction.creator;
   const video = prediction.video;
-
   const youtubeId = video?.youtubeVideoId;
-
-  // Prefer AI-generated thumbnail from the API, fall back to YouTube default
   const thumbnailUrl = video?.thumbnailUrl
     ? video.thumbnailUrl
     : youtubeId
@@ -56,7 +86,7 @@ function VideoCard({
 
   return (
     <div className="group">
-      {/* Thumbnail with enforced 16:9 aspect ratio and play button overlay */}
+      {/* Thumbnail */}
       <div
         className="relative w-full rounded-xl overflow-hidden bg-black mb-3 cursor-pointer"
         style={{ paddingBottom: "56.25%" }}
@@ -75,9 +105,7 @@ function VideoCard({
         ) : (
           <div className="absolute inset-0 bg-gradient-to-br from-surface-secondary via-surface-card to-surface-card-hover" />
         )}
-        {/* Dark overlay */}
         <div className="absolute inset-0 bg-black/20 group-hover:bg-black/10 transition-colors" />
-        {/* Play button */}
         <div className="absolute inset-0 flex items-center justify-center">
           <div className="w-12 h-12 rounded-full bg-red-600 flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
             <svg className="w-5 h-5 text-white ml-0.5" fill="currentColor" viewBox="0 0 24 24">
@@ -87,19 +115,14 @@ function VideoCard({
         </div>
       </div>
 
-      {/* Meta row: avatar + text -- clicks navigate to creator profile */}
+      {/* Meta */}
       <div className="flex gap-3">
-        {/* Creator avatar -- clicks to creator profile */}
         <div
           onClick={(e) => { e.stopPropagation(); onCreatorClick(); }}
           className="w-9 h-9 rounded-full overflow-hidden bg-surface-card-hover flex-shrink-0 mt-0.5 cursor-pointer hover:ring-2 hover:ring-accent/50 transition-all"
         >
           {creator?.avatarUrl ? (
-            <img
-              src={creator.avatarUrl}
-              alt={creator.channelName}
-              className="w-full h-full object-cover"
-            />
+            <img src={creator.avatarUrl} alt={creator.channelName} className="w-full h-full object-cover" />
           ) : (
             <div className="w-full h-full flex items-center justify-center text-sm font-black text-content-muted bg-surface-card">
               {(creator?.channelName || "?").charAt(0)}
@@ -107,16 +130,19 @@ function VideoCard({
           )}
         </div>
 
-        {/* Title + channel info */}
         <div className="flex-1 min-w-0">
-          {/* Claim text -- clicks to creator profile, clamped to 2 lines */}
           <h3
             onClick={(e) => { e.stopPropagation(); onCreatorClick(); }}
             className="text-sm font-semibold text-content-primary leading-snug line-clamp-2 hover:text-accent transition-colors cursor-pointer"
           >
             {prediction.claimText}
           </h3>
-          {/* Channel name -- clicks to creator profile */}
+          {/* Consistency badge inline under claim text */}
+          {prediction.consistency && prediction.consistency !== "first_occurrence" && (
+            <div className="mt-1">
+              <ConsistencyPill consistency={prediction.consistency} />
+            </div>
+          )}
           <p
             onClick={(e) => { e.stopPropagation(); onCreatorClick(); }}
             className="text-[13px] text-content-muted mt-1 hover:text-content-secondary transition-colors cursor-pointer"
@@ -142,37 +168,9 @@ function VideoCard({
   );
 }
 
-/* --- Upgrade CTA Card ----------------------------------------- */
-
-function UpgradeCTA({
-  heading,
-  description,
-}: {
-  heading: string;
-  description: string;
-}) {
-  const [, setLocation] = useLocation();
-
-  return (
-    <div className="col-span-full rounded-xl border border-accent/30 bg-accent/5 p-8 text-center">
-      <div className="w-12 h-12 rounded-full bg-accent/10 flex items-center justify-center mx-auto mb-4">
-        <svg className="w-6 h-6 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-        </svg>
-      </div>
-      <h3 className="text-lg font-bold text-content-primary mb-2">{heading}</h3>
-      <p className="text-sm text-content-secondary max-w-md mx-auto mb-6">{description}</p>
-      <button
-        onClick={() => setLocation("/plus")}
-        className="px-6 py-3 bg-accent text-accent-text text-sm font-bold rounded-full hover:bg-accent-hover transition-all"
-      >
-        Upgrade to Confirmd+
-      </button>
-    </div>
-  );
-}
-
-/* --- Leaderboard Channel Card --------------------------------- */
+/* ------------------------------------------------------------------ */
+/* Leaderboard Channel Card                                             */
+/* ------------------------------------------------------------------ */
 
 function LeaderboardChannel({
   creator,
@@ -184,20 +182,11 @@ function LeaderboardChannel({
   onClick: () => void;
 }) {
   return (
-    <div
-      onClick={onClick}
-      className="group flex items-center gap-3 py-2 cursor-pointer"
-    >
-      <span className="text-[12px] font-bold text-content-muted w-5 text-right flex-shrink-0">
-        {rank}
-      </span>
+    <div onClick={onClick} className="group flex items-center gap-3 py-2 cursor-pointer">
+      <span className="text-[12px] font-bold text-content-muted w-5 text-right flex-shrink-0">{rank}</span>
       <div className="w-8 h-8 rounded-full overflow-hidden bg-surface-card-hover flex-shrink-0">
         {creator.avatarUrl ? (
-          <img
-            src={creator.avatarUrl}
-            alt={creator.channelName}
-            className="w-full h-full object-cover"
-          />
+          <img src={creator.avatarUrl} alt={creator.channelName} className="w-full h-full object-cover" />
         ) : (
           <div className="w-full h-full flex items-center justify-center text-xs font-black text-content-muted">
             {(creator.channelName || "?").charAt(0)}
@@ -208,9 +197,7 @@ function LeaderboardChannel({
         <span className="text-[13px] font-semibold text-content-primary group-hover:text-accent transition-colors line-clamp-1">
           {creator.channelName}
         </span>
-        <span className="text-[11px] text-content-muted block">
-          {creator.totalClaims ?? 0} claims
-        </span>
+        <span className="text-[11px] text-content-muted block">{creator.totalClaims ?? 0} claims</span>
       </div>
       <span className={`text-sm font-bold ${accuracyColor(creator.overallAccuracy || 0)}`}>
         {creator.overallAccuracy ?? 0}%
@@ -219,7 +206,9 @@ function LeaderboardChannel({
   );
 }
 
-/* --- Loading Skeleton ----------------------------------------- */
+/* ------------------------------------------------------------------ */
+/* Loading Skeleton                                                     */
+/* ------------------------------------------------------------------ */
 
 function LoadingSkeleton() {
   return (
@@ -241,9 +230,9 @@ function LoadingSkeleton() {
   );
 }
 
-/* --- Main Page ------------------------------------------------ */
-
-/* --- Explainer Tutorial --------------------------------------- */
+/* ------------------------------------------------------------------ */
+/* Explainer Banner                                                     */
+/* ------------------------------------------------------------------ */
 
 function ExplainerBanner({ onDismiss }: { onDismiss: () => void }) {
   return (
@@ -257,7 +246,6 @@ function ExplainerBanner({ onDismiss }: { onDismiss: () => void }) {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
         </svg>
       </button>
-
       <div className="flex items-start gap-3 mb-4">
         <div className="w-8 h-8 rounded-lg bg-red-600 flex items-center justify-center flex-shrink-0">
           <svg className="w-4 h-4 text-white ml-0.5" fill="currentColor" viewBox="0 0 24 24">
@@ -269,55 +257,63 @@ function ExplainerBanner({ onDismiss }: { onDismiss: () => void }) {
           <p className="text-[12px] text-content-muted mt-0.5">Every card is a claim made by a crypto creator in one of their videos.</p>
         </div>
       </div>
-
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div className="flex items-start gap-2.5 bg-surface-primary rounded-lg p-3">
-          <div className="w-6 h-6 rounded bg-surface-card-hover flex items-center justify-center flex-shrink-0 mt-0.5">
-            <svg className="w-3.5 h-3.5 text-red-500" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M8 5v14l11-7z" />
-            </svg>
+        {[
+          {
+            icon: <svg className="w-3.5 h-3.5 text-red-500" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>,
+            title: "Watch the video",
+            body: "Play the original YouTube video where the claim was made, right here",
+          },
+          {
+            icon: <svg className="w-3.5 h-3.5 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>,
+            title: "Click the claim",
+            body: "View the creator's profile and their full prediction history",
+          },
+          {
+            icon: <svg className="w-3.5 h-3.5 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>,
+            title: "Click the channel",
+            body: "See the creator's accuracy score and all their verified claims",
+          },
+        ].map((item) => (
+          <div key={item.title} className="flex items-start gap-2.5 bg-surface-primary rounded-lg p-3">
+            <div className="w-6 h-6 rounded bg-surface-card-hover flex items-center justify-center flex-shrink-0 mt-0.5">
+              {item.icon}
+            </div>
+            <div>
+              <p className="text-[12px] font-semibold text-content-primary">{item.title}</p>
+              <p className="text-[11px] text-content-muted">{item.body}</p>
+            </div>
           </div>
-          <div>
-            <p className="text-[12px] font-semibold text-content-primary">Watch the video</p>
-            <p className="text-[11px] text-content-muted">Play the original YouTube video where the claim was made, right here</p>
-          </div>
-        </div>
-
-        <div className="flex items-start gap-2.5 bg-surface-primary rounded-lg p-3">
-          <div className="w-6 h-6 rounded bg-surface-card-hover flex items-center justify-center flex-shrink-0 mt-0.5">
-            <svg className="w-3.5 h-3.5 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-          </div>
-          <div>
-            <p className="text-[12px] font-semibold text-content-primary">Click the claim</p>
-            <p className="text-[11px] text-content-muted">View the creator's profile and their full prediction history</p>
-          </div>
-        </div>
-
-        <div className="flex items-start gap-2.5 bg-surface-primary rounded-lg p-3">
-          <div className="w-6 h-6 rounded bg-surface-card-hover flex items-center justify-center flex-shrink-0 mt-0.5">
-            <svg className="w-3.5 h-3.5 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-            </svg>
-          </div>
-          <div>
-            <p className="text-[12px] font-semibold text-content-primary">Click the channel</p>
-            <p className="text-[11px] text-content-muted">See the creator's accuracy score and all their verified claims</p>
-          </div>
-        </div>
+        ))}
       </div>
     </div>
   );
 }
 
-/* --- Main Page ------------------------------------------------ */
+/* ------------------------------------------------------------------ */
+/* Framer variants                                                      */
+/* ------------------------------------------------------------------ */
+
+const feedVariants = {
+  hidden: {},
+  visible: { transition: { staggerChildren: 0.04 } },
+};
+
+const cardVariants = {
+  hidden: { opacity: 0, y: 18 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.32, ease: "easeOut" } },
+};
+
+/* ------------------------------------------------------------------ */
+/* Main Page                                                            */
+/* ------------------------------------------------------------------ */
 
 export default function CreatorClaimsPage() {
   const [, setLocation] = useLocation();
   const { tier } = useAuth();
   const isPaid = tier !== "free";
   const [activeCategory, setActiveCategory] = useState("All");
+  const [sortKey, setSortKey] = useState<SortKey>("latest");
   const [showExplainer, setShowExplainer] = useState(() => {
     try { return localStorage.getItem("confirmd_claims_tutorial_dismissed") !== "1"; } catch { return true; }
   });
@@ -332,8 +328,8 @@ export default function CreatorClaimsPage() {
     queryFn: fetchCreatorLeaderboard,
   });
 
-  // Deduplicate by creator -- one claim per creator, interleaved for variety
   const allPredictions = useMemo(() => {
+    // Deduplicate by creator
     const seen = new Set<string>();
     const unique: any[] = [];
     for (const p of predictions) {
@@ -342,22 +338,27 @@ export default function CreatorClaimsPage() {
       seen.add(cid);
       unique.push(p);
     }
-    let items = unique;
-    if (activeCategory !== "All") {
-      items = items.filter((p: any) => p.category === activeCategory);
+    // Category filter
+    let items = activeCategory !== "All"
+      ? unique.filter((p: any) => p.category === activeCategory)
+      : unique;
+
+    // Sort
+    if (sortKey === "highest_accuracy") {
+      items = [...items].sort((a, b) => (b.creator?.overallAccuracy ?? 0) - (a.creator?.overallAccuracy ?? 0));
+    } else if (sortKey === "most_verified") {
+      items = [...items].sort((a, b) => (b.creator?.verifiedTrue ?? 0) - (a.creator?.verifiedTrue ?? 0));
+    } else if (sortKey === "most_claims") {
+      items = [...items].sort((a, b) => (b.creator?.totalClaims ?? 0) - (a.creator?.totalClaims ?? 0));
     }
+    // "latest" = default insertion order (already sorted by API)
+
     return items;
-  }, [predictions, activeCategory]);
+  }, [predictions, activeCategory, sortKey]);
 
-  const visibleClaims = isPaid
-    ? allPredictions
-    : allPredictions.slice(0, FREE_VISIBLE);
-  const blurredClaims = isPaid
-    ? []
-    : allPredictions.slice(FREE_VISIBLE, FREE_VISIBLE + FREE_BLURRED);
+  const visibleClaims = isPaid ? allPredictions : allPredictions.slice(0, FREE_VISIBLE);
+  const blurredClaims = isPaid ? [] : allPredictions.slice(FREE_VISIBLE, FREE_VISIBLE + FREE_BLURRED);
 
-  // For free users: blur the TOP creators (1-5), show lower-ranked (6-10) clearly
-  // This gates the most valuable info (who's best) behind the paywall
   const blurredLeaderboard = useMemo(() => {
     if (isPaid || leaderboard.length === 0) return [];
     return leaderboard.slice(0, Math.min(5, leaderboard.length));
@@ -366,18 +367,18 @@ export default function CreatorClaimsPage() {
 
   return (
     <div className="animate-in fade-in duration-700 min-h-screen bg-surface-primary">
-      {/* Category filter chips -- gold accent for active */}
+      {/* Category filter chips — sticky bar */}
       <div className="sticky top-0 z-20 bg-surface-primary border-b border-border">
         <div className="max-w-[1400px] mx-auto px-4 md:px-6 py-3">
-          <div className="flex gap-2.5 overflow-x-auto scrollbar-hide" style={{ scrollbarWidth: "none" }}>
+          <div className="flex gap-2 overflow-x-auto scrollbar-hide" style={{ scrollbarWidth: "none" }}>
             {CATEGORIES.map((cat) => (
               <button
                 key={cat}
                 onClick={() => setActiveCategory(cat)}
-                className={`px-3 py-1.5 rounded-lg text-[13px] font-medium whitespace-nowrap transition-all ${
+                className={`px-4 py-1.5 rounded-full text-[13px] font-semibold whitespace-nowrap transition-all border ${
                   activeCategory === cat
-                    ? "bg-accent text-accent-text"
-                    : "bg-surface-card text-content-primary hover:bg-surface-card-hover"
+                    ? "bg-accent text-white border-accent shadow-[0_0_12px_rgba(var(--color-accent-rgb,139,92,246),0.35)]"
+                    : "bg-surface-card text-content-secondary border-border hover:border-accent/40 hover:text-content-primary"
                 }`}
               >
                 {cat}
@@ -387,11 +388,29 @@ export default function CreatorClaimsPage() {
         </div>
       </div>
 
-      {/* Main content area */}
+      {/* Main content */}
       <div className="max-w-[1400px] mx-auto px-4 md:px-6 py-6">
         <div className="flex gap-6">
-          {/* Video grid -- main content */}
+          {/* Feed */}
           <div className="flex-1 min-w-0">
+            {/* Sort bar */}
+            <div className="flex items-center gap-2 mb-5 flex-wrap">
+              <span className="text-[11px] font-bold text-content-muted uppercase tracking-widest mr-1">Sort:</span>
+              {SORT_OPTIONS.map((opt) => (
+                <button
+                  key={opt.key}
+                  onClick={() => setSortKey(opt.key)}
+                  className={`px-3 py-1 rounded-full text-[12px] font-semibold transition-all border ${
+                    sortKey === opt.key
+                      ? "bg-accent/10 text-accent border-accent/30"
+                      : "bg-transparent text-content-muted border-border hover:border-accent/30 hover:text-content-secondary"
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+
             {feedLoading ? (
               <LoadingSkeleton />
             ) : allPredictions.length === 0 ? (
@@ -399,9 +418,7 @@ export default function CreatorClaimsPage() {
                 <svg className="w-16 h-16 text-content-muted mx-auto mb-4 opacity-30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
                 </svg>
-                <h3 className="text-lg font-bold text-content-primary">
-                  No creator claims yet
-                </h3>
+                <h3 className="text-lg font-bold text-content-primary">No creator claims yet</h3>
                 <p className="text-sm text-content-muted mt-1">
                   {activeCategory !== "All"
                     ? `No claims in ${activeCategory}. Try a different category.`
@@ -410,7 +427,6 @@ export default function CreatorClaimsPage() {
               </div>
             ) : (
               <>
-                {/* Explainer tutorial */}
                 {showExplainer && (
                   <ExplainerBanner onDismiss={() => {
                     setShowExplainer(false);
@@ -418,47 +434,48 @@ export default function CreatorClaimsPage() {
                   }} />
                 )}
 
-                {/* Video grid */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-4 gap-y-8">
+                {/* Animated feed grid */}
+                <motion.div
+                  key={`${activeCategory}-${sortKey}`}
+                  variants={feedVariants}
+                  initial="hidden"
+                  animate="visible"
+                  className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-4 gap-y-8"
+                >
                   {visibleClaims.map((prediction: any) => (
-                    <VideoCard
-                      key={prediction.id}
-                      prediction={prediction}
-                      onCreatorClick={() =>
-                        setLocation(
-                          `/creators/${prediction.creator?.id || prediction.id}`
-                        )
-                      }
-                    />
+                    <motion.div key={prediction.id} variants={cardVariants}>
+                      <VideoCard
+                        prediction={prediction}
+                        onCreatorClick={() =>
+                          setLocation(`/creators/${prediction.creator?.id || prediction.id}`)
+                        }
+                      />
+                    </motion.div>
                   ))}
+                </motion.div>
 
-                </div>
-
-                {/* Blurred cards + upgrade CTA overlay (free users) */}
+                {/* Blurred paywall section */}
                 {!isPaid && blurredClaims.length > 0 && (
-                  <div className="relative mt-0" style={{ maskImage: "linear-gradient(to bottom, transparent 0%, black 8%, black 100%)", WebkitMaskImage: "linear-gradient(to bottom, transparent 0%, black 8%, black 100%)" }}>
-                    {/* Progressive blur: each card gets increasingly blurred */}
+                  <div
+                    className="relative mt-0"
+                    style={{
+                      maskImage: "linear-gradient(to bottom, transparent 0%, black 8%, black 100%)",
+                      WebkitMaskImage: "linear-gradient(to bottom, transparent 0%, black 8%, black 100%)",
+                    }}
+                  >
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-4 gap-y-8 pointer-events-none select-none">
                       {blurredClaims.map((prediction: any, idx: number) => {
-                        // Progressive blur: 2px for first card, increasing by 2px per card
                         const blurPx = 2 + idx * 2;
                         return (
                           <div key={prediction.id} style={{ filter: `blur(${blurPx}px)` }}>
-                            <VideoCard
-                              prediction={prediction}
-                              onCreatorClick={() => {}}
-                            />
+                            <VideoCard prediction={prediction} onCreatorClick={() => {}} />
                           </div>
                         );
                       })}
                     </div>
-                    {/* Overlay gradient + CTA centered on top of blurred area */}
                     <div
                       className="absolute inset-0 flex items-center justify-center"
-                      style={{
-                        background:
-                          "linear-gradient(to bottom, transparent 0%, var(--color-surface-primary, rgb(15,15,15)) 85%)",
-                      }}
+                      style={{ background: "linear-gradient(to bottom, transparent 0%, var(--color-surface-primary, rgb(15,15,15)) 85%)" }}
                     >
                       <div className="text-center">
                         <div className="w-12 h-12 rounded-full bg-accent/10 flex items-center justify-center mx-auto mb-4">
@@ -482,13 +499,11 @@ export default function CreatorClaimsPage() {
             )}
           </div>
 
-          {/* Right sidebar -- Leaderboard */}
+          {/* Right sidebar — Leaderboard */}
           <aside className="hidden lg:block w-[300px] flex-shrink-0">
             <div className="sticky top-16">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-base font-bold text-content-primary">
-                  Top Creators
-                </h2>
+                <h2 className="text-base font-bold text-content-primary">Top Creators</h2>
                 {isPaid && (
                   <button
                     onClick={() => setLocation("/leaderboard")}
@@ -510,25 +525,23 @@ export default function CreatorClaimsPage() {
                   ))}
                 </div>
               ) : leaderboard.length === 0 ? (
-                <p className="text-sm text-content-muted py-4">
-                  No ranked creators yet.
-                </p>
+                <p className="text-sm text-content-muted py-4">No ranked creators yet.</p>
               ) : (
                 <div>
-                  {/* Blurred top creators (free users) -- most blurred at #1, less blurred going down */}
                   {!isPaid && blurredLeaderboard.length > 0 && (
-                    <div className="relative mb-0" style={{ maskImage: "linear-gradient(to bottom, black 0%, black 70%, transparent 100%)", WebkitMaskImage: "linear-gradient(to bottom, black 0%, black 70%, transparent 100%)" }}>
+                    <div
+                      className="relative mb-0"
+                      style={{
+                        maskImage: "linear-gradient(to bottom, black 0%, black 70%, transparent 100%)",
+                        WebkitMaskImage: "linear-gradient(to bottom, black 0%, black 70%, transparent 100%)",
+                      }}
+                    >
                       <div className="divide-y divide-border pointer-events-none select-none">
                         {blurredLeaderboard.map((creator: any, i: number) => {
-                          // #1 is most blurred, progressively less blurred going down
                           const blurPx = 8 - i * 1.5;
                           return (
                             <div key={creator.id} style={{ filter: `blur(${Math.max(blurPx, 2)}px)` }}>
-                              <LeaderboardChannel
-                                creator={creator}
-                                rank={i + 1}
-                                onClick={() => {}}
-                              />
+                              <LeaderboardChannel creator={creator} rank={i + 1} onClick={() => {}} />
                             </div>
                           );
                         })}
@@ -537,7 +550,6 @@ export default function CreatorClaimsPage() {
                     </div>
                   )}
 
-                  {/* Visible leaderboard entries */}
                   <div className="divide-y divide-border">
                     {visibleLeaderboard.map((creator: any, i: number) => (
                       <LeaderboardChannel
@@ -560,7 +572,7 @@ export default function CreatorClaimsPage() {
                 </div>
               )}
 
-              {/* Confirmd+ promo card */}
+              {/* Confirmd+ promo */}
               <div className="mt-6 p-4 rounded-xl bg-surface-card border border-border">
                 <div className="flex items-center gap-2 mb-2">
                   <span className="text-sm font-bold text-content-primary">Confirmd+</span>

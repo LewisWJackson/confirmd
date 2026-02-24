@@ -314,3 +314,16 @@ export function fetchSignals(params?: { filter?: string }) {
   const query = qs.toString();
   return fetchJson<{ data: any[]; summary: any }>(`/signals${query ? `?${query}` : ""}`);
 }
+
+// Creator Polls
+export function fetchActivePoll() {
+  return fetchJson<any>("/creators/polls/active");
+}
+
+export function voteOnPoll(pollId: string, optionId: string) {
+  return postJson<any>(`/creators/polls/${pollId}/vote`, { optionId });
+}
+
+export function suggestCreator(data: { channelName: string; channelHandle: string; youtubeChannelId?: string }) {
+  return postJson<any>("/creators/suggest", data);
+}

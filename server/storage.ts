@@ -28,6 +28,11 @@ import type {
   Gift,
   NewsletterSubscriber,
   InsertNewsletterSubscriber,
+  CreatorSuggestion,
+  InsertCreatorSuggestion,
+  CreatorPoll,
+  CreatorPollOption,
+  CreatorPollVote,
 } from "../shared/schema.js";
 import { db } from "./db.js";
 import { DrizzleStorage } from "./drizzle-storage.js";
@@ -137,6 +142,18 @@ export interface IStorage {
   getNewsletterSubscriber(email: string): Promise<NewsletterSubscriber | undefined>;
   getActiveNewsletterSubscribers(): Promise<NewsletterSubscriber[]>;
 
+  // Creator Suggestions
+  createCreatorSuggestion(data: Omit<InsertCreatorSuggestion, 'id'>): Promise<CreatorSuggestion>;
+  getCreatorSuggestions(status?: string): Promise<CreatorSuggestion[]>;
+  updateCreatorSuggestion(id: string, data: Partial<CreatorSuggestion>): Promise<void>;
+
+  // Creator Polls
+  createCreatorPoll(data: { endsAt?: Date }): Promise<CreatorPoll>;
+  getActivePoll(): Promise<{ poll: CreatorPoll; options: Array<CreatorPollOption & { suggestion: CreatorSuggestion }> } | null>;
+  createPollOption(pollId: string, suggestionId: string): Promise<CreatorPollOption>;
+  votePoll(optionId: string, pollId: string, voterFingerprint: string): Promise<{ success: boolean; message: string }>;
+  completePoll(pollId: string): Promise<CreatorSuggestion | null>;
+
   // Pipeline Stats
   getPipelineStats(): Promise<PipelineStats>;
 
@@ -221,6 +238,10 @@ export class MemStorage implements IStorage {
   private disputesMap: Map<string, Dispute> = new Map();
   private giftsMap: Map<string, Gift> = new Map();
   private newsletterSubscribersMap: Map<string, NewsletterSubscriber> = new Map();
+  private creatorSuggestionsMap: Map<string, CreatorSuggestion> = new Map();
+  private creatorPollsMap: Map<string, CreatorPoll> = new Map();
+  private creatorPollOptionsMap: Map<string, CreatorPollOption> = new Map();
+  private creatorPollVotesMap: Map<string, CreatorPollVote> = new Map();
   private lastPipelineRun: string | null = null;
 
   // ── Sources ──────────────────────────────────────────────────────
@@ -897,6 +918,9 @@ export class MemStorage implements IStorage {
       verificationNotes: data.verificationNotes ?? null,
       aiExtractionConfidence: data.aiExtractionConfidence ?? 0.8,
       assetSymbols: (data.assetSymbols as string[] | null) ?? [],
+      priorClaimId: data.priorClaimId ?? null,
+      consistency: data.consistency ?? "first_occurrence",
+      consistencyNote: data.consistencyNote ?? null,
       createdAt: now,
       updatedAt: now,
     };
@@ -1156,6 +1180,144 @@ export class MemStorage implements IStorage {
   setLastPipelineRun(ts: string): void {
     this.lastPipelineRun = ts;
   }
+
+  // ── Creator Suggestions ─────────────────────────────────────────
+
+  async createCreatorSuggestion(data: Omit<InsertCreatorSuggestion, 'id'>): Promise<CreatorSuggestion> {
+    const id = crypto.randomUUID();
+    const suggestion: CreatorSuggestion = {
+      id,
+      channelName: data.channelName,
+      channelHandle: data.channelHandle,
+      youtubeChannelId: data.youtubeChannelId ?? null,
+      suggestedBy: data.suggestedBy ?? null,
+      voteCount: data.voteCount ?? 0,
+      status: data.status ?? "pending",
+      createdAt: new Date(),
+    };
+    this.creatorSuggestionsMap.set(id, suggestion);
+    return suggestion;
+  }
+
+  async getCreatorSuggestions(status?: string): Promise<CreatorSuggestion[]> {
+    let results = Array.from(this.creatorSuggestionsMap.values());
+    if (status) {
+      results = results.filter((s) => s.status === status);
+    }
+    results.sort((a, b) => new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime());
+    return results;
+  }
+
+  async updateCreatorSuggestion(id: string, data: Partial<CreatorSuggestion>): Promise<void> {
+    const suggestion = this.creatorSuggestionsMap.get(id);
+    if (suggestion) {
+      Object.assign(suggestion, data);
+    }
+  }
+
+  // ── Creator Polls ───────────────────────────────────────────────
+
+  async createCreatorPoll(data: { endsAt?: Date }): Promise<CreatorPoll> {
+    const id = crypto.randomUUID();
+    const poll: CreatorPoll = {
+      id,
+      status: "active",
+      startsAt: new Date(),
+      endsAt: data.endsAt ?? null,
+      winnerSuggestionId: null,
+      createdAt: new Date(),
+    };
+    this.creatorPollsMap.set(id, poll);
+    return poll;
+  }
+
+  async getActivePoll(): Promise<{ poll: CreatorPoll; options: Array<CreatorPollOption & { suggestion: CreatorSuggestion }> } | null> {
+    const poll = Array.from(this.creatorPollsMap.values()).find((p) => p.status === "active");
+    if (!poll) return null;
+
+    const options = Array.from(this.creatorPollOptionsMap.values())
+      .filter((o) => o.pollId === poll.id)
+      .map((o) => {
+        const suggestion = this.creatorSuggestionsMap.get(o.suggestionId);
+        return { ...o, suggestion: suggestion! };
+      })
+      .filter((o) => o.suggestion != null);
+
+    return { poll, options };
+  }
+
+  async createPollOption(pollId: string, suggestionId: string): Promise<CreatorPollOption> {
+    const id = crypto.randomUUID();
+    const option: CreatorPollOption = {
+      id,
+      pollId,
+      suggestionId,
+      voteCount: 0,
+    };
+    this.creatorPollOptionsMap.set(id, option);
+    return option;
+  }
+
+  async votePoll(optionId: string, pollId: string, voterFingerprint: string): Promise<{ success: boolean; message: string }> {
+    // Check if voter already voted on this poll
+    const existingVote = Array.from(this.creatorPollVotesMap.values()).find(
+      (v) => v.pollId === pollId && v.voterFingerprint === voterFingerprint
+    );
+    if (existingVote) {
+      return { success: false, message: "You have already voted on this poll" };
+    }
+
+    const option = this.creatorPollOptionsMap.get(optionId);
+    if (!option) {
+      return { success: false, message: "Poll option not found" };
+    }
+
+    // Increment vote count on option
+    option.voteCount = (option.voteCount ?? 0) + 1;
+
+    // Record the vote
+    const voteId = crypto.randomUUID();
+    const vote: CreatorPollVote = {
+      id: voteId,
+      pollId,
+      optionId,
+      voterFingerprint,
+      votedAt: new Date(),
+    };
+    this.creatorPollVotesMap.set(voteId, vote);
+
+    return { success: true, message: "Vote recorded" };
+  }
+
+  async completePoll(pollId: string): Promise<CreatorSuggestion | null> {
+    const poll = this.creatorPollsMap.get(pollId);
+    if (!poll) return null;
+
+    // Find option with highest voteCount
+    const options = Array.from(this.creatorPollOptionsMap.values()).filter(
+      (o) => o.pollId === pollId
+    );
+    if (options.length === 0) {
+      poll.status = "completed";
+      return null;
+    }
+
+    options.sort((a, b) => (b.voteCount ?? 0) - (a.voteCount ?? 0));
+    const winningOption = options[0];
+
+    // Mark poll completed and set winner
+    poll.status = "completed";
+    poll.winnerSuggestionId = winningOption.suggestionId;
+
+    // Update winning suggestion status to 'added'
+    const winningSuggestion = this.creatorSuggestionsMap.get(winningOption.suggestionId);
+    if (winningSuggestion) {
+      winningSuggestion.status = "added";
+      return winningSuggestion;
+    }
+
+    return null;
+  }
 }
 
 // ─── Seed Data ───────────────────────────────────────────────────────
@@ -1354,11 +1516,11 @@ const SEED_CREATORS: Array<{
     description: "Daily cryptocurrency news and analysis",
   },
   {
-    youtubeChannelId: "UCCatR7nWbYrkVXdxXb4cGXg",
+    youtubeChannelId: "UCCatR7nWbYrkVXdxXb4cGXw",
     channelName: "DataDash",
     channelHandle: "@DataDash",
     channelUrl: "https://www.youtube.com/@DataDash",
-    description: "Crypto trading and technical analysis",
+    description: "Macro and crypto analysis with long-term market predictions",
   },
   {
     youtubeChannelId: "UCN9Nj4tjXbVTLYWN0EKly_Q",
@@ -1401,6 +1563,97 @@ const SEED_CREATORS: Array<{
     channelHandle: "@SheldonEvans",
     channelUrl: "https://www.youtube.com/@SheldonEvans",
     description: "Crypto investing and market calls",
+  },
+  {
+    youtubeChannelId: "UCQglaVhGOBI0BR5S6IJnQPg",
+    channelName: "Brian Jung",
+    channelHandle: "@BrianJung",
+    channelUrl: "https://www.youtube.com/@BrianJung",
+    description: "Crypto investing, price predictions, and personal finance",
+  },
+  {
+    youtubeChannelId: "UCsYYksPHiGqXHPoHI-fm5sg",
+    channelName: "Whiteboard Crypto",
+    channelHandle: "@WhiteboardCrypto",
+    channelUrl: "https://www.youtube.com/@WhiteboardCrypto",
+    description: "Crypto and DeFi education with technology explainers",
+  },
+  {
+    youtubeChannelId: "UCI7M65p3A-D3P4v5qW8POxQ",
+    channelName: "CryptosRUs",
+    channelHandle: "@CryptosRUs",
+    channelUrl: "https://www.youtube.com/@CryptosRUs",
+    description: "Bitcoin news, altcoin alpha, and price commentary",
+  },
+  {
+    youtubeChannelId: "UCQQ_fGcMDxlKre3SEqEWrLA",
+    channelName: "99Bitcoins",
+    channelHandle: "@99Bitcoins",
+    channelUrl: "https://www.youtube.com/@99Bitcoins",
+    description: "Crypto education, project reviews, and beginner guides",
+  },
+  {
+    youtubeChannelId: "UCc4Rz_T9Sb1w5rqqo9pL1Og",
+    channelName: "The Moon",
+    channelHandle: "@TheMoonCarl",
+    channelUrl: "https://www.youtube.com/@TheMoonCarl",
+    description: "Bitcoin technical analysis and price predictions",
+  },
+  {
+    youtubeChannelId: "UCJWCJCWOxBYSi5DhCieLOLQ",
+    channelName: "aantonop",
+    channelHandle: "@aantonop",
+    channelUrl: "https://www.youtube.com/@aantonop",
+    description: "Bitcoin technology fundamentals and blockchain education",
+  },
+  {
+    youtubeChannelId: "UCh1ob28ceGdqohUnR7vBACA",
+    channelName: "Finematics",
+    channelHandle: "@Finematics",
+    channelUrl: "https://www.youtube.com/@Finematics",
+    description: "DeFi protocol explainers and technology claims",
+  },
+  {
+    youtubeChannelId: "UCnJjRjmthxPCoQaAL44tR6g",
+    channelName: "Alessio Rastani",
+    channelHandle: "@AlessioRastani",
+    channelUrl: "https://www.youtube.com/@AlessioRastani",
+    description: "Technical analysis for crypto and stocks with price predictions",
+  },
+  {
+    youtubeChannelId: "UClWUQqWTL6xSK2Bx1bRlKPw",
+    channelName: "Michael Wrubel",
+    channelHandle: "@MichaelWrubel",
+    channelUrl: "https://www.youtube.com/@MichaelWrubel",
+    description: "Daily crypto updates and altcoin reviews",
+  },
+  {
+    youtubeChannelId: "UCxIU1RFIdDpvA8VOITswQ1A",
+    channelName: "The Wolf Of All Streets",
+    channelHandle: "@ScottMelker",
+    channelUrl: "https://www.youtube.com/@ScottMelker",
+    description: "Macro crypto trading, market predictions, and interviews",
+  },
+  {
+    youtubeChannelId: "UCAl9Ld79qaZxp9JzEOwd3aA",
+    channelName: "Bankless",
+    channelHandle: "@Bankless",
+    channelUrl: "https://www.youtube.com/@Bankless",
+    description: "DeFi and Ethereum ecosystem with regulatory and tech predictions",
+  },
+  {
+    youtubeChannelId: "UCHop-jpf-huVT1IYw79ymPw",
+    channelName: "Chico Crypto",
+    channelHandle: "@ChicoCrypto",
+    channelUrl: "https://www.youtube.com/@ChicoCrypto",
+    description: "Altcoin deep-dives, protocol claims, and investigative crypto research",
+  },
+  {
+    youtubeChannelId: "UCjemQfjaXAzA-95RKoy9n_g",
+    channelName: "Discover Crypto",
+    channelHandle: "@DiscoverCrypto",
+    channelUrl: "https://www.youtube.com/@DiscoverCrypto",
+    description: "Bitcoin and altcoin news, price analysis, and market commentary",
   },
 ];
 
