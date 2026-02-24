@@ -205,6 +205,12 @@ async function runStartupMigrations() {
         ADD COLUMN IF NOT EXISTS display_name TEXT NOT NULL DEFAULT '';
     `);
 
+    // Promote admin account to tribune tier
+    await client.query(`
+      UPDATE "user" SET subscription_tier = 'tribune', subscription_expires_at = '2030-01-01'
+      WHERE email = 'lewis@jackson.ventures' AND subscription_tier = 'free';
+    `);
+
     // ── Creator Leaderboard v2 migrations ──────────────────────────
 
     // New enums for claim consistency and poll system
