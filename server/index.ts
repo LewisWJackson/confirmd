@@ -275,6 +275,43 @@ async function runStartupMigrations() {
       );
     `);
 
+    // Deactivate any creator not in the verified channel ID list
+    // (removes stale/wrong channel IDs from old seeds)
+    const VERIFIED_CHANNEL_IDS = [
+      'UCqK_GSMbpiV8spgD3ZGloSw', // Coin Bureau
+      'UCRvqjQPSeaWn-uEx-w0XOIg', // Benjamin Cowen
+      'UCbLhGKVY-bJPcawebgtNfbw', // Altcoin Daily
+      'UCCatR7nWbYrkVXdxXb4cGXw', // DataDash (corrected)
+      'UCN9Nj4tjXbVTLYWN0EKly_Q', // Crypto Banter
+      'UCl2oCaw8hdR_kbqyqd2klIA', // Lark Davis
+      'UCviqt5aaucA1jP3qFmorZLQ', // Crypto Jebb
+      'UClgJyzwGs-GyaNxUHcLZrkg', // InvestAnswers
+      'UCrYmtJBtLdtm2ov84ulV-yg', // Ivan on Tech
+      'UCZ3fejCy_P5xhv9QF-V6-YA', // Sheldon Evans
+      'UCQglaVhGOBI0BR5S6IJnQPg', // Brian Jung
+      'UCsYYksPHiGqXHPoHI-fm5sg', // Whiteboard Crypto
+      'UCI7M65p3A-D3P4v5qW8POxQ', // CryptosRUs
+      'UCQQ_fGcMDxlKre3SEqEWrLA', // 99Bitcoins
+      'UCc4Rz_T9Sb1w5rqqo9pL1Og', // The Moon
+      'UCJWCJCWOxBYSi5DhCieLOLQ', // aantonop
+      'UCh1ob28ceGdqohUnR7vBACA', // Finematics
+      'UCnJjRjmthxPCoQaAL44tR6g', // Alessio Rastani
+      'UClWUQqWTL6xSK2Bx1bRlKPw', // Michael Wrubel
+      'UCxIU1RFIdDpvA8VOITswQ1A', // Wolf of All Streets
+      'UCAl9Ld79qaZxp9JzEOwd3aA', // Bankless
+      'UCHop-jpf-huVT1IYw79ymPw', // Chico Crypto
+      'UCjemQfjaXAzA-95RKoy9n_g', // Discover Crypto
+    ];
+    const placeholders = VERIFIED_CHANNEL_IDS.map((_, i) => `$${i + 1}`).join(', ');
+    const deactivated = await client.query(
+      `UPDATE creator SET is_active = false WHERE youtube_channel_id NOT IN (${placeholders}) AND is_active = true RETURNING channel_name`,
+      VERIFIED_CHANNEL_IDS
+    );
+    if (deactivated.rowCount && deactivated.rowCount > 0) {
+      const names = deactivated.rows.map((r: { channel_name: string }) => r.channel_name).join(', ');
+      console.log(`[Migration] Deactivated ${deactivated.rowCount} stale creators: ${names}`);
+    }
+
     console.log("[Migration] Schema up to date");
   } catch (err) {
     console.error("[Migration] Failed:", (err as Error).message);
