@@ -5,6 +5,43 @@ import { fetchMe, logout } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
 import { ThemeToggle } from "./ThemeToggle";
 
+function usePWAInstall() {
+  const [installPrompt, setInstallPrompt] = useState<Event | null>(null);
+  const [isInstalled, setIsInstalled] = useState(
+    () =>
+      window.matchMedia("(display-mode: standalone)").matches ||
+      (navigator as { standalone?: boolean }).standalone === true,
+  );
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      e.preventDefault();
+      setInstallPrompt(e);
+    };
+    window.addEventListener("beforeinstallprompt", handler);
+    window.addEventListener("appinstalled", () => {
+      setIsInstalled(true);
+      setInstallPrompt(null);
+    });
+    return () => window.removeEventListener("beforeinstallprompt", handler);
+  }, []);
+
+  const triggerInstall = () => {
+    if (!installPrompt) return;
+    (installPrompt as BeforeInstallPromptEvent).prompt();
+    (installPrompt as BeforeInstallPromptEvent).userChoice.then(() => {
+      setInstallPrompt(null);
+    });
+  };
+
+  return { canInstall: !!installPrompt && !isInstalled, triggerInstall };
+}
+
+interface BeforeInstallPromptEvent extends Event {
+  prompt(): Promise<void>;
+  userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
+}
+
 const topicPills = [
   { label: "Bitcoin", slug: "bitcoin" },
   { label: "Ethereum", slug: "ethereum" },
@@ -20,8 +57,11 @@ const topicPills = [
 
 const navItems = [
   { path: "/", label: "Home" },
+  { path: "/feed", label: "News Feed" },
+  { path: "/leaderboard", label: "Leaderboard" },
   { path: "/creator-claims", label: "Creator Claims" },
   { path: "/source-claims", label: "Source Claims" },
+  { path: "/trusted-feed", label: "Trusted Feed", oracleBadge: true },
 ];
 
 export const Header: React.FC = () => {
@@ -31,6 +71,7 @@ export const Header: React.FC = () => {
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const { tier } = useAuth();
+  const { canInstall, triggerInstall } = usePWAInstall();
 
   useEffect(() => {
     if (!showUserMenu) return;
@@ -89,19 +130,28 @@ export const Header: React.FC = () => {
 
           {/* Center nav (desktop) */}
           <nav className="hidden md:flex items-center gap-8">
-            {navItems.map(({ path, label }) => (
+            {navItems.map(({ path, label, oracleBadge }) => (
               <button
                 key={path}
                 onClick={() => setLocation(path)}
-                className={`relative text-sm font-medium transition-colors pb-1 ${
-                  isActive(path) ? "text-white" : "text-gray-400 hover:text-white"
+                className={`relative text-sm font-medium transition-colors py-1.5 ${
+                  isActive(path)
+                    ? "text-white"
+                    : "text-gray-400 hover:text-white"
                 }`}
               >
                 {label === "Creator Claims" ? (
                   <span className="inline-flex items-baseline">
                     Creat
-                    <span className="inline-flex items-center justify-center w-[15px] h-[11px] bg-red-600 rounded-[2px] mx-[0.5px] relative" style={{ top: "-0.5px" }}>
-                      <svg className="w-[7px] h-[7px] text-white ml-[1px]" fill="currentColor" viewBox="0 0 24 24">
+                    <span
+                      className="inline-flex items-center justify-center w-[15px] h-[11px] bg-red-600 rounded-[2px] mx-[0.5px] relative"
+                      style={{ top: "-0.5px" }}
+                    >
+                      <svg
+                        className="w-[7px] h-[7px] text-white ml-[1px]"
+                        fill="currentColor"
+                        viewBox="0 0 24 24"
+                      >
                         <path d="M8 5v14l11-7z" />
                       </svg>
                     </span>
@@ -109,16 +159,33 @@ export const Header: React.FC = () => {
                   </span>
                 ) : label === "Source Claims" ? (
                   <span className="inline-flex items-center gap-1">
-                    <svg className="w-[14px] h-[14px] text-current opacity-80" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2" />
+                    <svg
+                      className="w-[14px] h-[14px] text-current opacity-80"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2"
+                      />
                     </svg>
                     Source Claims
+                  </span>
+                ) : oracleBadge ? (
+                  <span className="inline-flex items-center gap-1.5">
+                    {label}
+                    <span className="text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-purple-600/25 border border-purple-500/40 text-purple-300">
+                      Oracle
+                    </span>
                   </span>
                 ) : (
                   label
                 )}
                 {isActive(path) && (
-                  <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#c4a97d] rounded-full" />
+                  <span className="absolute bottom-1 left-0 right-0 h-0.5 bg-[#c4a97d] rounded-full" />
                 )}
               </button>
             ))}
@@ -126,13 +193,42 @@ export const Header: React.FC = () => {
 
           {/* Right actions */}
           <div className="flex items-center gap-3">
+            {/* PWA install button — shown on mobile before install */}
+            {canInstall && (
+              <button
+                onClick={triggerInstall}
+                className="md:hidden flex items-center gap-1.5 text-[11px] font-semibold px-3 py-1.5 rounded-full bg-[#c4a97d]/15 border border-[#c4a97d]/40 text-[#c4a97d] hover:bg-[#c4a97d]/25 transition-colors"
+                aria-label="Install Confirmd app"
+              >
+                <svg
+                  className="w-3.5 h-3.5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                  />
+                </svg>
+                Install App
+              </button>
+            )}
+
             {/* Search icon */}
             <button
               onClick={() => setLocation("/search")}
               className="text-gray-400 hover:text-white transition-colors p-1.5"
               aria-label="Search"
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -155,6 +251,30 @@ export const Header: React.FC = () => {
               Subscribe
             </button>
 
+            {/* Oracle priority support badge */}
+            {tier === "oracle" && (
+              <a
+                href="mailto:support@confirmd.news?subject=Oracle%20Support%20Request"
+                className="hidden sm:flex items-center gap-1 text-[10px] font-bold px-2.5 py-1 rounded-full border border-purple-500/40 text-purple-300 bg-purple-600/10 hover:bg-purple-600/20 transition-colors"
+                title="Priority Support (Oracle)"
+              >
+                <svg
+                  className="w-3 h-3"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192l-3.536 3.536M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-5 0a4 4 0 11-8 0 4 4 0 018 0z"
+                  />
+                </svg>
+                Support
+              </a>
+            )}
+
             {/* Auth area */}
             {user ? (
               <div className="relative" ref={menuRef}>
@@ -163,11 +283,18 @@ export const Header: React.FC = () => {
                   className="flex items-center gap-2 text-white text-xs font-medium px-3 py-1.5 rounded-full border border-gray-600 hover:border-gray-400 transition-colors"
                 >
                   <div className="w-5 h-5 bg-[#c4a97d] rounded-full flex items-center justify-center text-[10px] font-bold text-[#1a1a1a]">
-                    {(user.displayName || user.email || "U").charAt(0).toUpperCase()}
+                    {(user.displayName || user.email || "U")
+                      .charAt(0)
+                      .toUpperCase()}
                   </div>
                   <span className="hidden md:inline">
                     {user.displayName || "Account"}
                   </span>
+                  {tier === "free" && (
+                    <span className="hidden md:inline text-[9px] font-black bg-[#c4a97d] text-[#1a1a1a] px-2 py-0.5 rounded-full ml-0.5">
+                      Upgrade
+                    </span>
+                  )}
                 </button>
 
                 {showUserMenu && (
@@ -198,6 +325,28 @@ export const Header: React.FC = () => {
                       >
                         Manage Subscription
                       </button>
+                      {tier === "oracle" && (
+                        <a
+                          href="mailto:support@confirmd.news?subject=Oracle%20Support%20Request"
+                          onClick={() => setShowUserMenu(false)}
+                          className="flex items-center gap-1.5 w-full text-left px-4 py-2.5 text-xs text-purple-300 hover:bg-purple-900/20 transition-colors"
+                        >
+                          <svg
+                            className="w-3 h-3"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192l-3.536 3.536M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-5 0a4 4 0 11-8 0 4 4 0 018 0z"
+                            />
+                          </svg>
+                          Priority Support
+                        </a>
+                      )}
                       <button
                         onClick={handleLogout}
                         className="w-full text-left px-4 py-2.5 text-xs text-gray-300 hover:bg-red-900/30 hover:text-red-400 transition-colors"
@@ -224,12 +373,32 @@ export const Header: React.FC = () => {
               aria-label="Menu"
             >
               {showMobileMenu ? (
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                <svg
+                  className="w-5 h-5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
                 </svg>
               ) : (
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                <svg
+                  className="w-5 h-5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M4 6h16M4 12h16M4 18h16"
+                  />
                 </svg>
               )}
             </button>
@@ -239,7 +408,7 @@ export const Header: React.FC = () => {
         {/* Mobile menu */}
         {showMobileMenu && (
           <div className="md:hidden border-t border-gray-800 px-4 py-3 space-y-2 animate-in fade-in">
-            {navItems.map(({ path, label }) => (
+            {navItems.map(({ path, label, oracleBadge }) => (
               <button
                 key={path}
                 onClick={() => {
@@ -255,8 +424,15 @@ export const Header: React.FC = () => {
                 {label === "Creator Claims" ? (
                   <span className="inline-flex items-baseline">
                     Creat
-                    <span className="inline-flex items-center justify-center w-[15px] h-[11px] bg-red-600 rounded-[2px] mx-[0.5px] relative" style={{ top: "-0.5px" }}>
-                      <svg className="w-[7px] h-[7px] text-white ml-[1px]" fill="currentColor" viewBox="0 0 24 24">
+                    <span
+                      className="inline-flex items-center justify-center w-[15px] h-[11px] bg-red-600 rounded-[2px] mx-[0.5px] relative"
+                      style={{ top: "-0.5px" }}
+                    >
+                      <svg
+                        className="w-[7px] h-[7px] text-white ml-[1px]"
+                        fill="currentColor"
+                        viewBox="0 0 24 24"
+                      >
                         <path d="M8 5v14l11-7z" />
                       </svg>
                     </span>
@@ -264,17 +440,43 @@ export const Header: React.FC = () => {
                   </span>
                 ) : label === "Source Claims" ? (
                   <span className="inline-flex items-center gap-1">
-                    <svg className="w-[14px] h-[14px] text-current opacity-80" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2" />
+                    <svg
+                      className="w-[14px] h-[14px] text-current opacity-80"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2"
+                      />
                     </svg>
                     Source Claims
+                  </span>
+                ) : oracleBadge ? (
+                  <span className="inline-flex items-center gap-1.5">
+                    {label}
+                    <span className="text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-purple-600/25 border border-purple-500/40 text-purple-300">
+                      Oracle
+                    </span>
                   </span>
                 ) : (
                   label
                 )}
               </button>
             ))}
-            <div className="pt-2 border-t border-gray-800">
+            <div className="pt-2 border-t border-gray-800 space-y-1">
+              <button
+                onClick={() => {
+                  setLocation("/plus");
+                  setShowMobileMenu(false);
+                }}
+                className="block w-full text-left text-sm font-bold py-2 px-3 rounded-lg text-[#c4a97d] hover:bg-white/5 transition-colors"
+              >
+                Subscribe
+              </button>
               <div className="flex items-center gap-3 py-2 px-3">
                 <span className="text-xs text-gray-500">Theme:</span>
                 <ThemeToggle />
