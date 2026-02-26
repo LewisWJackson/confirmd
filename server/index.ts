@@ -7,11 +7,20 @@ import path from "path";
 import { fileURLToPath } from "url";
 import apiRouter from "./routes.js";
 import stripeRouter from "./stripe.js";
-import { storage, seedInitialData, seedCreators, MemStorage } from "./storage.js";
+import {
+  storage,
+  seedInitialData,
+  seedCreators,
+  MemStorage,
+} from "./storage.js";
 import { pool } from "./db.js";
 import { pipeline } from "./pipeline-instance.js";
 import { startImageRetryLoop } from "./image-generator.js";
-import { runCreatorPipeline, verifyCreatorClaims, recalculateCreatorScores } from "./creator-pipeline.js";
+import {
+  runCreatorPipeline,
+  verifyCreatorClaims,
+  recalculateCreatorScores,
+} from "./creator-pipeline.js";
 import { analytics } from "./analytics.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -79,9 +88,7 @@ app.use((req, res, next) => {
   res.on("finish", () => {
     const duration = Date.now() - start;
     if (req.path.startsWith("/api")) {
-      console.log(
-        `${req.method} ${req.path} ${res.statusCode} ${duration}ms`
-      );
+      console.log(`${req.method} ${req.path} ${res.statusCode} ${duration}ms`);
       analytics.recordRequest(req.method, req.path, res.statusCode, duration);
     }
   });
@@ -95,15 +102,28 @@ app.use("/api/stripe", stripeRouter);
 app.use("/api", apiRouter);
 
 // ─── AI-generated image static serving (works in all modes) ─────────
-const imageStorageRoot = process.env.PERSISTENT_STORAGE_DIR || path.resolve("dist", "public");
-app.use("/story-images", express.static(path.join(imageStorageRoot, "story-images")));
-app.use("/video-thumbnails", express.static(path.join(imageStorageRoot, "video-thumbnails")));
-app.use("/tier-images", express.static(path.join(imageStorageRoot, "tier-images")));
+const imageStorageRoot =
+  process.env.PERSISTENT_STORAGE_DIR || path.resolve("dist", "public");
+app.use(
+  "/story-images",
+  express.static(path.join(imageStorageRoot, "story-images")),
+);
+app.use(
+  "/video-thumbnails",
+  express.static(path.join(imageStorageRoot, "video-thumbnails")),
+);
+app.use(
+  "/tier-images",
+  express.static(path.join(imageStorageRoot, "tier-images")),
+);
 
 // ─── Static / Vite Dev Server ───────────────────────────────────────
 
 async function setupFrontend() {
-  if (app.get("env") === "development" || process.env.NODE_ENV !== "production") {
+  if (
+    app.get("env") === "development" ||
+    process.env.NODE_ENV !== "production"
+  ) {
     // Development: use Vite dev server as middleware
     try {
       const { createServer: createViteServer } = await import("vite");
@@ -116,7 +136,7 @@ async function setupFrontend() {
     } catch (err) {
       console.warn(
         "Could not start Vite dev server. Falling back to static serving.",
-        (err as Error).message
+        (err as Error).message,
       );
       serveStatic();
     }
@@ -132,12 +152,29 @@ function serveStatic() {
   // Serve AI-generated images from persistent volume (survives redeploys)
   const persistentDir = process.env.PERSISTENT_STORAGE_DIR;
   if (persistentDir) {
-    app.use("/story-images", express.static(path.join(persistentDir, "story-images")));
-    app.use("/video-thumbnails", express.static(path.join(persistentDir, "video-thumbnails")));
-    app.use("/tier-images", express.static(path.join(persistentDir, "tier-images")));
+    app.use(
+      "/story-images",
+      express.static(path.join(persistentDir, "story-images")),
+    );
+    app.use(
+      "/video-thumbnails",
+      express.static(path.join(persistentDir, "video-thumbnails")),
+    );
+    app.use(
+      "/tier-images",
+      express.static(path.join(persistentDir, "tier-images")),
+    );
     console.log(`Serving persistent images from ${persistentDir}`);
   }
 
+  // Hashed assets (e.g. /assets/index-abc123.js) — cache 1 year immutable
+  app.use(
+    "/assets",
+    express.static(path.join(publicDir, "assets"), {
+      maxAge: "1y",
+      immutable: true,
+    }),
+  );
   app.use(express.static(publicDir));
   app.get("*", (_req, res) => {
     res.sendFile(path.resolve(publicDir, "index.html"));
@@ -152,7 +189,7 @@ app.use(
     err: Error,
     _req: express.Request,
     res: express.Response,
-    _next: express.NextFunction
+    _next: express.NextFunction,
   ) => {
     console.error("Unhandled error:", err.message);
     console.error(err.stack);
@@ -163,7 +200,7 @@ app.use(
           ? "An unexpected error occurred"
           : err.message,
     });
-  }
+  },
 );
 
 // ─── Auto-migration (adds missing columns to PostgreSQL) ─────────
@@ -291,38 +328,44 @@ async function runStartupMigrations() {
     // Deactivate any creator not in the verified channel ID list
     // (removes stale/wrong channel IDs from old seeds)
     const VERIFIED_CHANNEL_IDS = [
-      'UCqK_GSMbpiV8spgD3ZGloSw', // Coin Bureau
-      'UCRvqjQPSeaWn-uEx-w0XOIg', // Benjamin Cowen
-      'UCbLhGKVY-bJPcawebgtNfbw', // Altcoin Daily
-      'UCCatR7nWbYrkVXdxXb4cGXw', // DataDash (corrected)
-      'UCN9Nj4tjXbVTLYWN0EKly_Q', // Crypto Banter
-      'UCl2oCaw8hdR_kbqyqd2klIA', // Lark Davis
-      'UCviqt5aaucA1jP3qFmorZLQ', // Crypto Jebb
-      'UClgJyzwGs-GyaNxUHcLZrkg', // InvestAnswers
-      'UCrYmtJBtLdtm2ov84ulV-yg', // Ivan on Tech
-      'UCZ3fejCy_P5xhv9QF-V6-YA', // Sheldon Evans
-      'UCQglaVhGOBI0BR5S6IJnQPg', // Brian Jung
-      'UCsYYksPHiGqXHPoHI-fm5sg', // Whiteboard Crypto
-      'UCI7M65p3A-D3P4v5qW8POxQ', // CryptosRUs
-      'UCQQ_fGcMDxlKre3SEqEWrLA', // 99Bitcoins
-      'UCc4Rz_T9Sb1w5rqqo9pL1Og', // The Moon
-      'UCJWCJCWOxBYSi5DhCieLOLQ', // aantonop
-      'UCh1ob28ceGdqohUnR7vBACA', // Finematics
-      'UCnJjRjmthxPCoQaAL44tR6g', // Alessio Rastani
-      'UClWUQqWTL6xSK2Bx1bRlKPw', // Michael Wrubel
-      'UCxIU1RFIdDpvA8VOITswQ1A', // Wolf of All Streets
-      'UCAl9Ld79qaZxp9JzEOwd3aA', // Bankless
-      'UCHop-jpf-huVT1IYw79ymPw', // Chico Crypto
-      'UCjemQfjaXAzA-95RKoy9n_g', // Discover Crypto
+      "UCqK_GSMbpiV8spgD3ZGloSw", // Coin Bureau
+      "UCRvqjQPSeaWn-uEx-w0XOIg", // Benjamin Cowen
+      "UCbLhGKVY-bJPcawebgtNfbw", // Altcoin Daily
+      "UCCatR7nWbYrkVXdxXb4cGXw", // DataDash (corrected)
+      "UCN9Nj4tjXbVTLYWN0EKly_Q", // Crypto Banter
+      "UCl2oCaw8hdR_kbqyqd2klIA", // Lark Davis
+      "UCviqt5aaucA1jP3qFmorZLQ", // Crypto Jebb
+      "UClgJyzwGs-GyaNxUHcLZrkg", // InvestAnswers
+      "UCrYmtJBtLdtm2ov84ulV-yg", // Ivan on Tech
+      "UCZ3fejCy_P5xhv9QF-V6-YA", // Sheldon Evans
+      "UCQglaVhGOBI0BR5S6IJnQPg", // Brian Jung
+      "UCsYYksPHiGqXHPoHI-fm5sg", // Whiteboard Crypto
+      "UCI7M65p3A-D3P4v5qW8POxQ", // CryptosRUs
+      "UCQQ_fGcMDxlKre3SEqEWrLA", // 99Bitcoins
+      "UCc4Rz_T9Sb1w5rqqo9pL1Og", // The Moon
+      "UCJWCJCWOxBYSi5DhCieLOLQ", // aantonop
+      "UCh1ob28ceGdqohUnR7vBACA", // Finematics
+      "UCnJjRjmthxPCoQaAL44tR6g", // Alessio Rastani
+      "UClWUQqWTL6xSK2Bx1bRlKPw", // Michael Wrubel
+      "UCxIU1RFIdDpvA8VOITswQ1A", // Wolf of All Streets
+      "UCAl9Ld79qaZxp9JzEOwd3aA", // Bankless
+      "UCHop-jpf-huVT1IYw79ymPw", // Chico Crypto
+      "UCjemQfjaXAzA-95RKoy9n_g", // Discover Crypto
     ];
-    const placeholders = VERIFIED_CHANNEL_IDS.map((_, i) => `$${i + 1}`).join(', ');
+    const placeholders = VERIFIED_CHANNEL_IDS.map((_, i) => `$${i + 1}`).join(
+      ", ",
+    );
     const deactivated = await client.query(
       `UPDATE creator SET is_active = false WHERE youtube_channel_id NOT IN (${placeholders}) AND is_active = true RETURNING channel_name`,
-      VERIFIED_CHANNEL_IDS
+      VERIFIED_CHANNEL_IDS,
     );
     if (deactivated.rowCount && deactivated.rowCount > 0) {
-      const names = deactivated.rows.map((r: { channel_name: string }) => r.channel_name).join(', ');
-      console.log(`[Migration] Deactivated ${deactivated.rowCount} stale creators: ${names}`);
+      const names = deactivated.rows
+        .map((r: { channel_name: string }) => r.channel_name)
+        .join(", ");
+      console.log(
+        `[Migration] Deactivated ${deactivated.rowCount} stale creators: ${names}`,
+      );
     }
 
     // Purge YouTube Shorts: delete claims first (FK), then videos
@@ -343,10 +386,14 @@ async function runStartupMigrations() {
       RETURNING youtube_video_id, title
     `);
     if (deletedVideos.rowCount && deletedVideos.rowCount > 0) {
-      console.log(`[Migration] Purged ${deletedVideos.rowCount} Shorts videos and ${deletedClaims.rowCount} associated claims`);
-      deletedVideos.rows.slice(0, 5).forEach((r: { youtube_video_id: string; title: string }) =>
-        console.log(`  - ${r.title} (${r.youtube_video_id})`)
+      console.log(
+        `[Migration] Purged ${deletedVideos.rowCount} Shorts videos and ${deletedClaims.rowCount} associated claims`,
       );
+      deletedVideos.rows
+        .slice(0, 5)
+        .forEach((r: { youtube_video_id: string; title: string }) =>
+          console.log(`  - ${r.title} (${r.youtube_video_id})`),
+        );
     }
 
     console.log("[Migration] Schema up to date");
@@ -375,7 +422,10 @@ async function main() {
   try {
     await seedCreators(storage);
   } catch (err) {
-    console.warn("[Startup] seedCreators failed (will retry on first creator pipeline run):", (err as Error).message);
+    console.warn(
+      "[Startup] seedCreators failed (will retry on first creator pipeline run):",
+      (err as Error).message,
+    );
   }
 
   // Set up frontend serving
@@ -430,9 +480,12 @@ async function main() {
       }
     };
 
-    setTimeout(() => {
-      setInterval(runVerificationCycle, 60 * 60 * 1000);
-    }, 5 * 60 * 1000);
+    setTimeout(
+      () => {
+        setInterval(runVerificationCycle, 60 * 60 * 1000);
+      },
+      5 * 60 * 1000,
+    );
   });
 }
 

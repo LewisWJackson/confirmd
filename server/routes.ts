@@ -1,12 +1,51 @@
 import { Router, type Request, type Response } from "express";
+import { z } from "zod";
 import bcrypt from "bcryptjs";
+import Anthropic from "@anthropic-ai/sdk";
 import { storage, seedCreators } from "./storage.js";
+import { cache } from "./cache.js";
+import {
+  sendWelcomeEmail,
+  sendVerificationEmail,
+  sendPasswordResetEmail,
+} from "./email.js";
 import { validateCommunityEvidence } from "./pipeline.js";
 import { pipeline } from "./pipeline-instance.js";
-import { runCreatorPipeline, verifyCreatorClaims, recalculateCreatorScores, evaluateDispute } from "./creator-pipeline.js";
-import { generateSvgFallback, generateStoryImageAI, generateVideoThumbnail, getVideoThumbnailUrl, generateTierImages } from "./image-generator.js";
+import {
+  runCreatorPipeline,
+  verifyCreatorClaims,
+  recalculateCreatorScores,
+  evaluateDispute,
+  fetchChannelAvatarUrl,
+} from "./creator-pipeline.js";
+import {
+  generateSvgFallback,
+  generateStoryImageAI,
+  generateVideoThumbnail,
+  getVideoThumbnailUrl,
+  generateTierImages,
+} from "./image-generator.js";
 import { analytics } from "./analytics.js";
-import type { Claim, Verdict, EvidenceItem, Resolution, Source, SourceScore, Creator, CreatorVideo, CreatorClaim, CreatorScore, Dispute, CreatorSuggestion, CreatorPoll, CreatorPollOption } from "../shared/schema.js";
+import {
+  generateCreatorOgImage,
+  generateLeaderboardOgImage,
+} from "./og-image.js";
+import type {
+  Claim,
+  Verdict,
+  EvidenceItem,
+  Resolution,
+  Source,
+  SourceScore,
+  Creator,
+  CreatorVideo,
+  CreatorClaim,
+  CreatorScore,
+  Dispute,
+  CreatorSuggestion,
+  CreatorPoll,
+  CreatorPollOption,
+} from "../shared/schema.js";
 
 declare module "express-session" {
   interface SessionData {
@@ -28,11 +67,16 @@ function requireTier(minTier: string) {
     try {
       const user = await storage.getUserById(userId);
       let userTier = user?.subscriptionTier || "free";
-      if (user?.subscriptionExpiresAt && new Date(user.subscriptionExpiresAt) < new Date()) {
+      if (
+        user?.subscriptionExpiresAt &&
+        new Date(user.subscriptionExpiresAt) < new Date()
+      ) {
         userTier = "free";
       }
       if ((TIER_RANK[userTier] ?? 0) < (TIER_RANK[minTier] ?? 0)) {
-        return res.status(403).json({ error: `Requires ${minTier} subscription` });
+        return res
+          .status(403)
+          .json({ error: `Requires ${minTier} subscription` });
       }
       next();
     } catch {
@@ -40,6 +84,45 @@ function requireTier(minTier: string) {
     }
   };
 }
+
+// ─── Admin identity ─────────────────────────────────────────────────
+const ADMIN_EMAILS = new Set(
+  (process.env.ADMIN_EMAILS || "lewis@jackson.ventures")
+    .split(",")
+    .map((e) => e.trim().toLowerCase()),
+);
+
+// ─── Input validation schemas ────────────────────────────────────────
+const DisputeSchema = z.object({
+  claimId: z.string().uuid(),
+  disputeType: z.enum([
+    "never_said",
+    "misquoted",
+    "out_of_context",
+    "wrong_creator",
+  ]),
+  submitterNote: z.string().min(1).max(2000).optional(),
+  evidence: z.string().max(500).optional(),
+});
+
+const SuggestCreatorSchema = z.object({
+  channelName: z.string().min(1).max(100),
+  channelHandle: z
+    .string()
+    .min(1)
+    .max(50)
+    .regex(/^@?[\w.-]+$/, "Invalid channel handle"),
+  youtubeChannelId: z
+    .string()
+    .max(50)
+    .regex(/^UC[\w-]{22}$/)
+    .optional()
+    .nullable(),
+});
+
+const WatchlistSchema = z.object({
+  watchlist: z.array(z.string().min(1).max(10)).max(50),
+});
 
 // Helper to safely extract a single route param
 function param(req: Request, name: string): string {
@@ -93,37 +176,73 @@ interface EnrichedClaim {
   } | null;
 }
 
-function getFactualityStatus(verdictLabel: string | null): { status: "factual" | "not_factual" | "undetermined" | "unreviewed"; description: string } {
-  const defaults: Record<string, { status: "factual" | "not_factual" | "undetermined" | "unreviewed"; description: string }> = {
-    verified: { status: "factual", description: "This claim is verified by credible primary evidence." },
-    misleading: { status: "not_factual", description: "Available evidence contradicts or does not support this claim." },
-    speculative: { status: "undetermined", description: "Insufficient evidence to confirm or deny this claim." },
-    plausible_unverified: { status: "undetermined", description: "This claim appears plausible but remains unconfirmed by primary sources." },
+function getFactualityStatus(verdictLabel: string | null): {
+  status: "factual" | "not_factual" | "undetermined" | "unreviewed";
+  description: string;
+} {
+  const defaults: Record<
+    string,
+    {
+      status: "factual" | "not_factual" | "undetermined" | "unreviewed";
+      description: string;
+    }
+  > = {
+    verified: {
+      status: "factual",
+      description: "This claim is verified by credible primary evidence.",
+    },
+    misleading: {
+      status: "not_factual",
+      description:
+        "Available evidence contradicts or does not support this claim.",
+    },
+    speculative: {
+      status: "undetermined",
+      description: "Insufficient evidence to confirm or deny this claim.",
+    },
+    plausible_unverified: {
+      status: "undetermined",
+      description:
+        "This claim appears plausible but remains unconfirmed by primary sources.",
+    },
   };
-  if (!verdictLabel) return { status: "unreviewed", description: "This claim has not yet been reviewed." };
-  return defaults[verdictLabel] || { status: "unreviewed", description: "This claim has not yet been reviewed." };
+  if (!verdictLabel)
+    return {
+      status: "unreviewed",
+      description: "This claim has not yet been reviewed.",
+    };
+  return (
+    defaults[verdictLabel] || {
+      status: "unreviewed",
+      description: "This claim has not yet been reviewed.",
+    }
+  );
 }
 
 async function enrichClaim(claim: Claim): Promise<EnrichedClaim> {
-  const [source, verdict, evidence, resolution, sourceScore] = await Promise.all([
-    storage.getSource(claim.sourceId),
-    storage.getVerdictByClaim(claim.id),
-    storage.getEvidenceByClaim(claim.id),
-    storage.getResolutionByClaim(claim.id),
-    storage.getSource(claim.sourceId).then((s) =>
-      s ? storage.getSourceScore(s.id) : undefined
-    ),
-  ]);
+  const [source, verdict, evidence, resolution, sourceScore] =
+    await Promise.all([
+      storage.getSource(claim.sourceId),
+      storage.getVerdictByClaim(claim.id),
+      storage.getEvidenceByClaim(claim.id),
+      storage.getResolutionByClaim(claim.id),
+      storage
+        .getSource(claim.sourceId)
+        .then((s) => (s ? storage.getSourceScore(s.id) : undefined)),
+    ]);
 
   const factuality = getFactualityStatus(verdict?.verdictLabel || null);
   // Use reasoning for description only if it's real LLM output (contains structured markdown).
   // Simulation mode produces junk like "Analysis of 1 evidence items: 0 primary (A)..." — skip it.
-  const hasRealReasoning = verdict?.reasoningSummary
-    && /\*\*[^*]+\*\*\s*:/.test(verdict.reasoningSummary)
-    && !/^Analysis of \d+ evidence/i.test(verdict.reasoningSummary)
-    && !/^Credibility:/i.test(verdict.reasoningSummary);
+  const hasRealReasoning =
+    verdict?.reasoningSummary &&
+    /\*\*[^*]+\*\*\s*:/.test(verdict.reasoningSummary) &&
+    !/^Analysis of \d+ evidence/i.test(verdict.reasoningSummary) &&
+    !/^Credibility:/i.test(verdict.reasoningSummary);
   const factualityDescription = hasRealReasoning
-    ? (verdict!.reasoningSummary!.replace(/\*\*/g, "").split(/\.\s/)[0] + ".").replace(/\.\.$/, ".")
+    ? (
+        verdict!.reasoningSummary!.replace(/\*\*/g, "").split(/\.\s/)[0] + "."
+      ).replace(/\.\.$/, ".")
     : factuality.description;
 
   // Derive a logo abbreviation from the source name
@@ -355,7 +474,7 @@ router.get("/sources", async (_req: Request, res: Response) => {
             : null,
           createdAt: source.createdAt,
         };
-      })
+      }),
     );
 
     // Sort by trackRecord descending (highest credibility first)
@@ -396,49 +515,60 @@ router.get("/sources/feed", async (req: Request, res: Response) => {
 
 // ─── GET /sources/leaderboard ──────────────────────────────────────
 
-router.get("/sources/leaderboard", async (req: Request, res: Response) => {
-  try {
-    const sources = await storage.getSources();
+router.get(
+  "/sources/leaderboard",
+  requireTier("tribune"),
+  async (req: Request, res: Response) => {
+    try {
+      const cached = cache.get<object[]>("sources:leaderboard");
+      if (cached) {
+        res.json({ data: cached });
+        return;
+      }
 
-    const ranked = await Promise.all(
-      sources.map(async (source) => {
-        const score = await storage.getSourceScore(source.id);
-        const claims = await storage.getClaimsBySource(source.id);
-        const logoAbbrev = source.displayName
-          .split(" ")
-          .map((w) => w[0])
-          .join("")
-          .toUpperCase()
-          .slice(0, 3);
+      const sources = await storage.getSources();
 
-        return {
-          id: source.id,
-          displayName: source.displayName,
-          handleOrDomain: source.handleOrDomain,
-          logoUrl: source.logoUrl,
-          logo: logoAbbrev,
-          type: source.type,
-          trackRecord: score?.trackRecord ?? 0,
-          methodDiscipline: score?.methodDiscipline ?? 0,
-          sampleSize: score?.sampleSize ?? 0,
-          confidenceInterval: score?.confidenceInterval ?? null,
-          claimCount: claims.length,
-        };
-      })
-    );
+      const ranked = await Promise.all(
+        sources.map(async (source) => {
+          const score = await storage.getSourceScore(source.id);
+          const claims = await storage.getClaimsBySource(source.id);
+          const logoAbbrev = source.displayName
+            .split(" ")
+            .map((w) => w[0])
+            .join("")
+            .toUpperCase()
+            .slice(0, 3);
 
-    // Filter to sources with scores and sort by trackRecord desc
-    const sorted = ranked
-      .filter((s) => s.trackRecord > 0)
-      .sort((a, b) => b.trackRecord - a.trackRecord)
-      .map((s, i) => ({ ...s, rank: i + 1, rankChange: 0 }));
+          return {
+            id: source.id,
+            displayName: source.displayName,
+            handleOrDomain: source.handleOrDomain,
+            logoUrl: source.logoUrl,
+            logo: logoAbbrev,
+            type: source.type,
+            trackRecord: score?.trackRecord ?? 0,
+            methodDiscipline: score?.methodDiscipline ?? 0,
+            sampleSize: score?.sampleSize ?? 0,
+            confidenceInterval: score?.confidenceInterval ?? null,
+            claimCount: claims.length,
+          };
+        }),
+      );
 
-    res.json({ data: sorted });
-  } catch (err) {
-    console.error("GET /sources/leaderboard error:", err);
-    res.status(500).json({ error: "Failed to fetch source leaderboard" });
-  }
-});
+      // Filter to sources with scores and sort by trackRecord desc
+      const sorted = ranked
+        .filter((s) => s.trackRecord > 0)
+        .sort((a, b) => b.trackRecord - a.trackRecord)
+        .map((s, i) => ({ ...s, rank: i + 1, rankChange: 0 }));
+
+      cache.set("sources:leaderboard", sorted);
+      res.json({ data: sorted });
+    } catch (err) {
+      console.error("GET /sources/leaderboard error:", err);
+      res.status(500).json({ error: "Failed to fetch source leaderboard" });
+    }
+  },
+);
 
 // ─── GET /sources/:id ───────────────────────────────────────────────
 
@@ -460,7 +590,7 @@ router.get("/sources/:id", async (req: Request, res: Response) => {
     const recentClaims = claims
       .sort(
         (a, b) =>
-          new Date(b.assertedAt).getTime() - new Date(a.assertedAt).getTime()
+          new Date(b.assertedAt).getTime() - new Date(a.assertedAt).getTime(),
       )
       .slice(0, 10);
 
@@ -510,21 +640,29 @@ router.get("/stories", async (req: Request, res: Response) => {
     const asset = req.query.asset as string | undefined;
     const statusFilter = req.query.status as string | undefined;
 
-    let feedItems = await storage.getStoriesForFeed(limit, offset, statusFilter);
+    let feedItems = await storage.getStoriesForFeed(
+      limit,
+      offset,
+      statusFilter,
+    );
 
     // Filter by category if provided
     if (category) {
-      feedItems = feedItems.filter(s => s.category?.toLowerCase() === category.toLowerCase());
+      feedItems = feedItems.filter(
+        (s) => s.category?.toLowerCase() === category.toLowerCase(),
+      );
     }
 
     // Filter by asset if provided
     if (asset) {
       const assetUpper = asset.toUpperCase();
-      feedItems = feedItems.filter(s => s.assetSymbols.some(a => a.toUpperCase() === assetUpper));
+      feedItems = feedItems.filter((s) =>
+        s.assetSymbols.some((a) => a.toUpperCase() === assetUpper),
+      );
     }
 
     // Add singleSource flag and ensure every story has an imageUrl
-    const data = feedItems.map(s => ({
+    const data = feedItems.map((s) => ({
       ...s,
       imageUrl: s.imageUrl || `/api/stories/${s.id}/image`,
       singleSource: s.sourceCount <= 1,
@@ -666,13 +804,16 @@ router.get("/stories/:id", async (req: Request, res: Response) => {
     }
 
     // ── Related creator predictions ─────────────────────────────────
-    const storyAssets = (story.assetSymbols ?? []).map(a => a.toUpperCase());
-    let creatorPredictions: Array<{ claim: CreatorClaim; creator: Creator }> = [];
+    const storyAssets = (story.assetSymbols ?? []).map((a) => a.toUpperCase());
+    let creatorPredictions: Array<{ claim: CreatorClaim; creator: Creator }> =
+      [];
 
     if (storyAssets.length > 0) {
       const allCreatorClaims = await storage.getCreatorClaims({ limit: 100 });
-      const matching = allCreatorClaims.filter(cc =>
-        (cc.assetSymbols ?? []).some(a => storyAssets.includes(a.toUpperCase()))
+      const matching = allCreatorClaims.filter((cc) =>
+        (cc.assetSymbols ?? []).some((a) =>
+          storyAssets.includes(a.toUpperCase()),
+        ),
       );
 
       // Enrich with creator data, limit to 5
@@ -741,127 +882,142 @@ router.get("/evidence/:claimId", async (req: Request, res: Response) => {
 
 // ─── POST /evidence/:claimId/submit ─────────────────────────────────
 
-router.post("/evidence/:claimId/submit", async (req: Request, res: Response) => {
-  try {
-    const claimId = param(req, "claimId");
-    const { url, notes } = req.body || {};
-
-    if (!url || typeof url !== "string") {
-      res.status(400).json({ error: "URL is required" });
-      return;
-    }
-
+router.post(
+  "/evidence/:claimId/submit",
+  async (req: Request, res: Response) => {
     try {
-      new URL(url);
-    } catch {
-      res.status(400).json({ error: "Invalid URL format" });
-      return;
-    }
+      const claimId = param(req, "claimId");
+      const { url, notes } = req.body || {};
 
-    const claim = await storage.getClaim(claimId);
-    if (!claim) {
-      res.status(404).json({ error: "Claim not found" });
-      return;
-    }
+      if (!url || typeof url !== "string") {
+        res.status(400).json({ error: "URL is required" });
+        return;
+      }
 
-    const existingEvidence = await storage.getEvidenceByClaim(claimId);
-    if (existingEvidence.some((e) => e.url === url)) {
-      res.status(409).json({ error: "This URL has already been submitted as evidence for this claim" });
-      return;
-    }
+      try {
+        new URL(url);
+      } catch {
+        res.status(400).json({ error: "Invalid URL format" });
+        return;
+      }
 
-    const result = await validateCommunityEvidence(
-      url,
-      notes,
-      claim.claimText,
-      claim.claimType,
-      existingEvidence.map((e) => ({
-        url: e.url,
-        publisher: e.publisher || "",
-        excerpt: e.excerpt,
-        grade: e.evidenceGrade,
-        stance: e.stance,
-        primaryFlag: e.primaryFlag || false,
-      })),
-    );
+      const claim = await storage.getClaim(claimId);
+      if (!claim) {
+        res.status(404).json({ error: "Claim not found" });
+        return;
+      }
 
-    if (!result.accepted || !result.evidence) {
-      res.status(422).json({
-        error: "Evidence rejected",
-        reason: result.reason || "Content was not relevant to the claim",
-      });
-      return;
-    }
+      const existingEvidence = await storage.getEvidenceByClaim(claimId);
+      if (existingEvidence.some((e) => e.url === url)) {
+        res.status(409).json({
+          error:
+            "This URL has already been submitted as evidence for this claim",
+        });
+        return;
+      }
 
-    const storedEvidence = await storage.createEvidence({
-      claimId,
-      url: result.evidence.url,
-      publisher: result.evidence.publisher,
-      excerpt: result.evidence.excerpt,
-      stance: result.evidence.stance as any,
-      evidenceGrade: result.evidence.grade as any,
-      primaryFlag: result.evidence.primaryFlag,
-      metadata: {
-        communitySubmitted: true,
-        submittedAt: new Date().toISOString(),
-        submitterNotes: notes || null,
-      },
-    });
+      const result = await validateCommunityEvidence(
+        url,
+        notes,
+        claim.claimText,
+        claim.claimType,
+        existingEvidence.map((e) => ({
+          url: e.url,
+          publisher: e.publisher || "",
+          excerpt: e.excerpt,
+          grade: e.evidenceGrade,
+          stance: e.stance,
+          primaryFlag: e.primaryFlag || false,
+        })),
+      );
 
-    if (result.verdict) {
-      await storage.deleteVerdictByClaim(claimId);
-      const allEvidence = await storage.getEvidenceByClaim(claimId);
-      await storage.createVerdict({
+      if (!result.accepted || !result.evidence) {
+        res.status(422).json({
+          error: "Evidence rejected",
+          reason: result.reason || "Content was not relevant to the claim",
+        });
+        return;
+      }
+
+      const storedEvidence = await storage.createEvidence({
         claimId,
-        model: "community-recalc",
-        promptVersion: "v1.0.0",
-        verdictLabel: result.verdict.verdictLabel as any,
-        probabilityTrue: result.verdict.probabilityTrue,
-        evidenceStrength: result.verdict.evidenceStrength,
-        keyEvidenceIds: allEvidence.map((e) => e.id),
-        reasoningSummary: result.verdict.reasoningSummary,
-        invalidationTriggers: result.verdict.invalidationTriggers,
+        url: result.evidence.url,
+        publisher: result.evidence.publisher,
+        excerpt: result.evidence.excerpt,
+        stance: result.evidence.stance as any,
+        evidenceGrade: result.evidence.grade as any,
+        primaryFlag: result.evidence.primaryFlag,
+        metadata: {
+          communitySubmitted: true,
+          submittedAt: new Date().toISOString(),
+          submitterNotes: notes || null,
+        },
       });
-    }
 
-    res.status(201).json({
-      message: "Evidence accepted",
-      evidence: {
-        id: storedEvidence.id,
-        url: storedEvidence.url,
-        publisher: storedEvidence.publisher,
-        excerpt: storedEvidence.excerpt,
-        stance: storedEvidence.stance,
-        grade: storedEvidence.evidenceGrade,
-        primaryFlag: storedEvidence.primaryFlag,
-      },
-      verdictUpdated: !!result.verdict,
-    });
-  } catch (err) {
-    console.error("POST /evidence/:claimId/submit error:", err);
-    res.status(500).json({ error: "Failed to process evidence submission" });
-  }
-});
+      if (result.verdict) {
+        await storage.deleteVerdictByClaim(claimId);
+        const allEvidence = await storage.getEvidenceByClaim(claimId);
+        await storage.createVerdict({
+          claimId,
+          model: "community-recalc",
+          promptVersion: "v1.0.0",
+          verdictLabel: result.verdict.verdictLabel as any,
+          probabilityTrue: result.verdict.probabilityTrue,
+          evidenceStrength: result.verdict.evidenceStrength,
+          keyEvidenceIds: allEvidence.map((e) => e.id),
+          reasoningSummary: result.verdict.reasoningSummary,
+          invalidationTriggers: result.verdict.invalidationTriggers,
+        });
+      }
+
+      res.status(201).json({
+        message: "Evidence accepted",
+        evidence: {
+          id: storedEvidence.id,
+          url: storedEvidence.url,
+          publisher: storedEvidence.publisher,
+          excerpt: storedEvidence.excerpt,
+          stance: storedEvidence.stance,
+          grade: storedEvidence.evidenceGrade,
+          primaryFlag: storedEvidence.primaryFlag,
+        },
+        verdictUpdated: !!result.verdict,
+      });
+    } catch (err) {
+      console.error("POST /evidence/:claimId/submit error:", err);
+      res.status(500).json({ error: "Failed to process evidence submission" });
+    }
+  },
+);
 
 // ─── GET /claims/:id/verdict-history ─────────────────────────────────
 
-router.get("/claims/:id/verdict-history", async (req: Request, res: Response) => {
-  try {
-    const verdicts = await storage.getVerdictHistoryByClaim(param(req, "id"));
-    res.json({ data: verdicts });
-  } catch (err) {
-    console.error("Error fetching verdict history:", (err as Error).message);
-    res.status(500).json({ error: "Failed to fetch verdict history" });
-  }
-});
+router.get(
+  "/claims/:id/verdict-history",
+  async (req: Request, res: Response) => {
+    try {
+      const verdicts = await storage.getVerdictHistoryByClaim(param(req, "id"));
+      res.json({ data: verdicts });
+    } catch (err) {
+      console.error("Error fetching verdict history:", (err as Error).message);
+      res.status(500).json({ error: "Failed to fetch verdict history" });
+    }
+  },
+);
 
 // ─── GET /search ────────────────────────────────────────────────────
 
 router.get("/search", async (req: Request, res: Response) => {
   try {
-    const q = (req.query.q as string || "").trim();
+    const q = ((req.query.q as string) || "").trim();
     if (!q) {
       res.status(400).json({ error: "Query parameter 'q' is required" });
+      return;
+    }
+    if (q.length > 200) {
+      res
+        .status(400)
+        .json({ error: "Search query too long (max 200 characters)" });
       return;
     }
 
@@ -888,7 +1044,7 @@ router.get("/search", async (req: Request, res: Response) => {
           createdAt: story.createdAt,
           claimCount: storyWithClaims?.claims.length ?? 0,
         };
-      })
+      }),
     );
 
     // Enrich sources with score
@@ -917,10 +1073,11 @@ router.get("/search", async (req: Request, res: Response) => {
               }
             : null,
         };
-      })
+      }),
     );
 
-    const total = enrichedClaims.length + enrichedStories.length + enrichedSources.length;
+    const total =
+      enrichedClaims.length + enrichedStories.length + enrichedSources.length;
 
     res.json({
       data: {
@@ -941,19 +1098,45 @@ router.get("/search", async (req: Request, res: Response) => {
 
 // ─── POST /admin/reset-stories — Clear all stories so pipeline generates fresh ones ──
 
-router.post("/admin/reset-stories", async (_req: Request, res: Response) => {
-  try {
-    const allStories = await storage.getStories();
-    let deleted = 0;
-    for (const story of allStories) {
-      await storage.deleteStory(story.id);
-      deleted++;
+router.post(
+  "/admin/reset-stories",
+  requireAdmin,
+  async (_req: Request, res: Response) => {
+    try {
+      const allStories = await storage.getStories();
+      let deleted = 0;
+      for (const story of allStories) {
+        await storage.deleteStory(story.id);
+        deleted++;
+      }
+      console.log(`[Admin] Deleted ${deleted} stories`);
+      res.json({
+        deleted,
+        message: `Cleared ${deleted} stories. Trigger /pipeline/run to generate fresh ones.`,
+      });
+    } catch (err: any) {
+      console.error("[Admin] Reset stories failed:", err.message);
+      res.status(500).json({ error: err.message });
     }
-    console.log(`[Admin] Deleted ${deleted} stories`);
-    res.json({ deleted, message: `Cleared ${deleted} stories. Trigger /pipeline/run to generate fresh ones.` });
-  } catch (err: any) {
-    console.error("[Admin] Reset stories failed:", err.message);
-    res.status(500).json({ error: err.message });
+  },
+);
+
+// ─── GET /stats (public landing page stats) ─────────────────────────
+
+router.get("/stats", async (_req: Request, res: Response) => {
+  try {
+    const [pipelineStats, allCreators] = await Promise.all([
+      storage.getPipelineStats(),
+      storage.getCreators(true),
+    ]);
+    res.json({
+      creatorsTracked: allCreators.length,
+      claimsVerified: pipelineStats.totalClaims,
+      storiesTracked: pipelineStats.totalStories,
+    });
+  } catch (err) {
+    console.error("GET /stats error:", err);
+    res.status(500).json({ error: "Failed to fetch stats" });
   }
 });
 
@@ -971,33 +1154,37 @@ router.get("/pipeline/status", async (_req: Request, res: Response) => {
 
 // ─── POST /pipeline/run ─────────────────────────────────────────────
 
-router.post("/pipeline/run", async (_req: Request, res: Response) => {
-  try {
-    const status = pipeline.getStatus();
-    if (status.isRunning) {
-      res.status(409).json({
-        error: "Pipeline is already running",
-        startedAt: status.lastRunAt?.toISOString() ?? null,
+router.post(
+  "/pipeline/run",
+  requireAdmin,
+  async (_req: Request, res: Response) => {
+    try {
+      const status = pipeline.getStatus();
+      if (status.isRunning) {
+        res.status(409).json({
+          error: "Pipeline is already running",
+          startedAt: status.lastRunAt?.toISOString() ?? null,
+        });
+        return;
+      }
+
+      storage.setLastPipelineRun(new Date().toISOString());
+
+      // Trigger the pipeline asynchronously — don't await so we return 202 immediately
+      pipeline.runDailyBatch().catch((err) => {
+        console.error("[Pipeline] Manual run failed:", err);
       });
-      return;
+
+      res.status(202).json({
+        message: "Pipeline run accepted",
+        startedAt: new Date().toISOString(),
+      });
+    } catch (err) {
+      console.error("POST /pipeline/run error:", err);
+      res.status(500).json({ error: "Failed to trigger pipeline run" });
     }
-
-    storage.setLastPipelineRun(new Date().toISOString());
-
-    // Trigger the pipeline asynchronously — don't await so we return 202 immediately
-    pipeline.runDailyBatch().catch((err) => {
-      console.error("[Pipeline] Manual run failed:", err);
-    });
-
-    res.status(202).json({
-      message: "Pipeline run accepted",
-      startedAt: new Date().toISOString(),
-    });
-  } catch (err) {
-    console.error("POST /pipeline/run error:", err);
-    res.status(500).json({ error: "Failed to trigger pipeline run" });
-  }
-});
+  },
+);
 
 // ─── GET /health ────────────────────────────────────────────────────
 
@@ -1019,14 +1206,20 @@ router.get("/health", async (_req: Request, res: Response) => {
 
 router.post("/auth/signup", async (req: Request, res: Response) => {
   try {
-    const { email, password, displayName } = req.body || {};
+    const { email, password, displayName, refCode } = req.body || {};
 
     if (!email || !password || !displayName) {
-      res.status(400).json({ error: "Email, password, and display name are required" });
+      res
+        .status(400)
+        .json({ error: "Email, password, and display name are required" });
       return;
     }
 
-    if (typeof email !== "string" || typeof password !== "string" || typeof displayName !== "string") {
+    if (
+      typeof email !== "string" ||
+      typeof password !== "string" ||
+      typeof displayName !== "string"
+    ) {
       res.status(400).json({ error: "Invalid input types" });
       return;
     }
@@ -1038,12 +1231,34 @@ router.post("/auth/signup", async (req: Request, res: Response) => {
 
     const existing = await storage.getUserByEmail(email);
     if (existing) {
-      res.status(409).json({ error: "An account with this email already exists" });
+      res
+        .status(409)
+        .json({ error: "An account with this email already exists" });
       return;
     }
 
+    // Validate referral code if provided
+    let referrer: { id: string } | undefined;
+    if (refCode && typeof refCode === "string") {
+      referrer =
+        (await storage.getUserByReferralCode(refCode.toUpperCase())) ??
+        undefined;
+    }
+
     const passwordHash = await bcrypt.hash(password, 10);
-    const user = await storage.createUser({ email, passwordHash, displayName });
+    const emailVerifyToken = crypto.randomUUID();
+    const user = await storage.createUser({
+      email,
+      passwordHash,
+      displayName,
+      emailVerifyToken,
+      referredBy: referrer ? referrer.id : undefined,
+    });
+
+    // Create referral record linking new user to referrer
+    if (referrer) {
+      await storage.createReferral(referrer.id, user.id).catch(() => {});
+    }
 
     req.session.userId = user.id;
     res.status(201).json({
@@ -1051,8 +1266,15 @@ router.post("/auth/signup", async (req: Request, res: Response) => {
       email: user.email,
       displayName: user.displayName,
       subscriptionTier: user.subscriptionTier,
+      emailVerified: user.emailVerified,
       createdAt: user.createdAt,
     });
+
+    // Fire-and-forget emails
+    sendWelcomeEmail(user.email, user.displayName).catch(() => {});
+    sendVerificationEmail(user.email, user.displayName, emailVerifyToken).catch(
+      () => {},
+    );
   } catch (err) {
     console.error("POST /auth/signup error:", err);
     res.status(500).json({ error: "Failed to create account" });
@@ -1086,6 +1308,7 @@ router.post("/auth/login", async (req: Request, res: Response) => {
       email: user.email,
       displayName: user.displayName,
       subscriptionTier: user.subscriptionTier,
+      emailVerified: user.emailVerified,
       createdAt: user.createdAt,
     });
   } catch (err) {
@@ -1119,8 +1342,11 @@ router.get("/auth/me", async (req: Request, res: Response) => {
       return;
     }
 
-    const effectiveTier = (user.subscriptionExpiresAt && new Date(user.subscriptionExpiresAt) < new Date())
-      ? "free" : user.subscriptionTier;
+    const effectiveTier =
+      user.subscriptionExpiresAt &&
+      new Date(user.subscriptionExpiresAt) < new Date()
+        ? "free"
+        : user.subscriptionTier;
 
     res.json({
       id: user.id,
@@ -1128,6 +1354,7 @@ router.get("/auth/me", async (req: Request, res: Response) => {
       displayName: user.displayName,
       subscriptionTier: effectiveTier,
       subscriptionExpiresAt: user.subscriptionExpiresAt,
+      emailVerified: user.emailVerified,
       createdAt: user.createdAt,
     });
   } catch (err) {
@@ -1135,6 +1362,261 @@ router.get("/auth/me", async (req: Request, res: Response) => {
     res.status(500).json({ error: "Failed to fetch user" });
   }
 });
+
+// ─── GET /auth/verify-email ──────────────────────────────────────────
+
+router.get("/auth/verify-email", async (req: Request, res: Response) => {
+  try {
+    const token = req.query.token as string;
+    if (!token) {
+      res.status(400).json({ error: "Token is required" });
+      return;
+    }
+
+    const user = await storage.getUserByEmailVerifyToken(token);
+    if (!user) {
+      res.status(400).json({ error: "Invalid or expired verification token" });
+      return;
+    }
+
+    await storage.markEmailVerified(user.id);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("GET /auth/verify-email error:", err);
+    res.status(500).json({ error: "Failed to verify email" });
+  }
+});
+
+// ─── POST /auth/forgot-password ──────────────────────────────────────
+
+router.post("/auth/forgot-password", async (req: Request, res: Response) => {
+  try {
+    const { email } = req.body || {};
+    if (!email || typeof email !== "string") {
+      res.status(400).json({ error: "Email is required" });
+      return;
+    }
+
+    // Always return success to avoid user enumeration
+    const user = await storage.getUserByEmail(email);
+    if (user) {
+      const token = crypto.randomUUID();
+      const expiry = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+      await storage.setPasswordReset(user.id, token, expiry);
+      sendPasswordResetEmail(user.email, user.displayName, token).catch(
+        () => {},
+      );
+    }
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("POST /auth/forgot-password error:", err);
+    res.status(500).json({ error: "Failed to process request" });
+  }
+});
+
+// ─── POST /auth/reset-password ───────────────────────────────────────
+
+router.post("/auth/reset-password", async (req: Request, res: Response) => {
+  try {
+    const { token, password } = req.body || {};
+    if (
+      !token ||
+      !password ||
+      typeof token !== "string" ||
+      typeof password !== "string"
+    ) {
+      res.status(400).json({ error: "Token and password are required" });
+      return;
+    }
+
+    if (password.length < 8) {
+      res.status(400).json({ error: "Password must be at least 8 characters" });
+      return;
+    }
+
+    const user = await storage.getUserByPasswordResetToken(token);
+    if (!user) {
+      res.status(400).json({ error: "Invalid or expired reset token" });
+      return;
+    }
+
+    if (
+      user.passwordResetExpiry &&
+      new Date(user.passwordResetExpiry) < new Date()
+    ) {
+      res.status(400).json({ error: "Reset token has expired" });
+      return;
+    }
+
+    const hash = await bcrypt.hash(password, 10);
+    await storage.updateUserPassword(user.id, hash);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("POST /auth/reset-password error:", err);
+    res.status(500).json({ error: "Failed to reset password" });
+  }
+});
+
+// ─── GET /auth/watchlist ─────────────────────────────────────────────
+
+router.get("/auth/watchlist", async (req: Request, res: Response) => {
+  const userId = req.session.userId;
+  if (!userId) {
+    res.status(401).json({ error: "Not authenticated" });
+    return;
+  }
+  const user = await storage.getUserById(userId);
+  if (!user) {
+    res.status(401).json({ error: "User not found" });
+    return;
+  }
+  res.json({ watchlist: user.watchlist ?? [] });
+});
+
+// ─── PUT /auth/watchlist ─────────────────────────────────────────────
+
+router.put("/auth/watchlist", async (req: Request, res: Response) => {
+  const userId = req.session.userId;
+  if (!userId) {
+    res.status(401).json({ error: "Not authenticated" });
+    return;
+  }
+  const user = await storage.getUserById(userId);
+  if (!user) {
+    res.status(401).json({ error: "User not found" });
+    return;
+  }
+  if (user.subscriptionTier !== "oracle") {
+    res.status(403).json({ error: "Watchlist requires Oracle subscription" });
+    return;
+  }
+  const wlParsed = WatchlistSchema.safeParse(req.body);
+  if (!wlParsed.success) {
+    res.status(400).json({ error: wlParsed.error.errors[0].message });
+    return;
+  }
+  const symbols: string[] = wlParsed.data.watchlist
+    .map((s: string) => s.toUpperCase().trim())
+    .filter((s: string) => s.length > 0);
+  await storage.updateUserWatchlist(userId, symbols);
+  res.json({ watchlist: symbols });
+});
+
+// ─── GET /auth/verify-email ──────────────────────────────────────────
+
+router.get("/auth/verify-email", async (req: Request, res: Response) => {
+  try {
+    const token = req.query.token as string;
+    if (!token) {
+      res.status(400).json({ error: "Token is required" });
+      return;
+    }
+    const user = await storage.getUserByEmailVerifyToken(token);
+    if (!user) {
+      res.status(400).json({ error: "Invalid or expired verification token" });
+      return;
+    }
+    await storage.markEmailVerified(user.id);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("GET /auth/verify-email error:", err);
+    res.status(500).json({ error: "Verification failed" });
+  }
+});
+
+// ─── POST /auth/forgot-password ───────────────────────────────────────
+
+router.post("/auth/forgot-password", async (req: Request, res: Response) => {
+  try {
+    const { email } = req.body || {};
+    if (!email || typeof email !== "string") {
+      res.status(400).json({ error: "Email is required" });
+      return;
+    }
+    const user = await storage.getUserByEmail(email);
+    // Always respond OK to prevent user enumeration
+    if (user) {
+      const token = crypto.randomUUID();
+      const expiry = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+      await storage.setPasswordReset(user.id, token, expiry);
+      sendPasswordResetEmail(user.email, user.displayName, token).catch(
+        () => {},
+      );
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("POST /auth/forgot-password error:", err);
+    res.status(500).json({ error: "Failed to process request" });
+  }
+});
+
+// ─── POST /auth/reset-password ────────────────────────────────────────
+
+router.post("/auth/reset-password", async (req: Request, res: Response) => {
+  try {
+    const { token, password } = req.body || {};
+    if (
+      !token ||
+      !password ||
+      typeof token !== "string" ||
+      typeof password !== "string"
+    ) {
+      res.status(400).json({ error: "Token and password are required" });
+      return;
+    }
+    if (password.length < 8) {
+      res.status(400).json({ error: "Password must be at least 8 characters" });
+      return;
+    }
+    const user = await storage.getUserByPasswordResetToken(token);
+    if (!user) {
+      res.status(400).json({ error: "Invalid or expired reset token" });
+      return;
+    }
+    if (
+      user.passwordResetExpiry &&
+      new Date(user.passwordResetExpiry) < new Date()
+    ) {
+      res.status(400).json({ error: "Reset token has expired" });
+      return;
+    }
+    const passwordHash = await bcrypt.hash(password, 10);
+    await storage.updateUserPassword(user.id, passwordHash);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("POST /auth/reset-password error:", err);
+    res.status(500).json({ error: "Failed to reset password" });
+  }
+});
+
+// ─── Referral Routes ─────────────────────────────────────────────────
+
+router.get(
+  "/referrals/my-code",
+  requireAuth,
+  async (req: Request, res: Response) => {
+    try {
+      const userId = (req.session as any).userId as string;
+      const user = await storage.getUserById(userId);
+      if (!user) {
+        res.status(404).json({ error: "User not found" });
+        return;
+      }
+      const allReferrals = await storage.getReferralsByReferrer(userId);
+      const rewardedCount = allReferrals.filter((r) => r.rewardGranted).length;
+      res.json({
+        referralCode: user.referralCode,
+        referralCount: allReferrals.length,
+        rewardedCount,
+        freeMonthsEarned: rewardedCount,
+      });
+    } catch (err) {
+      console.error("GET /referrals/my-code error:", err);
+      res.status(500).json({ error: "Failed to fetch referral info" });
+    }
+  },
+);
 
 // ─── GET /creators/feed (mixed feed — NOT tier-gated) ───────────────
 
@@ -1157,10 +1639,10 @@ router.get("/creators/feed", async (req: Request, res: Response) => {
 
         // Find a related story by overlapping asset symbols
         let relatedStoryId: string | null = null;
-        const claimAssets = (cc.assetSymbols ?? []).map(a => a.toUpperCase());
+        const claimAssets = (cc.assetSymbols ?? []).map((a) => a.toUpperCase());
         if (claimAssets.length > 0) {
-          const match = recentStories.find(s =>
-            s.assetSymbols.some(a => claimAssets.includes(a.toUpperCase()))
+          const match = recentStories.find((s) =>
+            s.assetSymbols.some((a) => claimAssets.includes(a.toUpperCase())),
           );
           if (match) relatedStoryId = match.id;
         }
@@ -1198,16 +1680,88 @@ router.get("/creators/feed", async (req: Request, res: Response) => {
             : null,
           relatedStoryId,
         };
-      })
+      }),
     );
 
     // Filter out entries with missing creator or video
-    res.json({ data: data.filter(d => d.creator && d.video) });
+    res.json({ data: data.filter((d) => d.creator && d.video) });
   } catch (err) {
     console.error("GET /creators/feed error:", err);
     res.status(500).json({ error: "Failed to fetch creator feed" });
   }
 });
+
+// ─── GET /creators/curated-feed (Oracle tier required) ───────────────
+
+router.get(
+  "/creators/curated-feed",
+  requireTier("oracle"),
+  async (req: Request, res: Response) => {
+    try {
+      const minAccuracy = parseFloat(req.query.minAccuracy as string) || 70;
+
+      // 1. Fetch all active creators meeting the accuracy threshold
+      let allCreators = await storage.getCreators(true);
+      allCreators = allCreators.filter(
+        (c) => (c.overallAccuracy ?? 0) >= minAccuracy,
+      );
+      allCreators.sort(
+        (a, b) => (a.rankOverall ?? 9999) - (b.rankOverall ?? 9999),
+      );
+
+      // 2. For each creator, fetch their 5 most recent completed videos
+      const videoEntries = await Promise.all(
+        allCreators.map(async (creator) => {
+          const videos = await storage.getCreatorVideos(creator.id);
+          const completed = videos
+            .filter((v) => v.transcriptStatus === "complete")
+            .sort((a, b) => {
+              const ta = a.publishedAt ? new Date(a.publishedAt).getTime() : 0;
+              const tb = b.publishedAt ? new Date(b.publishedAt).getTime() : 0;
+              return tb - ta;
+            })
+            .slice(0, 5);
+          return completed.map((v) => ({ video: v, creator }));
+        }),
+      );
+
+      // 3. Flatten, sort by publishedAt DESC
+      const feed = videoEntries
+        .flat()
+        .sort((a, b) => {
+          const ta = a.video.publishedAt
+            ? new Date(a.video.publishedAt).getTime()
+            : 0;
+          const tb = b.video.publishedAt
+            ? new Date(b.video.publishedAt).getTime()
+            : 0;
+          return tb - ta;
+        })
+        .map(({ video, creator }) => ({
+          youtubeVideoId: video.youtubeVideoId,
+          title: video.title,
+          thumbnailUrl: video.thumbnailUrl ?? null,
+          publishedAt: video.publishedAt
+            ? new Date(video.publishedAt).toISOString()
+            : null,
+          durationSeconds: video.durationSeconds ?? 0,
+          viewCount: video.viewCount ?? 0,
+          creator: {
+            id: creator.id,
+            channelName: creator.channelName,
+            avatarUrl: creator.avatarUrl ?? null,
+            overallAccuracy: creator.overallAccuracy ?? 0,
+            tier: creator.tier,
+          },
+        }));
+
+      res.json({ data: feed });
+    } catch (err) {
+      console.error("GET /creators/curated-feed error:", err);
+      res.status(500).json({ error: "Failed to fetch curated feed" });
+    }
+  },
+);
 
 // ─── GET /creators/videos ────────────────────────────────────────────
 
@@ -1246,18 +1800,27 @@ router.get("/creators/videos", async (req: Request, res: Response) => {
 
         if (!creator) return null;
 
-        const verifiedTrue  = claims.filter((c) => c.status === "verified_true").length;
-        const verifiedFalse = claims.filter((c) => c.status === "verified_false").length;
-        const pending       = claims.filter((c) => c.status === "pending").length;
+        const verifiedTrue = claims.filter(
+          (c) => c.status === "verified_true",
+        ).length;
+        const verifiedFalse = claims.filter(
+          (c) => c.status === "verified_false",
+        ).length;
+        const pending = claims.filter((c) => c.status === "pending").length;
         const totalVerified = verifiedTrue + verifiedFalse;
-        const accuracyPct   = totalVerified > 0 ? Math.round((verifiedTrue / totalVerified) * 100) : 0;
+        const accuracyPct =
+          totalVerified > 0
+            ? Math.round((verifiedTrue / totalVerified) * 100)
+            : 0;
 
         return {
           videoId: video.id,
           youtubeVideoId: video.youtubeVideoId,
           title: video.title,
           thumbnailUrl: video.thumbnailUrl ?? null,
-          publishedAt: video.publishedAt ? new Date(video.publishedAt).toISOString() : null,
+          publishedAt: video.publishedAt
+            ? new Date(video.publishedAt).toISOString()
+            : null,
           viewCount: video.viewCount ?? 0,
           durationSeconds: video.durationSeconds ?? 0,
           creator: {
@@ -1276,7 +1839,7 @@ router.get("/creators/videos", async (req: Request, res: Response) => {
             accuracyPct,
           },
         };
-      })
+      }),
     );
 
     res.json({ data: data.filter(Boolean), total });
@@ -1288,52 +1851,104 @@ router.get("/creators/videos", async (req: Request, res: Response) => {
 
 // ─── GET /creators ──────────────────────────────────────────────────
 
-router.get("/creators", requireTier("tribune"), async (req: Request, res: Response) => {
-  try {
-    const activeOnly = req.query.active === "true";
-    const niche = req.query.niche as string | undefined;
-    const sort = req.query.sort as string | undefined;
+router.get(
+  "/creators",
+  requireTier("tribune"),
+  async (req: Request, res: Response) => {
+    try {
+      const activeOnly = req.query.active === "true";
+      const niche = req.query.niche as string | undefined;
+      const sort = req.query.sort as string | undefined;
 
-    let creators = await storage.getCreators(activeOnly || undefined);
+      let creators = await storage.getCreators(activeOnly || undefined);
 
-    if (niche) {
-      creators = creators.filter((c) => c.primaryNiche === niche);
+      if (niche) {
+        creators = creators.filter((c) => c.primaryNiche === niche);
+      }
+
+      if (sort === "accuracy") {
+        creators.sort(
+          (a, b) => (b.overallAccuracy ?? 0) - (a.overallAccuracy ?? 0),
+        );
+      } else if (sort === "claims") {
+        creators.sort((a, b) => (b.totalClaims ?? 0) - (a.totalClaims ?? 0));
+      } else if (sort === "newest") {
+        creators.sort(
+          (a, b) =>
+            new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime(),
+        );
+      }
+
+      res.json({ data: creators });
+    } catch (err) {
+      console.error("GET /creators error:", err);
+      res.status(500).json({ error: "Failed to fetch creators" });
     }
-
-    if (sort === "accuracy") {
-      creators.sort((a, b) => (b.overallAccuracy ?? 0) - (a.overallAccuracy ?? 0));
-    } else if (sort === "claims") {
-      creators.sort((a, b) => (b.totalClaims ?? 0) - (a.totalClaims ?? 0));
-    } else if (sort === "newest") {
-      creators.sort(
-        (a, b) =>
-          new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime()
-      );
-    }
-
-    res.json({ data: creators });
-  } catch (err) {
-    console.error("GET /creators error:", err);
-    res.status(500).json({ error: "Failed to fetch creators" });
-  }
-});
+  },
+);
 
 // ─── GET /creators/leaderboard ──────────────────────────────────────
+// Public: returns top 6 with minimal fields for unauthenticated users.
+// Tribune+: returns full ranked list with rank history.
 
-router.get("/creators/leaderboard", async (_req: Request, res: Response) => {
+router.get("/creators/leaderboard", async (req: Request, res: Response) => {
   try {
-    const creators = await storage.getCreators();
+    // Determine if caller has Tribune+ access
+    const userId = req.session?.userId;
+    let isTribune = false;
+    if (userId) {
+      try {
+        const user = await storage.getUserById(userId);
+        let userTier = user?.subscriptionTier || "free";
+        if (
+          user?.subscriptionExpiresAt &&
+          new Date(user.subscriptionExpiresAt) < new Date()
+        ) {
+          userTier = "free";
+        }
+        isTribune = (TIER_RANK[userTier] ?? 0) >= TIER_RANK["tribune"];
+      } catch {
+        // ignore auth errors, treat as public
+      }
+    }
 
-    const ranked = creators
-      .filter((c) => (c.totalClaims ?? 0) >= 5)
-      .sort((a, b) => (b.overallAccuracy ?? 0) - (a.overallAccuracy ?? 0))
-      .map((c, i) => ({
-        ...c,
-        rank: i + 1,
-        rankChange: c.rankChange ?? 0,
-      }));
+    const cached = cache.get<object[]>("creators:leaderboard");
+    let withHistory: object[];
 
-    res.json({ data: ranked });
+    if (cached) {
+      withHistory = cached;
+    } else {
+      const creators = await storage.getCreators();
+
+      const ranked = creators
+        .filter((c) => (c.totalClaims ?? 0) >= 5)
+        .sort((a, b) => (b.overallAccuracy ?? 0) - (a.overallAccuracy ?? 0))
+        .map((c, i) => ({
+          ...c,
+          rank: i + 1,
+          rankChange: c.rankChange ?? 0,
+        }));
+
+      withHistory = await Promise.all(
+        ranked.map(async (c) => {
+          const scores = await storage.getCreatorScoreHistory(c.id);
+          const rankHistory = scores
+            .slice(0, 8)
+            .reverse()
+            .map((s) => ({
+              rank: s.rankOverall,
+              calculatedAt: s.calculatedAt,
+            }));
+          return { ...c, rankHistory };
+        }),
+      );
+
+      cache.set("creators:leaderboard", withHistory);
+    }
+
+    // Unauthenticated / free users only get the top 6 public rows
+    const data = isTribune ? withHistory : withHistory.slice(0, 6);
+    res.json({ data });
   } catch (err) {
     console.error("GET /creators/leaderboard error:", err);
     res.status(500).json({ error: "Failed to fetch leaderboard" });
@@ -1342,83 +1957,117 @@ router.get("/creators/leaderboard", async (_req: Request, res: Response) => {
 
 // ─── GET /creators/:id ──────────────────────────────────────────────
 
-router.get("/creators/:id", requireTier("tribune"), async (req: Request, res: Response) => {
-  try {
-    const creatorId = param(req, "id");
-    const creator = await storage.getCreator(creatorId);
-    if (!creator) {
-      res.status(404).json({ error: "Creator not found" });
-      return;
+router.get(
+  "/creators/:id",
+  requireTier("tribune"),
+  async (req: Request, res: Response) => {
+    try {
+      const creatorId = param(req, "id");
+
+      const cacheKey = `creator:${creatorId}`;
+      const cached = cache.get<object>(cacheKey);
+      if (cached) {
+        res.json(cached);
+        return;
+      }
+
+      const creator = await storage.getCreator(creatorId);
+      if (!creator) {
+        res.status(404).json({ error: "Creator not found" });
+        return;
+      }
+
+      const [rawVideos, claims, scoreHistory] = await Promise.all([
+        storage.getCreatorVideos(creatorId, 10),
+        storage.getCreatorClaims({ creatorId, limit: 20 }),
+        storage.getCreatorScoreHistory(creatorId),
+      ]);
+
+      // Enrich videos with AI-generated thumbnails when available
+      const videos = rawVideos.map((v) => ({
+        ...v,
+        thumbnailUrl: getVideoThumbnailUrl(v.id) ?? v.thumbnailUrl,
+      }));
+
+      const payload = { creator, videos, claims, scoreHistory };
+      cache.set(cacheKey, payload);
+      res.json(payload);
+    } catch (err) {
+      console.error("GET /creators/:id error:", err);
+      res.status(500).json({ error: "Failed to fetch creator" });
     }
-
-    const [rawVideos, claims, scoreHistory] = await Promise.all([
-      storage.getCreatorVideos(creatorId, 10),
-      storage.getCreatorClaims({ creatorId, limit: 20 }),
-      storage.getCreatorScoreHistory(creatorId),
-    ]);
-
-    // Enrich videos with AI-generated thumbnails when available
-    const videos = rawVideos.map(v => ({
-      ...v,
-      thumbnailUrl: getVideoThumbnailUrl(v.id) ?? v.thumbnailUrl,
-    }));
-
-    res.json({ creator, videos, claims, scoreHistory });
-  } catch (err) {
-    console.error("GET /creators/:id error:", err);
-    res.status(500).json({ error: "Failed to fetch creator" });
-  }
-});
+  },
+);
 
 // ─── GET /creators/:id/claims ───────────────────────────────────────
 
-router.get("/creators/:id/claims", requireTier("tribune"), async (req: Request, res: Response) => {
-  try {
-    const creatorId = param(req, "id");
-    const status = req.query.status as string | undefined;
-    const category = req.query.category as string | undefined;
-    const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 50;
-    const offset = req.query.offset ? parseInt(req.query.offset as string, 10) : 0;
+router.get(
+  "/creators/:id/claims",
+  requireTier("tribune"),
+  async (req: Request, res: Response) => {
+    try {
+      const creatorId = param(req, "id");
+      const status = req.query.status as string | undefined;
+      const category = req.query.category as string | undefined;
+      const limit = req.query.limit
+        ? parseInt(req.query.limit as string, 10)
+        : 50;
+      const offset = req.query.offset
+        ? parseInt(req.query.offset as string, 10)
+        : 0;
 
-    const claims = await storage.getCreatorClaims({ creatorId, status, category, limit, offset });
+      const claims = await storage.getCreatorClaims({
+        creatorId,
+        status,
+        category,
+        limit,
+        offset,
+      });
 
-    res.json({ data: claims });
-  } catch (err) {
-    console.error("GET /creators/:id/claims error:", err);
-    res.status(500).json({ error: "Failed to fetch creator claims" });
-  }
-});
+      res.json({ data: claims });
+    } catch (err) {
+      console.error("GET /creators/:id/claims error:", err);
+      res.status(500).json({ error: "Failed to fetch creator claims" });
+    }
+  },
+);
 
 // ─── POST /creators/pipeline/run ────────────────────────────────────
 
-router.post("/creators/pipeline/run", async (_req: Request, res: Response) => {
-  try {
-    // Fire and forget
-    runCreatorPipeline(storage).catch((err) => {
-      console.error("[CreatorPipeline] Run failed:", err);
-    });
+router.post(
+  "/creators/pipeline/run",
+  requireAdmin,
+  async (_req: Request, res: Response) => {
+    try {
+      // Fire and forget
+      runCreatorPipeline(storage).catch((err) => {
+        console.error("[CreatorPipeline] Run failed:", err);
+      });
 
-    res.status(202).json({ message: "Creator pipeline started" });
-  } catch (err) {
-    console.error("POST /creators/pipeline/run error:", err);
-    res.status(500).json({ error: "Failed to trigger creator pipeline" });
-  }
-});
+      res.status(202).json({ message: "Creator pipeline started" });
+    } catch (err) {
+      console.error("POST /creators/pipeline/run error:", err);
+      res.status(500).json({ error: "Failed to trigger creator pipeline" });
+    }
+  },
+);
 
 // ─── POST /creators/suggest ─────────────────────────────────────────
 
 router.post("/creators/suggest", async (req: Request, res: Response) => {
   try {
-    const { channelName, channelHandle, youtubeChannelId } = req.body || {};
-
-    if (!channelName || !channelHandle) {
-      res.status(400).json({ error: "channelName and channelHandle are required" });
+    const parsed = SuggestCreatorSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.errors[0].message });
       return;
     }
+    const { channelName, channelHandle, youtubeChannelId } = parsed.data;
 
     const suggestion = await storage.createCreatorSuggestion({
       channelName,
-      channelHandle,
+      channelHandle: channelHandle.startsWith("@")
+        ? channelHandle
+        : `@${channelHandle}`,
       youtubeChannelId: youtubeChannelId ?? null,
       suggestedBy: null,
       voteCount: 0,
@@ -1436,7 +2085,8 @@ router.post("/creators/suggest", async (req: Request, res: Response) => {
 
 router.get("/creators/suggestions", async (req: Request, res: Response) => {
   try {
-    const status = typeof req.query.status === "string" ? req.query.status : undefined;
+    const status =
+      typeof req.query.status === "string" ? req.query.status : undefined;
     const suggestions = await storage.getCreatorSuggestions(status);
     res.json({ data: suggestions });
   } catch (err) {
@@ -1463,100 +2113,266 @@ router.get("/creators/polls/active", async (_req: Request, res: Response) => {
 
 // ─── POST /creators/polls/:pollId/vote ──────────────────────────────
 
-router.post("/creators/polls/:pollId/vote", async (req: Request, res: Response) => {
-  try {
-    const pollId = param(req, "pollId");
-    const { optionId } = req.body || {};
+router.post(
+  "/creators/polls/:pollId/vote",
+  async (req: Request, res: Response) => {
+    try {
+      const pollId = param(req, "pollId");
+      const { optionId } = req.body || {};
 
-    if (!optionId) {
-      res.status(400).json({ error: "optionId is required" });
-      return;
+      if (!optionId) {
+        res.status(400).json({ error: "optionId is required" });
+        return;
+      }
+
+      // Fingerprint: prefer session ID (cryptographically set by server, cannot be spoofed
+      // by the client). Fall back to IP only if there is no session yet.
+      const sessionId = (req.session as any)?.id as string | undefined;
+      const voterFingerprint = sessionId
+        ? `session:${sessionId}`
+        : `ip:${req.ip || "anonymous"}`;
+      const result = await storage.votePoll(
+        optionId as string,
+        pollId,
+        voterFingerprint,
+      );
+
+      if (!result.success) {
+        res.status(409).json({ error: result.message });
+        return;
+      }
+
+      res.json({ data: { message: result.message } });
+    } catch (err) {
+      console.error("POST /creators/polls/:pollId/vote error:", err);
+      res.status(500).json({ error: "Failed to record vote" });
     }
-
-    const forwardedFor = req.headers["x-forwarded-for"];
-    const voterFingerprint = req.ip || (Array.isArray(forwardedFor) ? forwardedFor[0] : forwardedFor) || "anonymous";
-    const result = await storage.votePoll(optionId as string, pollId, voterFingerprint);
-
-    if (!result.success) {
-      res.status(409).json({ error: result.message });
-      return;
-    }
-
-    res.json({ data: { message: result.message } });
-  } catch (err) {
-    console.error("POST /creators/polls/:pollId/vote error:", err);
-    res.status(500).json({ error: "Failed to record vote" });
-  }
-});
+  },
+);
 
 // ─── POST /creators/polls/admin/complete/:pollId ─────────────────────
 
-router.post("/creators/polls/admin/complete/:pollId", async (req: Request, res: Response) => {
-  try {
-    const pollId = param(req, "pollId");
-    const winner = await storage.completePoll(pollId);
+router.post(
+  "/creators/polls/admin/complete/:pollId",
+  requireAdmin,
+  async (req: Request, res: Response) => {
+    try {
+      const pollId = param(req, "pollId");
+      const winner = await storage.completePoll(pollId);
 
-    res.json({
-      data: {
-        message: winner ? "Poll completed. Winner: " + winner.channelName : "Poll completed with no winner.",
-        winner: winner ?? null,
-      },
-    });
-  } catch (err) {
-    console.error("POST /creators/polls/admin/complete/:pollId error:", err);
-    res.status(500).json({ error: "Failed to complete poll" });
-  }
-});
+      res.json({
+        data: {
+          message: winner
+            ? "Poll completed. Winner: " + winner.channelName
+            : "Poll completed with no winner.",
+          winner: winner ?? null,
+        },
+      });
+    } catch (err) {
+      console.error("POST /creators/polls/admin/complete/:pollId error:", err);
+      res.status(500).json({ error: "Failed to complete poll" });
+    }
+  },
+);
 
 // ─── POST /disputes ─────────────────────────────────────────────────
 
-router.post("/disputes", requireTier("tribune"), async (req: Request, res: Response) => {
-  try {
-    const { claimId, disputeType, evidence, submitterNote } = req.body || {};
+router.post(
+  "/disputes",
+  requireTier("tribune"),
+  async (req: Request, res: Response) => {
+    try {
+      const parsed = DisputeSchema.safeParse(req.body);
+      if (!parsed.success) {
+        res.status(400).json({ error: parsed.error.errors[0].message });
+        return;
+      }
+      const { claimId, disputeType, evidence, submitterNote } = parsed.data;
 
-    if (!claimId || !disputeType) {
-      res.status(400).json({ error: "claimId and disputeType are required" });
-      return;
+      const claim = await storage.getCreatorClaim(claimId);
+      if (!claim) {
+        res.status(404).json({ error: "Creator claim not found" });
+        return;
+      }
+
+      const dispute = await storage.createDispute({
+        claimId,
+        disputeType,
+        evidence: evidence ?? null,
+        submitterNote: submitterNote ?? null,
+      });
+
+      // Trigger AI evaluation in background
+      evaluateDispute(storage, dispute.id).catch((err) => {
+        console.error("[CreatorPipeline] Dispute evaluation failed:", err);
+      });
+
+      res.status(201).json({ data: dispute });
+    } catch (err) {
+      console.error("POST /disputes error:", err);
+      res.status(500).json({ error: "Failed to create dispute" });
     }
-
-    const claim = await storage.getCreatorClaim(claimId);
-    if (!claim) {
-      res.status(404).json({ error: "Creator claim not found" });
-      return;
-    }
-
-    const dispute = await storage.createDispute({
-      claimId,
-      disputeType,
-      evidence: evidence ?? null,
-      submitterNote: submitterNote ?? null,
-    });
-
-    // Trigger AI evaluation in background
-    evaluateDispute(storage, dispute.id).catch((err) => {
-      console.error("[CreatorPipeline] Dispute evaluation failed:", err);
-    });
-
-    res.status(201).json({ data: dispute });
-  } catch (err) {
-    console.error("POST /disputes error:", err);
-    res.status(500).json({ error: "Failed to create dispute" });
-  }
-});
+  },
+);
 
 // ─── GET /disputes/:claimId ─────────────────────────────────────────
 
-router.get("/disputes/:claimId", requireTier("tribune"), async (req: Request, res: Response) => {
-  try {
-    const claimId = param(req, "claimId");
-    const disputes = await storage.getDisputesByClaimId(claimId);
+router.get(
+  "/disputes/:claimId",
+  requireTier("tribune"),
+  async (req: Request, res: Response) => {
+    try {
+      const claimId = param(req, "claimId");
+      const disputes = await storage.getDisputesByClaimId(claimId);
 
-    res.json({ data: disputes });
-  } catch (err) {
-    console.error("GET /disputes/:claimId error:", err);
-    res.status(500).json({ error: "Failed to fetch disputes" });
-  }
-});
+      res.json({ data: disputes });
+    } catch (err) {
+      console.error("GET /disputes/:claimId error:", err);
+      res.status(500).json({ error: "Failed to fetch disputes" });
+    }
+  },
+);
+
+// ─── POST /saved-stories/:storyId ───────────────────────────────────
+
+router.post(
+  "/saved-stories/:storyId",
+  requireAuth,
+  async (req: Request, res: Response) => {
+    try {
+      const userId = (req.session as any).userId as string;
+      const { storyId } = req.params;
+      const story = await storage.getStory(storyId);
+      if (!story) {
+        res.status(404).json({ error: "Story not found" });
+        return;
+      }
+      const saved = await storage.saveStory(userId, storyId);
+      res.json(saved);
+    } catch (err) {
+      console.error("POST /saved-stories/:storyId error:", err);
+      res.status(500).json({ error: "Failed to save story" });
+    }
+  },
+);
+
+// ─── DELETE /saved-stories/:storyId ─────────────────────────────────
+
+router.delete(
+  "/saved-stories/:storyId",
+  requireAuth,
+  async (req: Request, res: Response) => {
+    try {
+      const userId = (req.session as any).userId as string;
+      const { storyId } = req.params;
+      await storage.unsaveStory(userId, storyId);
+      res.status(204).send();
+    } catch (err) {
+      console.error("DELETE /saved-stories/:storyId error:", err);
+      res.status(500).json({ error: "Failed to unsave story" });
+    }
+  },
+);
+
+// ─── GET /saved-stories ──────────────────────────────────────────────
+
+router.get(
+  "/saved-stories",
+  requireAuth,
+  async (req: Request, res: Response) => {
+    try {
+      const userId = (req.session as any).userId as string;
+      const saved = await storage.getSavedStoriesByUser(userId);
+      // Fetch full story objects
+      const storyObjects = await Promise.all(
+        saved.map(async (s) => {
+          const story = await storage.getStory(s.storyId);
+          return story ? { ...story, savedAt: s.savedAt } : null;
+        }),
+      );
+      const data = storyObjects.filter(Boolean);
+      res.json({ data });
+    } catch (err) {
+      console.error("GET /saved-stories error:", err);
+      res.status(500).json({ error: "Failed to fetch saved stories" });
+    }
+  },
+);
+
+// ─── GET /saved-stories/ids ──────────────────────────────────────────
+
+router.get(
+  "/saved-stories/ids",
+  requireAuth,
+  async (req: Request, res: Response) => {
+    try {
+      const userId = (req.session as any).userId as string;
+      const saved = await storage.getSavedStoriesByUser(userId);
+      res.json({ data: saved.map((s) => s.storyId) });
+    } catch (err) {
+      console.error("GET /saved-stories/ids error:", err);
+      res.status(500).json({ error: "Failed to fetch saved story IDs" });
+    }
+  },
+);
+
+// ─── POST /user/follow/:creatorId ───────────────────────────────────
+
+router.post(
+  "/user/follow/:creatorId",
+  requireAuth,
+  async (req: Request, res: Response) => {
+    try {
+      const userId = (req.session as any).userId as string;
+      const { creatorId } = req.params;
+      const creator = await storage.getCreator(creatorId);
+      if (!creator) {
+        res.status(404).json({ error: "Creator not found" });
+        return;
+      }
+      const followed = await storage.followCreator(userId, creatorId);
+      res.json(followed);
+    } catch (err) {
+      console.error("POST /user/follow/:creatorId error:", err);
+      res.status(500).json({ error: "Failed to follow creator" });
+    }
+  },
+);
+
+// ─── DELETE /user/follow/:creatorId ─────────────────────────────────
+
+router.delete(
+  "/user/follow/:creatorId",
+  requireAuth,
+  async (req: Request, res: Response) => {
+    try {
+      const userId = (req.session as any).userId as string;
+      const { creatorId } = req.params;
+      await storage.unfollowCreator(userId, creatorId);
+      res.status(204).send();
+    } catch (err) {
+      console.error("DELETE /user/follow/:creatorId error:", err);
+      res.status(500).json({ error: "Failed to unfollow creator" });
+    }
+  },
+);
+
+// ─── GET /user/following ─────────────────────────────────────────────
+
+router.get(
+  "/user/following",
+  requireAuth,
+  async (req: Request, res: Response) => {
+    try {
+      const userId = (req.session as any).userId as string;
+      const followed = await storage.getFollowedCreators(userId);
+      res.json({ data: followed.map((f) => f.creatorId) });
+    } catch (err) {
+      console.error("GET /user/following error:", err);
+      res.status(500).json({ error: "Failed to fetch followed creators" });
+    }
+  },
+);
 
 // ─── POST /admin/regenerate-images ─────────────────────────────────
 // Sequentially generates AI images for stories missing them,
@@ -1574,35 +2390,52 @@ router.post("/admin/regenerate-images", async (req: Request, res: Response) => {
     regenRunning = true;
     const force = req.query.force === "true";
     const stories = await storage.getStories();
-    const toProcess = force ? stories : stories.filter(s => !s.imageUrl?.startsWith("/story-images/"));
+    const toProcess = force
+      ? stories
+      : stories.filter((s) => !s.imageUrl?.startsWith("/story-images/"));
 
-    console.log(`[RegenImages] Starting: ${toProcess.length} stories to process (${stories.length} total, ${stories.length - toProcess.length} skipped)`);
+    console.log(
+      `[RegenImages] Starting: ${toProcess.length} stories to process (${stories.length} total, ${stories.length - toProcess.length} skipped)`,
+    );
 
     let success = 0;
     let failed = 0;
     for (const story of toProcess) {
       try {
-        const aiUrl = await generateStoryImageAI(story.id, story.title, story.category, force);
+        const aiUrl = await generateStoryImageAI(
+          story.id,
+          story.title,
+          story.category,
+          force,
+        );
         if (aiUrl) {
           await storage.updateStory(story.id, { imageUrl: aiUrl });
           success++;
-          console.log(`[RegenImages] ✓ ${story.id}: ${story.title.slice(0, 50)}`);
+          console.log(
+            `[RegenImages] ✓ ${story.id}: ${story.title.slice(0, 50)}`,
+          );
         } else {
-          await storage.updateStory(story.id, { imageUrl: `/api/stories/${story.id}/image` });
+          await storage.updateStory(story.id, {
+            imageUrl: `/api/stories/${story.id}/image`,
+          });
           failed++;
           console.log(`[RegenImages] ✗ ${story.id}: fell back to SVG`);
         }
       } catch (err: any) {
-        await storage.updateStory(story.id, { imageUrl: `/api/stories/${story.id}/image` });
+        await storage.updateStory(story.id, {
+          imageUrl: `/api/stories/${story.id}/image`,
+        });
         failed++;
         console.error(`[RegenImages] ✗ ${story.id}: ${err.message || err}`);
       }
       // 3 second delay between requests to respect rate limits
-      await new Promise(r => setTimeout(r, 3000));
+      await new Promise((r) => setTimeout(r, 3000));
     }
 
     regenRunning = false;
-    console.log(`[RegenImages] Done: ${success} generated, ${failed} fell back to SVG`);
+    console.log(
+      `[RegenImages] Done: ${success} generated, ${failed} fell back to SVG`,
+    );
 
     res.json({
       message: `Regeneration complete`,
@@ -1624,68 +2457,85 @@ router.post("/admin/regenerate-images", async (req: Request, res: Response) => {
 
 let videoThumbRegenRunning = false;
 
-router.post("/admin/regenerate-video-thumbnails", async (req: Request, res: Response) => {
-  try {
-    if (videoThumbRegenRunning) {
-      res.status(409).json({ error: "Video thumbnail regeneration already in progress" });
-      return;
-    }
+router.post(
+  "/admin/regenerate-video-thumbnails",
+  async (req: Request, res: Response) => {
+    try {
+      if (videoThumbRegenRunning) {
+        res
+          .status(409)
+          .json({ error: "Video thumbnail regeneration already in progress" });
+        return;
+      }
 
-    const force = req.query.force === "true";
-    const videos = await storage.getAllCreatorVideos();
+      const force = req.query.force === "true";
+      const videos = await storage.getAllCreatorVideos();
 
-    // Respond immediately, process in background
-    res.json({
-      message: `Processing ${videos.length} video thumbnails sequentially in background`,
-      total: videos.length,
-    });
+      // Respond immediately, process in background
+      res.json({
+        message: `Processing ${videos.length} video thumbnails sequentially in background`,
+        total: videos.length,
+      });
 
-    // Sequential background processing with delay
-    videoThumbRegenRunning = true;
-    (async () => {
-      let success = 0;
-      let failed = 0;
-      for (const video of videos) {
-        try {
-          const creator = await storage.getCreator(video.creatorId);
-          const channelName = creator?.channelName ?? "Unknown";
-          const url = await generateVideoThumbnail(video.id, video.title, channelName, force);
-          if (url) {
-            await storage.updateCreatorVideo(video.id, { thumbnailUrl: url });
-            success++;
-          } else {
+      // Sequential background processing with delay
+      videoThumbRegenRunning = true;
+      (async () => {
+        let success = 0;
+        let failed = 0;
+        for (const video of videos) {
+          try {
+            const creator = await storage.getCreator(video.creatorId);
+            const channelName = creator?.channelName ?? "Unknown";
+            const url = await generateVideoThumbnail(
+              video.id,
+              video.title,
+              channelName,
+              force,
+            );
+            if (url) {
+              await storage.updateCreatorVideo(video.id, { thumbnailUrl: url });
+              success++;
+            } else {
+              failed++;
+            }
+          } catch {
             failed++;
           }
-        } catch {
-          failed++;
+          // 3 second delay between requests to respect rate limits
+          await new Promise((r) => setTimeout(r, 3000));
         }
-        // 3 second delay between requests to respect rate limits
-        await new Promise(r => setTimeout(r, 3000));
-      }
-      console.log(`[RegenVideoThumbs] Done: ${success} generated, ${failed} failed`);
-      videoThumbRegenRunning = false;
-    })().catch(() => { videoThumbRegenRunning = false; });
-  } catch (err) {
-    console.error("POST /admin/regenerate-video-thumbnails error:", err);
-    res.status(500).json({ error: "Failed to regenerate video thumbnails" });
-  }
-});
+        console.log(
+          `[RegenVideoThumbs] Done: ${success} generated, ${failed} failed`,
+        );
+        videoThumbRegenRunning = false;
+      })().catch(() => {
+        videoThumbRegenRunning = false;
+      });
+    } catch (err) {
+      console.error("POST /admin/regenerate-video-thumbnails error:", err);
+      res.status(500).json({ error: "Failed to regenerate video thumbnails" });
+    }
+  },
+);
 
 // ─── POST /admin/generate-tier-images ────────────────────────────────
 // Generates AI images for subscription tier cards (Vantage, Premium, Pro).
 
-router.post("/admin/generate-tier-images", async (_req: Request, res: Response) => {
-  try {
-    const results = await generateTierImages();
-    res.json({
-      message: "Tier image generation complete",
-      results,
-    });
-  } catch (err) {
-    console.error("POST /admin/generate-tier-images error:", err);
-    res.status(500).json({ error: "Failed to generate tier images" });
-  }
-});
+router.post(
+  "/admin/generate-tier-images",
+  async (_req: Request, res: Response) => {
+    try {
+      const results = await generateTierImages();
+      res.json({
+        message: "Tier image generation complete",
+        results,
+      });
+    } catch (err) {
+      console.error("POST /admin/generate-tier-images error:", err);
+      res.status(500).json({ error: "Failed to generate tier images" });
+    }
+  },
+);
 
 // ─── Gift Redemption & Validation ────────────────────────────────────
 
@@ -1711,7 +2561,9 @@ router.post("/gifts/redeem", async (req: Request, res: Response) => {
     }
 
     if (gift.status === "redeemed") {
-      res.status(409).json({ error: "This gift code has already been redeemed" });
+      res
+        .status(409)
+        .json({ error: "This gift code has already been redeemed" });
       return;
     }
 
@@ -1763,261 +2615,637 @@ function requireAuth(req: Request, res: Response, next: Function) {
   next();
 }
 
-// Stories
-router.put("/admin/stories/:id", requireAuth, async (req: Request, res: Response) => {
+async function requireAdmin(req: Request, res: Response, next: Function) {
+  const userId = req.session?.userId;
+  if (!userId) {
+    res.status(401).json({ error: "Authentication required" });
+    return;
+  }
   try {
-    const storyId = param(req, "id");
-    const story = await storage.getStory(storyId);
-    if (!story) {
-      res.status(404).json({ error: "Story not found" });
+    const user = await storage.getUserById(userId);
+    if (!user || !ADMIN_EMAILS.has(user.email.toLowerCase())) {
+      res.status(403).json({ error: "Admin access required" });
       return;
     }
-    const { title, summary, category, imageUrl, assetSymbols } = req.body || {};
-    const update: Record<string, any> = {};
-    if (title !== undefined) update.title = title;
-    if (summary !== undefined) update.summary = summary;
-    if (category !== undefined) update.category = category;
-    if (imageUrl !== undefined) update.imageUrl = imageUrl;
-    if (assetSymbols !== undefined) update.assetSymbols = assetSymbols;
-    await storage.updateStory(storyId, update);
-    const updated = await storage.getStory(storyId);
-    res.json(updated);
-  } catch (err) {
-    console.error("PUT /admin/stories/:id error:", err);
-    res.status(500).json({ error: "Failed to update story" });
+    next();
+  } catch {
+    res.status(500).json({ error: "Failed to verify admin access" });
   }
-});
+}
 
-router.delete("/admin/stories/:id", requireAuth, async (req: Request, res: Response) => {
-  try {
-    const storyId = param(req, "id");
-    const deleted = await storage.deleteStory(storyId);
-    if (!deleted) {
-      res.status(404).json({ error: "Story not found" });
-      return;
+// Stories
+router.put(
+  "/admin/stories/:id",
+  requireAuth,
+  async (req: Request, res: Response) => {
+    try {
+      const storyId = param(req, "id");
+      const story = await storage.getStory(storyId);
+      if (!story) {
+        res.status(404).json({ error: "Story not found" });
+        return;
+      }
+      const { title, summary, category, imageUrl, assetSymbols } =
+        req.body || {};
+      const update: Record<string, any> = {};
+      if (title !== undefined) update.title = title;
+      if (summary !== undefined) update.summary = summary;
+      if (category !== undefined) update.category = category;
+      if (imageUrl !== undefined) update.imageUrl = imageUrl;
+      if (assetSymbols !== undefined) update.assetSymbols = assetSymbols;
+      await storage.updateStory(storyId, update);
+      const updated = await storage.getStory(storyId);
+      res.json(updated);
+    } catch (err) {
+      console.error("PUT /admin/stories/:id error:", err);
+      res.status(500).json({ error: "Failed to update story" });
     }
-    res.status(204).send();
-  } catch (err) {
-    console.error("DELETE /admin/stories/:id error:", err);
-    res.status(500).json({ error: "Failed to delete story" });
-  }
-});
+  },
+);
+
+router.delete(
+  "/admin/stories/:id",
+  requireAuth,
+  async (req: Request, res: Response) => {
+    try {
+      const storyId = param(req, "id");
+      const deleted = await storage.deleteStory(storyId);
+      if (!deleted) {
+        res.status(404).json({ error: "Story not found" });
+        return;
+      }
+      res.status(204).send();
+    } catch (err) {
+      console.error("DELETE /admin/stories/:id error:", err);
+      res.status(500).json({ error: "Failed to delete story" });
+    }
+  },
+);
 
 // Claims
-router.put("/admin/claims/:id", requireAuth, async (req: Request, res: Response) => {
-  try {
-    const claimId = param(req, "id");
-    const claim = await storage.getClaim(claimId);
-    if (!claim) {
-      res.status(404).json({ error: "Claim not found" });
-      return;
+router.put(
+  "/admin/claims/:id",
+  requireAuth,
+  async (req: Request, res: Response) => {
+    try {
+      const claimId = param(req, "id");
+      const claim = await storage.getClaim(claimId);
+      if (!claim) {
+        res.status(404).json({ error: "Claim not found" });
+        return;
+      }
+      const { claimText, claimType, status, assetSymbols } = req.body || {};
+      const update: Record<string, any> = {};
+      if (claimText !== undefined) update.claimText = claimText;
+      if (claimType !== undefined) update.claimType = claimType;
+      if (status !== undefined) update.status = status;
+      if (assetSymbols !== undefined) update.assetSymbols = assetSymbols;
+      const updated = await storage.updateClaim(claimId, update);
+      res.json(updated);
+    } catch (err) {
+      console.error("PUT /admin/claims/:id error:", err);
+      res.status(500).json({ error: "Failed to update claim" });
     }
-    const { claimText, claimType, status, assetSymbols } = req.body || {};
-    const update: Record<string, any> = {};
-    if (claimText !== undefined) update.claimText = claimText;
-    if (claimType !== undefined) update.claimType = claimType;
-    if (status !== undefined) update.status = status;
-    if (assetSymbols !== undefined) update.assetSymbols = assetSymbols;
-    const updated = await storage.updateClaim(claimId, update);
-    res.json(updated);
-  } catch (err) {
-    console.error("PUT /admin/claims/:id error:", err);
-    res.status(500).json({ error: "Failed to update claim" });
-  }
-});
+  },
+);
 
-router.delete("/admin/claims/:id", requireAuth, async (req: Request, res: Response) => {
-  try {
-    const claimId = param(req, "id");
-    const deleted = await storage.deleteClaim(claimId);
-    if (!deleted) {
-      res.status(404).json({ error: "Claim not found" });
-      return;
+router.delete(
+  "/admin/claims/:id",
+  requireAuth,
+  async (req: Request, res: Response) => {
+    try {
+      const claimId = param(req, "id");
+      const deleted = await storage.deleteClaim(claimId);
+      if (!deleted) {
+        res.status(404).json({ error: "Claim not found" });
+        return;
+      }
+      res.status(204).send();
+    } catch (err) {
+      console.error("DELETE /admin/claims/:id error:", err);
+      res.status(500).json({ error: "Failed to delete claim" });
     }
-    res.status(204).send();
-  } catch (err) {
-    console.error("DELETE /admin/claims/:id error:", err);
-    res.status(500).json({ error: "Failed to delete claim" });
-  }
-});
+  },
+);
 
 // Verdicts (manual override — creates new record for audit trail)
-router.put("/admin/verdicts/:claimId", requireAuth, async (req: Request, res: Response) => {
-  try {
-    const claimId = param(req, "claimId");
-    const claim = await storage.getClaim(claimId);
-    if (!claim) {
-      res.status(404).json({ error: "Claim not found" });
-      return;
+router.put(
+  "/admin/verdicts/:claimId",
+  requireAuth,
+  async (req: Request, res: Response) => {
+    try {
+      const claimId = param(req, "claimId");
+      const claim = await storage.getClaim(claimId);
+      if (!claim) {
+        res.status(404).json({ error: "Claim not found" });
+        return;
+      }
+      const { verdictLabel, reasoningSummary, probabilityTrue } =
+        req.body || {};
+      if (!verdictLabel) {
+        res.status(400).json({ error: "verdictLabel is required" });
+        return;
+      }
+      const verdict = await storage.createVerdict({
+        claimId,
+        model: "manual_override",
+        promptVersion: "admin",
+        verdictLabel,
+        reasoningSummary: reasoningSummary ?? null,
+        probabilityTrue: probabilityTrue ?? null,
+      });
+      res.json(verdict);
+    } catch (err) {
+      console.error("PUT /admin/verdicts/:claimId error:", err);
+      res.status(500).json({ error: "Failed to update verdict" });
     }
-    const { verdictLabel, reasoningSummary, probabilityTrue } = req.body || {};
-    if (!verdictLabel) {
-      res.status(400).json({ error: "verdictLabel is required" });
-      return;
+  },
+);
+
+// ─── GET /admin/creator-claims/pending ───────────────────────────────
+// Returns all pending creator claims enriched with creator name + video title,
+// sorted by aiExtractionConfidence DESC.
+
+router.get(
+  "/admin/creator-claims/pending",
+  requireAuth,
+  async (_req: Request, res: Response) => {
+    try {
+      const claims = await storage.getCreatorClaims({
+        status: "pending",
+        limit: 500,
+      });
+
+      // Sort by aiExtractionConfidence DESC (nulls last)
+      claims.sort((a, b) => {
+        const ca = a.aiExtractionConfidence ?? 0;
+        const cb = b.aiExtractionConfidence ?? 0;
+        return cb - ca;
+      });
+
+      // Batch-enrich with creator name and video title
+      const creatorIds = [...new Set(claims.map((c) => c.creatorId))];
+      const videoIds = [...new Set(claims.map((c) => c.videoId))];
+
+      const [creatorsArr, videosArr] = await Promise.all([
+        Promise.all(creatorIds.map((id) => storage.getCreator(id))),
+        Promise.all(videoIds.map((id) => storage.getCreatorVideo(id))),
+      ]);
+
+      const creatorMap = new Map(
+        creatorsArr
+          .filter(Boolean)
+          .map((c) => [
+            c!.id,
+            { name: c!.channelName, avatarUrl: c!.avatarUrl ?? null },
+          ]),
+      );
+      const videoMap = new Map(
+        videosArr.filter(Boolean).map((v) => [v!.id, v!.title]),
+      );
+
+      const enriched = claims.map((c) => {
+        const creator = creatorMap.get(c.creatorId);
+        return {
+          ...c,
+          creatorName: creator?.name ?? "Unknown",
+          creatorAvatarUrl: creator?.avatarUrl ?? null,
+          videoTitle: videoMap.get(c.videoId) ?? "Unknown video",
+        };
+      });
+
+      res.json({ data: enriched });
+    } catch (err) {
+      console.error("GET /admin/creator-claims/pending error:", err);
+      res.status(500).json({ error: "Failed to fetch pending claims" });
     }
-    const verdict = await storage.createVerdict({
-      claimId,
-      model: "manual_override",
-      promptVersion: "admin",
-      verdictLabel,
-      reasoningSummary: reasoningSummary ?? null,
-      probabilityTrue: probabilityTrue ?? null,
-    });
-    res.json(verdict);
-  } catch (err) {
-    console.error("PUT /admin/verdicts/:claimId error:", err);
-    res.status(500).json({ error: "Failed to update verdict" });
-  }
-});
+  },
+);
+
+// ─── PUT /admin/creator-claims/:id ────────────────────────────────────
+// Verifies a creator claim: sets status + verificationDate.
+
+router.put(
+  "/admin/creator-claims/:id",
+  requireAuth,
+  async (req: Request, res: Response) => {
+    try {
+      const id = param(req, "id");
+      const claim = await storage.getCreatorClaim(id);
+      if (!claim) {
+        res.status(404).json({ error: "Creator claim not found" });
+        return;
+      }
+      const { status, verificationNotes } = req.body || {};
+      const validStatuses = [
+        "verified_true",
+        "verified_false",
+        "unverifiable",
+        "partially_true",
+        "expired",
+        "pending",
+      ];
+      if (!status || !validStatuses.includes(status)) {
+        res.status(400).json({
+          error: `status must be one of: ${validStatuses.join(", ")}`,
+        });
+        return;
+      }
+      await storage.updateCreatorClaim(id, {
+        status: status as any,
+        verificationDate: new Date(),
+        ...(verificationNotes !== undefined && { verificationNotes }),
+      });
+      res.json({ ok: true, id, status });
+    } catch (err) {
+      console.error("PUT /admin/creator-claims/:id error:", err);
+      res.status(500).json({ error: "Failed to update creator claim" });
+    }
+  },
+);
 
 // Sources
-router.put("/admin/sources/:id", requireAuth, async (req: Request, res: Response) => {
-  try {
-    const sourceId = param(req, "id");
-    const source = await storage.getSource(sourceId);
-    if (!source) {
-      res.status(404).json({ error: "Source not found" });
-      return;
+router.put(
+  "/admin/sources/:id",
+  requireAuth,
+  async (req: Request, res: Response) => {
+    try {
+      const sourceId = param(req, "id");
+      const source = await storage.getSource(sourceId);
+      if (!source) {
+        res.status(404).json({ error: "Source not found" });
+        return;
+      }
+      const { displayName, logoUrl, metadata } = req.body || {};
+      const update: Record<string, any> = {};
+      if (displayName !== undefined) update.displayName = displayName;
+      if (logoUrl !== undefined) update.logoUrl = logoUrl;
+      if (metadata !== undefined) update.metadata = metadata;
+      const updated = await storage.updateSource(sourceId, update);
+      res.json(updated);
+    } catch (err) {
+      console.error("PUT /admin/sources/:id error:", err);
+      res.status(500).json({ error: "Failed to update source" });
     }
-    const { displayName, logoUrl, metadata } = req.body || {};
-    const update: Record<string, any> = {};
-    if (displayName !== undefined) update.displayName = displayName;
-    if (logoUrl !== undefined) update.logoUrl = logoUrl;
-    if (metadata !== undefined) update.metadata = metadata;
-    const updated = await storage.updateSource(sourceId, update);
-    res.json(updated);
-  } catch (err) {
-    console.error("PUT /admin/sources/:id error:", err);
-    res.status(500).json({ error: "Failed to update source" });
-  }
-});
+  },
+);
 
 // Pipeline trigger
-router.post("/admin/pipeline/run", requireAuth, async (_req: Request, res: Response) => {
-  try {
-    const status = pipeline.getStatus();
-    if (status.isRunning) {
-      res.status(409).json({ error: "Pipeline is already running" });
-      return;
+router.post(
+  "/admin/pipeline/run",
+  requireAuth,
+  async (_req: Request, res: Response) => {
+    try {
+      const status = pipeline.getStatus();
+      if (status.isRunning) {
+        res.status(409).json({ error: "Pipeline is already running" });
+        return;
+      }
+      storage.setLastPipelineRun(new Date().toISOString());
+      pipeline.runDailyBatch().catch((err) => {
+        console.error("[Pipeline] Admin-triggered run failed:", err);
+      });
+      res.json({ status: "started" });
+    } catch (err) {
+      console.error("POST /admin/pipeline/run error:", err);
+      res.status(500).json({ error: "Failed to trigger pipeline" });
     }
-    storage.setLastPipelineRun(new Date().toISOString());
-    pipeline.runDailyBatch().catch((err) => {
-      console.error("[Pipeline] Admin-triggered run failed:", err);
-    });
-    res.json({ status: "started" });
-  } catch (err) {
-    console.error("POST /admin/pipeline/run error:", err);
-    res.status(500).json({ error: "Failed to trigger pipeline" });
-  }
-});
+  },
+);
 
 // ─── POST /admin/run-creator-pipeline ─────────────────────────────────
 // Seeds creators if needed, then runs the full creator pipeline cycle.
 
-router.post("/admin/run-creator-pipeline", async (_req: Request, res: Response) => {
-  try {
-    // Ensure seed creators exist
-    await seedCreators(storage);
+router.post(
+  "/admin/run-creator-pipeline",
+  requireAdmin,
+  async (_req: Request, res: Response) => {
+    try {
+      // Ensure seed creators exist
+      await seedCreators(storage);
 
-    // Fire the full cycle asynchronously
-    (async () => {
-      try {
-        const result = await runCreatorPipeline(storage);
-        await verifyCreatorClaims(storage);
-        await recalculateCreatorScores(storage);
-        console.log(`[Admin] Creator pipeline complete: ${result.creatorsProcessed} creators, ${result.totalClaims} claims`);
-      } catch (err) {
-        console.error("[Admin] Creator pipeline run failed:", err);
+      // Fire the full cycle asynchronously
+      (async () => {
+        try {
+          const result = await runCreatorPipeline(storage);
+          await verifyCreatorClaims(storage);
+          await recalculateCreatorScores(storage);
+          console.log(
+            `[Admin] Creator pipeline complete: ${result.creatorsProcessed} creators, ${result.totalClaims} claims`,
+          );
+        } catch (err) {
+          console.error("[Admin] Creator pipeline run failed:", err);
+        }
+      })();
+
+      const creators = await storage.getCreators();
+      res.status(202).json({
+        message: "Creator pipeline started",
+        creatorsCount: creators.length,
+        creators: creators.map((c) => ({
+          id: c.id,
+          channelName: c.channelName,
+          youtubeChannelId: c.youtubeChannelId,
+        })),
+      });
+    } catch (err) {
+      console.error("POST /admin/run-creator-pipeline error:", err);
+      res.status(500).json({ error: "Failed to trigger creator pipeline" });
+    }
+  },
+);
+
+// ─── POST /admin/backfill-avatars ─────────────────────────────────────
+// One-time job: fetch and store avatar URLs for all creators missing one.
+
+router.post(
+  "/admin/backfill-avatars",
+  requireAdmin,
+  async (_req: Request, res: Response) => {
+    try {
+      const creators = await storage.getCreators();
+      const missing = creators.filter((c) => !c.avatarUrl);
+
+      if (missing.length === 0) {
+        res.json({ message: "All creators already have avatars", updated: 0 });
+        return;
       }
-    })();
 
-    const creators = await storage.getCreators();
-    res.status(202).json({
-      message: "Creator pipeline started",
-      creatorsCount: creators.length,
-      creators: creators.map((c) => ({
-        id: c.id,
-        channelName: c.channelName,
-        youtubeChannelId: c.youtubeChannelId,
-      })),
-    });
-  } catch (err) {
-    console.error("POST /admin/run-creator-pipeline error:", err);
-    res.status(500).json({ error: "Failed to trigger creator pipeline" });
-  }
-});
+      // Run async in background
+      (async () => {
+        let updated = 0;
+        for (const creator of missing) {
+          try {
+            const avatarUrl = await fetchChannelAvatarUrl(
+              creator.youtubeChannelId,
+            );
+            if (avatarUrl) {
+              await storage.updateCreator(creator.id, { avatarUrl });
+              console.log(`[Backfill] Saved avatar for ${creator.channelName}`);
+              updated++;
+            }
+            // Be polite — small delay between requests
+            await new Promise((r) => setTimeout(r, 500));
+          } catch (err) {
+            console.error(`[Backfill] Failed for ${creator.channelName}:`, err);
+          }
+        }
+        console.log(
+          `[Backfill] Done — ${updated}/${missing.length} avatars saved`,
+        );
+      })();
+
+      res.status(202).json({
+        message: `Backfilling avatars for ${missing.length} creators`,
+        missing: missing.length,
+      });
+    } catch (err) {
+      console.error("POST /admin/backfill-avatars error:", err);
+      res.status(500).json({ error: "Failed to start avatar backfill" });
+    }
+  },
+);
 
 // ─── GET /admin/metrics ──────────────────────────────────────────────
 // Returns API stats, pipeline health, and system uptime.
 
-router.get("/admin/metrics", async (_req: Request, res: Response) => {
-  try {
-    const metrics = analytics.getMetrics();
-    res.json(metrics);
-  } catch (err) {
-    console.error("GET /admin/metrics error:", err);
-    res.status(500).json({ error: "Failed to fetch metrics" });
-  }
-});
+router.get(
+  "/admin/metrics",
+  requireAdmin,
+  async (_req: Request, res: Response) => {
+    try {
+      const metrics = analytics.getMetrics();
+      res.json(metrics);
+    } catch (err) {
+      console.error("GET /admin/metrics error:", err);
+      res.status(500).json({ error: "Failed to fetch metrics" });
+    }
+  },
+);
+
+// ─── GET /admin/users/stats ───────────────────────────────────────────
+// Returns signup counts by day (last 30 days) and tier breakdown.
+
+router.get(
+  "/admin/users/stats",
+  requireAdmin,
+  async (_req: Request, res: Response) => {
+    try {
+      const users = await storage.getAllUsers();
+
+      // Tier breakdown
+      const tierCounts: Record<string, number> = {};
+      for (const user of users) {
+        const tier = user.subscriptionTier || "free";
+        tierCounts[tier] = (tierCounts[tier] || 0) + 1;
+      }
+
+      // Signups per day for the last 30 days
+      const now = new Date();
+      const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      const signupsByDay: Record<string, number> = {};
+      for (
+        let d = new Date(thirtyDaysAgo);
+        d <= now;
+        d.setDate(d.getDate() + 1)
+      ) {
+        signupsByDay[d.toISOString().slice(0, 10)] = 0;
+      }
+      for (const user of users) {
+        if (!user.createdAt) continue;
+        const day = new Date(user.createdAt).toISOString().slice(0, 10);
+        if (day in signupsByDay) {
+          signupsByDay[day]++;
+        }
+      }
+
+      const signupTrend = Object.entries(signupsByDay)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([date, count]) => ({ date, count }));
+
+      res.json({
+        totalUsers: users.length,
+        tierBreakdown: Object.entries(tierCounts).map(([tier, count]) => ({
+          tier,
+          count,
+        })),
+        signupTrend,
+      });
+    } catch (err) {
+      console.error("GET /admin/users/stats error:", err);
+      res.status(500).json({ error: "Failed to fetch user stats" });
+    }
+  },
+);
 
 // ─── Firmy AI Support Agent ─────────────────────────────────────────
 
-const FIRMY_KNOWLEDGE: Record<string, { keywords: string[]; response: string; action?: string }> = {
+const FIRMY_KNOWLEDGE: Record<
+  string,
+  { keywords: string[]; response: string; action?: string }
+> = {
   how_it_works: {
-    keywords: ["how does", "how do", "what is confirmd", "what does confirmd", "how confirmd", "how works", "explain confirmd", "tell me about confirmd", "what is this"],
-    response: "Confirmd is a crypto news verification platform. We track claims made by news sources and crypto influencers, then evaluate them using a rigorous evidence-based methodology.\n\nHere is how it works:\n\n1. **Claim Extraction** — We identify specific, falsifiable claims from crypto news articles, tweets, and YouTube videos.\n2. **Evidence Gathering** — Our pipeline collects supporting and contradicting evidence from multiple sources.\n3. **Verdict Generation** — Each claim receives a verdict (Confirmed, Likely True, Unverified, Likely False, or False) based on the weight of evidence.\n4. **Source Scoring** — We track each source's historical accuracy, building a credibility track record over time.\n5. **Creator Tracking** — We monitor crypto YouTubers and influencers, scoring their prediction accuracy.\n\nThe community can also submit evidence to help refine verdicts. Think of us as a fact-checking layer for the crypto information ecosystem.",
+    keywords: [
+      "how does",
+      "how do",
+      "what is confirmd",
+      "what does confirmd",
+      "how confirmd",
+      "how works",
+      "explain confirmd",
+      "tell me about confirmd",
+      "what is this",
+    ],
+    response:
+      "Confirmd is a crypto news verification platform. We track claims made by news sources and crypto influencers, then evaluate them using a rigorous evidence-based methodology.\n\nHere is how it works:\n\n1. **Claim Extraction** — We identify specific, falsifiable claims from crypto news articles, tweets, and YouTube videos.\n2. **Evidence Gathering** — Our pipeline collects supporting and contradicting evidence from multiple sources.\n3. **Verdict Generation** — Each claim receives a verdict (Confirmed, Likely True, Unverified, Likely False, or False) based on the weight of evidence.\n4. **Source Scoring** — We track each source's historical accuracy, building a credibility track record over time.\n5. **Creator Tracking** — We monitor crypto YouTubers and influencers, scoring their prediction accuracy.\n\nThe community can also submit evidence to help refine verdicts. Think of us as a fact-checking layer for the crypto information ecosystem.",
   },
   factuality_scoring: {
-    keywords: ["factuality", "scoring", "how are scores", "methodology", "how do you score", "accuracy score", "track record", "credibility", "how is accuracy", "verdict system"],
-    response: "Our factuality scoring system evaluates claims and sources on multiple dimensions:\n\n**Claim Verdicts:**\nEach claim receives a probability score (0-100%) representing the likelihood it is true, plus an evidence strength rating. Verdicts range from \"Confirmed\" to \"False\" based on available evidence.\n\n**Source Scores:**\n- **Track Record** — Historical accuracy across all tracked claims\n- **Method Discipline** — How well-sourced and rigorous the outlet's reporting is\n- **Sample Size** — Number of claims tracked (more data = more reliable score)\n- **Confidence Interval** — Statistical range showing how certain we are of the score\n\n**Creator Accuracy:**\nFor crypto YouTubers and influencers, we track specific predictions and grade them as they resolve. Overall accuracy is calculated as correct predictions divided by resolved predictions.\n\nYou can explore our full methodology at [/methodology](/methodology).",
+    keywords: [
+      "factuality",
+      "scoring",
+      "how are scores",
+      "methodology",
+      "how do you score",
+      "accuracy score",
+      "track record",
+      "credibility",
+      "how is accuracy",
+      "verdict system",
+    ],
+    response:
+      'Our factuality scoring system evaluates claims and sources on multiple dimensions:\n\n**Claim Verdicts:**\nEach claim receives a probability score (0-100%) representing the likelihood it is true, plus an evidence strength rating. Verdicts range from "Confirmed" to "False" based on available evidence.\n\n**Source Scores:**\n- **Track Record** — Historical accuracy across all tracked claims\n- **Method Discipline** — How well-sourced and rigorous the outlet\'s reporting is\n- **Sample Size** — Number of claims tracked (more data = more reliable score)\n- **Confidence Interval** — Statistical range showing how certain we are of the score\n\n**Creator Accuracy:**\nFor crypto YouTubers and influencers, we track specific predictions and grade them as they resolve. Overall accuracy is calculated as correct predictions divided by resolved predictions.\n\nYou can explore our full methodology at [/methodology](/methodology).',
   },
   billing: {
-    keywords: ["billing", "subscription", "payment", "invoice", "charge", "price", "cost", "plan", "upgrade", "downgrade", "cancel", "refund"],
-    response: "Here is what I can help you with regarding your subscription:\n\n- **View plans & upgrade** — Visit our [Plus page](/plus) to see available tiers and upgrade your account\n- **Manage subscription** — You can manage your current subscription, update payment methods, and view invoices from your account settings\n- **Cancel** — You can cancel anytime from your account settings. Your access continues until the end of your billing period\n\nIf you need help with a specific billing issue such as a failed payment or refund request, I would recommend submitting a support ticket so our team can assist you directly.",
+    keywords: [
+      "billing",
+      "subscription",
+      "payment",
+      "invoice",
+      "charge",
+      "price",
+      "cost",
+      "plan",
+      "upgrade",
+      "downgrade",
+      "cancel",
+      "refund",
+    ],
+    response:
+      "Here is what I can help you with regarding your subscription:\n\n- **View plans & upgrade** — Visit our [Plus page](/plus) to see available tiers and upgrade your account\n- **Manage subscription** — You can manage your current subscription, update payment methods, and view invoices from your account settings\n- **Cancel** — You can cancel anytime from your account settings. Your access continues until the end of your billing period\n\nIf you need help with a specific billing issue such as a failed payment or refund request, I would recommend submitting a support ticket so our team can assist you directly.",
     action: "show_billing_links",
   },
   subscription_manage: {
-    keywords: ["manage my subscription", "change plan", "account settings", "my account", "my plan", "current plan"],
-    response: "To manage your subscription:\n\n1. Click your profile icon in the top-right corner\n2. Select **Manage Subscription**\n3. From there you can upgrade, downgrade, or cancel your plan\n\nAlternatively, visit the [Plus page](/plus) to compare plans and make changes.\n\nIf you are not currently logged in, you will need to [sign in](/login) first.",
+    keywords: [
+      "manage my subscription",
+      "change plan",
+      "account settings",
+      "my account",
+      "my plan",
+      "current plan",
+    ],
+    response:
+      "To manage your subscription:\n\n1. Click your profile icon in the top-right corner\n2. Select **Manage Subscription**\n3. From there you can upgrade, downgrade, or cancel your plan\n\nAlternatively, visit the [Plus page](/plus) to compare plans and make changes.\n\nIf you are not currently logged in, you will need to [sign in](/login) first.",
     action: "show_billing_links",
   },
   report_issue: {
-    keywords: ["report", "issue", "bug", "problem", "broken", "error", "not working", "something wrong", "help me with"],
-    response: "I am sorry to hear you are experiencing an issue. To make sure our team can investigate and resolve it properly, please fill out the form below with details about what you are experiencing.\n\nOur support team typically responds within 24 hours.",
+    keywords: [
+      "report",
+      "issue",
+      "bug",
+      "problem",
+      "broken",
+      "error",
+      "not working",
+      "something wrong",
+      "help me with",
+    ],
+    response:
+      "I am sorry to hear you are experiencing an issue. To make sure our team can investigate and resolve it properly, please fill out the form below with details about what you are experiencing.\n\nOur support team typically responds within 24 hours.",
     action: "show_escalation_form",
   },
   creators: {
-    keywords: ["creator", "youtuber", "influencer", "youtube", "prediction", "leaderboard"],
-    response: "Confirmd tracks crypto content creators — YouTubers, influencers, and analysts — by extracting specific predictions from their videos and scoring them as they resolve.\n\n- **Creator Claims** — Browse all tracked predictions at [/creator-claims](/creator-claims)\n- **Leaderboard** — See which creators have the best track records at [/leaderboard](/leaderboard)\n- **Individual Profiles** — Click on any creator to see their full prediction history and accuracy breakdown\n\nThis helps you make informed decisions about which crypto voices to trust.",
+    keywords: [
+      "creator",
+      "youtuber",
+      "influencer",
+      "youtube",
+      "prediction",
+      "leaderboard",
+    ],
+    response:
+      "Confirmd tracks crypto content creators — YouTubers, influencers, and analysts — by extracting specific predictions from their videos and scoring them as they resolve.\n\n- **Creator Claims** — Browse all tracked predictions at [/creator-claims](/creator-claims)\n- **Leaderboard** — See which creators have the best track records at [/leaderboard](/leaderboard)\n- **Individual Profiles** — Click on any creator to see their full prediction history and accuracy breakdown\n\nThis helps you make informed decisions about which crypto voices to trust.",
   },
   sources: {
-    keywords: ["source", "news source", "outlet", "publisher", "media", "who do you track"],
-    response: "We track a wide range of crypto news sources including major outlets, independent journalists, Twitter/X accounts, and research firms.\n\nEach source receives a credibility score based on their historical accuracy. You can browse all tracked sources and their scores at [/sources](/sources).\n\nOur scoring system rewards consistent accuracy and penalizes sources that frequently publish unverified or false claims.",
+    keywords: [
+      "source",
+      "news source",
+      "outlet",
+      "publisher",
+      "media",
+      "who do you track",
+    ],
+    response:
+      "We track a wide range of crypto news sources including major outlets, independent journalists, Twitter/X accounts, and research firms.\n\nEach source receives a credibility score based on their historical accuracy. You can browse all tracked sources and their scores at [/sources](/sources).\n\nOur scoring system rewards consistent accuracy and penalizes sources that frequently publish unverified or false claims.",
   },
   stories: {
-    keywords: ["story", "stories", "news", "feed", "latest", "headlines", "recent"],
-    response: "Our news feed aggregates crypto stories from multiple sources, showing you how different outlets cover the same events.\n\nEach story includes:\n- **Multi-source coverage** — See which outlets reported on it and their credibility tiers\n- **Associated claims** — Specific verifiable claims extracted from the story\n- **Verdicts** — Evidence-based assessments of each claim\n\nVisit the [home page](/) to browse the latest stories, or use [topic pages](/topics/bitcoin) to filter by specific areas of interest.",
+    keywords: [
+      "story",
+      "stories",
+      "news",
+      "feed",
+      "latest",
+      "headlines",
+      "recent",
+    ],
+    response:
+      "Our news feed aggregates crypto stories from multiple sources, showing you how different outlets cover the same events.\n\nEach story includes:\n- **Multi-source coverage** — See which outlets reported on it and their credibility tiers\n- **Associated claims** — Specific verifiable claims extracted from the story\n- **Verdicts** — Evidence-based assessments of each claim\n\nVisit the [home page](/) to browse the latest stories, or use [topic pages](/topics/bitcoin) to filter by specific areas of interest.",
   },
   greeting: {
-    keywords: ["hello", "hi", "hey", "greetings", "good morning", "good evening", "good afternoon", "sup", "yo"],
-    response: "Greetings! I am Firmy, your guide to Confirmd. Like the great philosophers of antiquity, I seek truth above all else — though in my case, it is the truth about crypto news.\n\nHow may I assist you today? You can ask me about how Confirmd works, our factuality scoring methodology, your subscription, or anything else related to the platform.",
+    keywords: [
+      "hello",
+      "hi",
+      "hey",
+      "greetings",
+      "good morning",
+      "good evening",
+      "good afternoon",
+      "sup",
+      "yo",
+    ],
+    response:
+      "Greetings! I am Firmy, your guide to Confirmd. Like the great philosophers of antiquity, I seek truth above all else — though in my case, it is the truth about crypto news.\n\nHow may I assist you today? You can ask me about how Confirmd works, our factuality scoring methodology, your subscription, or anything else related to the platform.",
   },
   thanks: {
     keywords: ["thank", "thanks", "appreciate", "helpful", "great help"],
-    response: "You are most welcome! As Socrates might have said (had he been into crypto): the pursuit of knowledge is its own reward. Do not hesitate to return if you have more questions. I am always here.",
+    response:
+      "You are most welcome! As Socrates might have said (had he been into crypto): the pursuit of knowledge is its own reward. Do not hesitate to return if you have more questions. I am always here.",
   },
   plus_features: {
-    keywords: ["plus", "premium", "features", "what do i get", "benefits", "worth it", "tribune", "oracle"],
-    response: "Confirmd Plus unlocks the full power of the platform:\n\n- **Full Evidence Access** — See all evidence items for every claim, not just summaries\n- **Creator Profiles & Claims** — Deep-dive into any crypto influencer's prediction history\n- **Leaderboard Access** — See the full creator accuracy rankings\n- **Real-time Alerts** — Get notified when claims you follow are updated\n- **Blindspot Reports** — Discover stories and perspectives you might be missing\n- **Data Export & API Access** — For power users and researchers\n\nVisit [/plus](/plus) to explore plans and start your subscription.",
+    keywords: [
+      "plus",
+      "premium",
+      "features",
+      "what do i get",
+      "benefits",
+      "worth it",
+      "tribune",
+      "oracle",
+    ],
+    response:
+      "Confirmd Plus unlocks the full power of the platform:\n\n- **Full Evidence Access** — See all evidence items for every claim, not just summaries\n- **Creator Profiles & Claims** — Deep-dive into any crypto influencer's prediction history\n- **Leaderboard Access** — See the full creator accuracy rankings\n- **Real-time Alerts** — Get notified when claims you follow are updated\n- **Blindspot Reports** — Discover stories and perspectives you might be missing\n- **Data Export & API Access** — For power users and researchers\n\nVisit [/plus](/plus) to explore plans and start your subscription.",
     action: "show_billing_links",
   },
 };
 
-function generateFirmyResponse(message: string, history: Array<{ role: string; content: string }>): { reply: string; action?: string } {
+function generateFirmyResponse(
+  message: string,
+  history: Array<{ role: string; content: string }>,
+): { reply: string; action?: string } {
   const lower = message.toLowerCase().trim();
 
   // Check each knowledge category for keyword matches
-  let bestMatch: { response: string; action?: string; score: number } | null = null;
+  let bestMatch: { response: string; action?: string; score: number } | null =
+    null;
 
   for (const [_category, data] of Object.entries(FIRMY_KNOWLEDGE)) {
     let matchScore = 0;
@@ -2028,7 +3256,11 @@ function generateFirmyResponse(message: string, history: Array<{ role: string; c
       }
     }
     if (matchScore > 0 && (!bestMatch || matchScore > bestMatch.score)) {
-      bestMatch = { response: data.response, action: data.action, score: matchScore };
+      bestMatch = {
+        response: data.response,
+        action: data.action,
+        score: matchScore,
+      };
     }
   }
 
@@ -2038,7 +3270,8 @@ function generateFirmyResponse(message: string, history: Array<{ role: string; c
 
   // Fallback — suggest escalation for anything we can't handle
   return {
-    reply: "That is an excellent question, though it ventures beyond my current knowledge. I want to make sure you get the help you need.\n\nWould you like to submit a support ticket? Our team can provide a more detailed response. Alternatively, you might find answers in our [FAQ](/faq) or [About](/about) pages.",
+    reply:
+      "That is an excellent question, though it ventures beyond my current knowledge. I want to make sure you get the help you need.\n\nWould you like to submit a support ticket? Our team can provide a more detailed response. Alternatively, you might find answers in our [FAQ](/faq) or [About](/about) pages.",
     action: "suggest_escalation",
   };
 }
@@ -2084,7 +3317,8 @@ router.post("/support/escalate", (req: Request, res: Response) => {
 
     res.json({
       success: true,
-      message: "Your issue has been forwarded to our team. We'll respond via email.",
+      message:
+        "Your issue has been forwarded to our team. We'll respond via email.",
     });
   } catch (err) {
     console.error("POST /support/escalate error:", err);
@@ -2105,7 +3339,11 @@ router.post("/newsletter/subscribe", async (req: Request, res: Response) => {
 
     const subscriber = await storage.subscribeNewsletter({
       email: email.trim().toLowerCase(),
-      preferences: preferences ?? { dailyBriefing: true, blindspotReport: true, weeklyDigest: true },
+      preferences: preferences ?? {
+        dailyBriefing: true,
+        blindspotReport: true,
+        weeklyDigest: true,
+      },
       isActive: true,
     });
 
@@ -2134,7 +3372,9 @@ router.post("/newsletter/unsubscribe", async (req: Request, res: Response) => {
       return;
     }
 
-    const success = await storage.unsubscribeNewsletter(email.trim().toLowerCase());
+    const success = await storage.unsubscribeNewsletter(
+      email.trim().toLowerCase(),
+    );
     if (!success) {
       res.status(404).json({ error: "Email not found in subscriber list" });
       return;
@@ -2147,130 +3387,790 @@ router.post("/newsletter/unsubscribe", async (req: Request, res: Response) => {
   }
 });
 
-// ─── Daily Briefing ─────────────────────────────────────────────────
-
-router.get("/briefing/daily", async (_req: Request, res: Response) => {
+// GET unsubscribe — used by email footer links (email clients cannot send POST)
+router.get("/newsletter/unsubscribe", async (req: Request, res: Response) => {
   try {
-    // Get stories for the feed (already sorted by recency)
-    const stories = await storage.getStoriesForFeed(10, 0);
-
-    // Get recent claims from the last 24 hours
-    const allClaims = await storage.getClaims({ sort: "newest", limit: 20 });
-    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    const recentClaims = allClaims.filter(
-      (c) => new Date(c.assertedAt).getTime() >= oneDayAgo.getTime()
-    );
-
-    // Enrich recent claims with verdicts and sources
-    const enrichedClaims = await Promise.all(recentClaims.map(enrichClaim));
-
-    // Compute summary stats
-    const verdictCounts = { verified: 0, plausible_unverified: 0, speculative: 0, misleading: 0 };
-    for (const c of enrichedClaims) {
-      if (c.verdict) {
-        const label = c.verdict.verdictLabel as keyof typeof verdictCounts;
-        if (label in verdictCounts) verdictCounts[label]++;
-      }
+    const email = req.query.email as string | undefined;
+    if (!email || !email.includes("@")) {
+      res.status(400).send("Invalid unsubscribe link.");
+      return;
     }
-
-    res.json({
-      date: new Date().toISOString().split("T")[0],
-      generatedAt: new Date().toISOString(),
-      summary: {
-        totalStories: stories.length,
-        totalClaims: enrichedClaims.length,
-        verdictBreakdown: verdictCounts,
-      },
-      topStories: stories.slice(0, 5).map((s) => ({
-        id: s.id,
-        title: s.title,
-        summary: s.summary,
-        category: s.category,
-        sourceCount: s.sourceCount,
-        credibilityDistribution: s.credibilityDistribution,
-        latestItemTimestamp: s.latestItemTimestamp,
-      })),
-      recentClaims: enrichedClaims.slice(0, 10),
-    });
+    await storage.unsubscribeNewsletter(email.trim().toLowerCase());
+    const appUrl = process.env.APP_URL || "https://confirmd.news";
+    res.redirect(302, `${appUrl}/account?unsubscribed=1`);
   } catch (err) {
-    console.error("GET /briefing/daily error:", err);
-    res.status(500).json({ error: "Failed to generate daily briefing" });
+    console.error("GET /newsletter/unsubscribe error:", err);
+    res.status(500).send("Unsubscribe failed. Please try again.");
   }
 });
 
-// ─── Signals ────────────────────────────────────────────────────────
+// ─── Daily Briefing ─────────────────────────────────────────────────
 
-router.get("/signals", async (req: Request, res: Response) => {
-  try {
-    const filter = req.query.filter as string | undefined;
-
-    // Get all claims with newest first
-    const allClaims = await storage.getClaims({ sort: "newest", limit: 500 });
-    const enrichedClaims = await Promise.all(allClaims.map(enrichClaim));
-
-    // Group by asset symbol
-    const symbolMap: Record<string, EnrichedClaim[]> = {};
-    for (const claim of enrichedClaims) {
-      const symbols = claim.assetSymbols ?? [];
-      for (const symbol of symbols) {
-        if (!symbolMap[symbol]) symbolMap[symbol] = [];
-        symbolMap[symbol].push(claim);
+router.get(
+  "/briefing/daily",
+  requireTier("oracle"),
+  async (_req: Request, res: Response) => {
+    try {
+      const today = new Date().toISOString().split("T")[0];
+      const cacheKey = `briefing:daily:${today}`;
+      const cached = cache.get<object>(cacheKey);
+      if (cached) {
+        res.json(cached);
+        return;
       }
-    }
 
-    // Build signal objects
-    let signals = Object.entries(symbolMap).map(([symbol, claims]) => {
-      const dist = { verified: 0, plausible_unverified: 0, speculative: 0, misleading: 0 };
-      let probSum = 0;
-      let probCount = 0;
+      // Get stories for the feed (already sorted by recency)
+      const stories = await storage.getStoriesForFeed(10, 0);
 
-      for (const c of claims) {
+      // Get recent claims from the last 24 hours
+      const allClaims = await storage.getClaims({ sort: "newest", limit: 20 });
+      const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const recentClaims = allClaims.filter(
+        (c) => new Date(c.assertedAt).getTime() >= oneDayAgo.getTime(),
+      );
+
+      // Enrich recent claims with verdicts and sources
+      const enrichedClaims = await Promise.all(recentClaims.map(enrichClaim));
+
+      // Compute summary stats
+      const verdictCounts = {
+        verified: 0,
+        plausible_unverified: 0,
+        speculative: 0,
+        misleading: 0,
+      };
+      for (const c of enrichedClaims) {
         if (c.verdict) {
-          const label = c.verdict.verdictLabel as keyof typeof dist;
-          if (label in dist) dist[label]++;
-          probSum += c.verdict.probabilityTrue ?? 0;
-          probCount++;
-        } else {
-          dist.speculative++;
+          const label = c.verdict.verdictLabel as keyof typeof verdictCounts;
+          if (label in verdictCounts) verdictCounts[label]++;
         }
       }
 
-      return {
-        symbol,
-        totalClaims: claims.length,
-        verdictDistribution: dist,
-        avgProbability: probCount > 0 ? probSum / probCount : 0,
-        recentClaims: claims.slice(0, 5),
+      const payload = {
+        date: today,
+        generatedAt: new Date().toISOString(),
+        summary: {
+          totalStories: stories.length,
+          totalClaims: enrichedClaims.length,
+          verdictBreakdown: verdictCounts,
+        },
+        topStories: stories.slice(0, 5).map((s) => ({
+          id: s.id,
+          title: s.title,
+          summary: s.summary,
+          category: s.category,
+          sourceCount: s.sourceCount,
+          credibilityDistribution: s.credibilityDistribution,
+          latestItemTimestamp: s.latestItemTimestamp,
+        })),
+        recentClaims: enrichedClaims.slice(0, 10),
       };
-    });
 
-    // Sort by total claims descending
-    signals.sort((a, b) => b.totalClaims - a.totalClaims);
-
-    // Apply filter
-    if (filter === "verified") {
-      signals = signals.filter((s) => s.verdictDistribution.verified > 0);
-    } else if (filter === "emerging") {
-      signals = signals.filter(
-        (s) =>
-          s.verdictDistribution.speculative > 0 ||
-          s.recentClaims.some((c) => c.status === "unreviewed" || c.status === "needs_evidence")
-      );
+      cache.set(cacheKey, payload);
+      res.json(payload);
+    } catch (err) {
+      console.error("GET /briefing/daily error:", err);
+      res.status(500).json({ error: "Failed to generate daily briefing" });
     }
+  },
+);
 
-    res.json({
-      data: signals,
-      summary: {
-        totalAssets: signals.length,
-        totalVerified: signals.reduce((s, a) => s + a.verdictDistribution.verified, 0),
-        totalSpeculative: signals.reduce((s, a) => s + a.verdictDistribution.speculative, 0),
-        totalMisleading: signals.reduce((s, a) => s + a.verdictDistribution.misleading, 0),
-      },
-    });
-  } catch (err) {
-    console.error("GET /signals error:", err);
-    res.status(500).json({ error: "Failed to fetch signals" });
+// ─── Signals ────────────────────────────────────────────────────────
+
+router.get(
+  "/signals",
+  requireTier("oracle"),
+  async (req: Request, res: Response) => {
+    try {
+      const filter = req.query.filter as string | undefined;
+
+      // Get all claims with newest first
+      const allClaims = await storage.getClaims({ sort: "newest", limit: 500 });
+      const enrichedClaims = await Promise.all(allClaims.map(enrichClaim));
+
+      // Group by asset symbol
+      const symbolMap: Record<string, EnrichedClaim[]> = {};
+      for (const claim of enrichedClaims) {
+        const symbols = claim.assetSymbols ?? [];
+        for (const symbol of symbols) {
+          if (!symbolMap[symbol]) symbolMap[symbol] = [];
+          symbolMap[symbol].push(claim);
+        }
+      }
+
+      // Build signal objects
+      let signals = Object.entries(symbolMap).map(([symbol, claims]) => {
+        const dist = {
+          verified: 0,
+          plausible_unverified: 0,
+          speculative: 0,
+          misleading: 0,
+        };
+        let probSum = 0;
+        let probCount = 0;
+
+        for (const c of claims) {
+          if (c.verdict) {
+            const label = c.verdict.verdictLabel as keyof typeof dist;
+            if (label in dist) dist[label]++;
+            probSum += c.verdict.probabilityTrue ?? 0;
+            probCount++;
+          } else {
+            dist.speculative++;
+          }
+        }
+
+        return {
+          symbol,
+          totalClaims: claims.length,
+          verdictDistribution: dist,
+          avgProbability: probCount > 0 ? probSum / probCount : 0,
+          recentClaims: claims.slice(0, 5),
+        };
+      });
+
+      // Sort by total claims descending
+      signals.sort((a, b) => b.totalClaims - a.totalClaims);
+
+      // Apply filter
+      if (filter === "verified") {
+        signals = signals.filter((s) => s.verdictDistribution.verified > 0);
+      } else if (filter === "emerging") {
+        signals = signals.filter(
+          (s) =>
+            s.verdictDistribution.speculative > 0 ||
+            s.recentClaims.some(
+              (c) => c.status === "unreviewed" || c.status === "needs_evidence",
+            ),
+        );
+      }
+
+      res.json({
+        data: signals,
+        summary: {
+          totalAssets: signals.length,
+          totalVerified: signals.reduce(
+            (s, a) => s + a.verdictDistribution.verified,
+            0,
+          ),
+          totalSpeculative: signals.reduce(
+            (s, a) => s + a.verdictDistribution.speculative,
+            0,
+          ),
+          totalMisleading: signals.reduce(
+            (s, a) => s + a.verdictDistribution.misleading,
+            0,
+          ),
+        },
+      });
+    } catch (err) {
+      console.error("GET /signals error:", err);
+      res.status(500).json({ error: "Failed to fetch signals" });
+    }
+  },
+);
+
+// ─── GET /export/creators ────────────────────────────────────────────
+
+router.get(
+  "/export/creators",
+  requireTier("oracle"),
+  async (_req: Request, res: Response) => {
+    try {
+      const creators = await storage.getCreators();
+      const rows = [
+        [
+          "channelName",
+          "channelHandle",
+          "tier",
+          "overallAccuracy",
+          "totalClaims",
+          "verifiedTrue",
+          "verifiedFalse",
+          "priceAccuracy",
+          "regulatoryAccuracy",
+          "marketAccuracy",
+          "timelineAccuracy",
+          "subscriberCount",
+          "trackingSince",
+        ].join(","),
+        ...creators.map((c) =>
+          [
+            `"${(c.channelName || "").replace(/"/g, '""')}"`,
+            `"${(c.channelHandle || "").replace(/"/g, '""')}"`,
+            c.tier || "unranked",
+            c.overallAccuracy ?? 0,
+            c.totalClaims ?? 0,
+            c.verifiedTrue ?? 0,
+            c.verifiedFalse ?? 0,
+            c.priceAccuracy ?? 0,
+            c.regulatoryAccuracy ?? 0,
+            c.marketAccuracy ?? 0,
+            c.timelineAccuracy ?? 0,
+            c.subscriberCount ?? 0,
+            c.trackingSince
+              ? new Date(c.trackingSince).toISOString().split("T")[0]
+              : "",
+          ].join(","),
+        ),
+      ];
+      res.setHeader("Content-Type", "text/csv");
+      res.setHeader(
+        "Content-Disposition",
+        'attachment; filename="confirmd-creators.csv"',
+      );
+      res.send(rows.join("\n"));
+    } catch (err) {
+      console.error("GET /export/creators error:", err);
+      res.status(500).json({ error: "Export failed" });
+    }
+  },
+);
+
+// ─── GET /export/claims ──────────────────────────────────────────────
+
+router.get(
+  "/export/claims",
+  requireTier("oracle"),
+  async (_req: Request, res: Response) => {
+    try {
+      const claims = await storage.getCreatorClaims({ limit: 5000 });
+      const creators = await storage.getCreators();
+      const creatorMap = new Map(creators.map((c) => [c.id, c.channelName]));
+
+      const rows = [
+        [
+          "creatorName",
+          "claimText",
+          "category",
+          "status",
+          "specificityScore",
+          "confidenceLanguage",
+          "statedTimeframe",
+          "assetSymbols",
+          "createdAt",
+        ].join(","),
+        ...claims.map((cl) =>
+          [
+            `"${(creatorMap.get(cl.creatorId) || "").replace(/"/g, '""')}"`,
+            `"${(cl.claimText || "").replace(/"/g, '""').replace(/\n/g, " ")}"`,
+            cl.category || "",
+            cl.status || "",
+            cl.specificityScore ?? 0,
+            cl.confidenceLanguage || "",
+            `"${(cl.statedTimeframe || "").replace(/"/g, '""')}"`,
+            `"${(cl.assetSymbols || []).join(";")}"`,
+            cl.createdAt
+              ? new Date(cl.createdAt).toISOString().split("T")[0]
+              : "",
+          ].join(","),
+        ),
+      ];
+      res.setHeader("Content-Type", "text/csv");
+      res.setHeader(
+        "Content-Disposition",
+        'attachment; filename="confirmd-claims.csv"',
+      );
+      res.send(rows.join("\n"));
+    } catch (err) {
+      console.error("GET /export/claims error:", err);
+      res.status(500).json({ error: "Export failed" });
+    }
+  },
+);
+
+// ─── GET /reports/blindspot ──────────────────────────────────────────
+
+let blindspotCache: { report: any; generatedAt: Date } | null = null;
+const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+router.get(
+  "/reports/blindspot",
+  requireTier("oracle"),
+  async (_req: Request, res: Response) => {
+    try {
+      // Serve from cache if fresh
+      if (
+        blindspotCache &&
+        Date.now() - blindspotCache.generatedAt.getTime() < CACHE_TTL_MS
+      ) {
+        return res.json(blindspotCache.report);
+      }
+
+      const anthropicKey = process.env.ANTHROPIC_API_KEY;
+      if (!anthropicKey) {
+        return res.status(503).json({ error: "AI analysis unavailable" });
+      }
+
+      const creators = await storage.getCreators();
+      const qualified = creators.filter((c) => (c.totalClaims ?? 0) >= 5);
+      const highAccuracy = qualified.filter(
+        (c) => (c.overallAccuracy ?? 0) >= 70,
+      );
+      const lowAccuracy = qualified.filter(
+        (c) => (c.overallAccuracy ?? 0) < 50,
+      );
+
+      // Gather recent claims from each group (up to 40 per group)
+      async function getRecentClaimsForCreators(
+        group: typeof qualified,
+        limit: number,
+      ) {
+        const all: any[] = [];
+        for (const c of group.slice(0, 10)) {
+          const claims = await storage.getCreatorClaims({
+            creatorId: c.id,
+            limit: 8,
+          });
+          all.push(
+            ...claims.map((cl) => ({
+              creator: c.channelName,
+              claim: cl.claimText,
+              category: cl.category,
+              status: cl.status,
+            })),
+          );
+        }
+        return all.slice(0, limit);
+      }
+
+      const [highClaims, lowClaims] = await Promise.all([
+        getRecentClaimsForCreators(highAccuracy, 40),
+        getRecentClaimsForCreators(lowAccuracy, 40),
+      ]);
+
+      const anthropicClient = new Anthropic({ apiKey: anthropicKey });
+      const prompt = `You are a crypto media analyst. Analyse these claim datasets from two groups of crypto creators and produce a "Blindspot Report".
+
+HIGH-ACCURACY CREATORS (≥70% verified) — ${highAccuracy.length} creators:
+${JSON.stringify(highClaims, null, 2)}
+
+LOW-ACCURACY CREATORS (<50% verified) — ${lowAccuracy.length} creators:
+${JSON.stringify(lowClaims, null, 2)}
+
+Produce a JSON response with this exact structure:
+{
+  "summary": "2-3 sentence executive summary of the key blindspot finding",
+  "narrativesPushedByLowAccuracy": [
+    { "narrative": "string", "examples": ["claim1", "claim2"], "riskLevel": "high|medium|low" }
+  ],
+  "narrativesPushedByHighAccuracy": [
+    { "narrative": "string", "examples": ["claim1", "claim2"] }
+  ],
+  "divergences": [
+    { "topic": "string", "highAccuracyView": "string", "lowAccuracyView": "string" }
+  ],
+  "watchlist": ["topic1", "topic2", "topic3"],
+  "conclusion": "1-2 sentences on what readers should be cautious about"
+}
+
+Only return valid JSON, no markdown fences.`;
+
+      const _anthropicForScorecard = process.env.ANTHROPIC_API_KEY
+        ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+        : null;
+      if (!_anthropicForScorecard) throw new Error("No API key");
+      const response = await _anthropicForScorecard.messages.create({
+        model: "claude-opus-4-6",
+        max_tokens: 2048,
+        messages: [{ role: "user", content: prompt }],
+      });
+
+      let analysis: any = {};
+      try {
+        const raw = (response.content[0] as any).text || "{}";
+        analysis = JSON.parse(
+          raw.replace(/^```json\s*/i, "").replace(/```\s*$/, ""),
+        );
+      } catch {
+        analysis = {
+          summary: "Analysis unavailable",
+          narrativesPushedByLowAccuracy: [],
+          narrativesPushedByHighAccuracy: [],
+          divergences: [],
+          watchlist: [],
+          conclusion: "",
+        };
+      }
+
+      const report = {
+        generatedAt: new Date().toISOString(),
+        highAccuracyCreatorCount: highAccuracy.length,
+        lowAccuracyCreatorCount: lowAccuracy.length,
+        ...analysis,
+      };
+
+      blindspotCache = { report, generatedAt: new Date() };
+      res.json(report);
+    } catch (err) {
+      console.error("GET /reports/blindspot error:", err);
+      res.status(500).json({ error: "Failed to generate blindspot report" });
+    }
+  },
+);
+
+// ─── Weekly Prediction Scorecard ─────────────────────────────────────
+
+let scorecardCache: { scorecard: any; generatedAt: Date } | null = null;
+
+export async function buildWeeklyScorecard(): Promise<any> {
+  // Re-use cache if generated within the last hour
+  if (
+    scorecardCache &&
+    Date.now() - scorecardCache.generatedAt.getTime() < 60 * 60 * 1000
+  ) {
+    return scorecardCache.scorecard;
   }
+
+  const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  const weekLabel = new Date().toLocaleDateString("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+
+  // Gather resolved creator claims from the past week
+  const allClaims = await storage.getCreatorClaims({});
+  const resolvedThisWeek = allClaims.filter(
+    (c: any) =>
+      c.verificationDate &&
+      new Date(c.verificationDate) >= oneWeekAgo &&
+      (c.status === "verified_true" || c.status === "verified_false"),
+  );
+
+  const totalResolved = resolvedThisWeek.length;
+  const trueCount = resolvedThisWeek.filter(
+    (c: any) => c.status === "verified_true",
+  ).length;
+  const accuracyRate =
+    totalResolved > 0 ? Math.round((trueCount / totalResolved) * 100) : 0;
+
+  // Build per-creator stats
+  const creatorMap = new Map<
+    string,
+    { name: string; correct: number; total: number }
+  >();
+  const allCreators = await storage.getCreators(true);
+  for (const cr of allCreators) {
+    creatorMap.set(cr.id, {
+      name: cr.channelName,
+      correct: 0,
+      total: 0,
+    });
+  }
+  for (const c of resolvedThisWeek) {
+    const entry = creatorMap.get(c.creatorId);
+    if (entry) {
+      entry.total++;
+      if (c.status === "verified_true") entry.correct++;
+    }
+  }
+  const topCreators = [...creatorMap.values()]
+    .filter((e) => e.total > 0)
+    .map((e) => ({
+      name: e.name,
+      accuracy: Math.round((e.correct / e.total) * 100),
+      resolved: e.total,
+    }))
+    .sort((a, b) => b.accuracy - a.accuracy)
+    .slice(0, 5);
+
+  // Sample claims for Claude analysis
+  const correctClaims = resolvedThisWeek
+    .filter((c: any) => c.status === "verified_true")
+    .slice(0, 10)
+    .map((c: any) => c.claimText);
+  const wrongClaims = resolvedThisWeek
+    .filter((c: any) => c.status === "verified_false")
+    .slice(0, 10)
+    .map((c: any) => c.claimText);
+
+  const prompt = `You are the analytics engine for Confirmd, a crypto claim verification platform. Generate a weekly prediction scorecard summary.
+
+WEEK: ${weekLabel}
+TOTAL RESOLVED: ${totalResolved}
+ACCURACY RATE: ${accuracyRate}%
+
+CORRECT PREDICTIONS (${correctClaims.length}):
+${correctClaims.map((t, i) => `${i + 1}. ${t}`).join("\n") || "None this week"}
+
+WRONG PREDICTIONS (${wrongClaims.length}):
+${wrongClaims.map((t, i) => `${i + 1}. ${t}`).join("\n") || "None this week"}
+
+Produce a JSON response with this exact structure:
+{
+  "summary": "2-3 sentence narrative summary of the week in predictions — what themes dominated, how accurate creators were overall",
+  "biggestCorrectCall": "A single sentence describing the most impressive correct prediction this week",
+  "biggestMiss": "A single sentence describing the most notable wrong prediction this week"
+}
+
+Only return valid JSON, no markdown fences.`;
+
+  let analysis: any = {
+    summary: `${totalResolved} predictions were resolved this week with an overall accuracy rate of ${accuracyRate}%.`,
+    biggestCorrectCall:
+      correctClaims[0] || "No notable correct calls this week.",
+    biggestMiss: wrongClaims[0] || "No notable misses this week.",
+  };
+
+  try {
+    const _anthropicForScorecard = process.env.ANTHROPIC_API_KEY
+      ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+      : null;
+    if (!_anthropicForScorecard) throw new Error("No API key");
+    const response = await _anthropicForScorecard.messages.create({
+      model: "claude-opus-4-6",
+      max_tokens: 1024,
+      messages: [{ role: "user", content: prompt }],
+    });
+    const raw = (response.content[0] as any).text || "{}";
+    analysis = JSON.parse(
+      raw.replace(/^```json\s*/i, "").replace(/```\s*$/, ""),
+    );
+  } catch {
+    // Keep fallback analysis
+  }
+
+  const scorecard = {
+    generatedAt: new Date().toISOString(),
+    weekLabel,
+    resolvedCount: totalResolved,
+    accuracyRate,
+    topCreators,
+    ...analysis,
+  };
+
+  scorecardCache = { scorecard, generatedAt: new Date() };
+  return scorecard;
+}
+
+router.get(
+  "/reports/weekly-scorecard",
+  requireTier("oracle"),
+  async (_req: Request, res: Response) => {
+    try {
+      const scorecard = await buildWeeklyScorecard();
+      res.json(scorecard);
+    } catch (err) {
+      console.error("GET /reports/weekly-scorecard error:", err);
+      res
+        .status(500)
+        .json({ error: "Failed to generate weekly prediction scorecard" });
+    }
+  },
+);
+
+// ─── CSV Export ───────────────────────────────────────────────────────
+
+router.get(
+  "/export/creators",
+  requireTier("oracle"),
+  async (_req: Request, res: Response) => {
+    try {
+      const creators = await storage.getCreators(false);
+      const headers = [
+        "id",
+        "channelName",
+        "channelHandle",
+        "tier",
+        "overallAccuracy",
+        "totalClaims",
+        "verifiedTrue",
+        "verifiedFalse",
+        "pendingClaims",
+        "subscriberCount",
+        "rankOverall",
+        "trackingSince",
+      ];
+      const rows = creators.map((c: any) =>
+        [
+          c.id,
+          `"${(c.channelName || "").replace(/"/g, '""')}"`,
+          c.channelHandle || "",
+          c.tier,
+          c.overallAccuracy ?? 0,
+          c.totalClaims ?? 0,
+          c.verifiedTrue ?? 0,
+          c.verifiedFalse ?? 0,
+          c.pendingClaims ?? 0,
+          c.subscriberCount ?? 0,
+          c.rankOverall ?? "",
+          c.trackingSince
+            ? new Date(c.trackingSince).toISOString().split("T")[0]
+            : "",
+        ].join(","),
+      );
+      const csv = [headers.join(","), ...rows].join("\n");
+      res.setHeader("Content-Type", "text/csv");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="confirmd-creators-${new Date().toISOString().split("T")[0]}.csv"`,
+      );
+      res.send(csv);
+    } catch (err) {
+      console.error("GET /export/creators error:", err);
+      res.status(500).json({ error: "Failed to export creators" });
+    }
+  },
+);
+
+router.get(
+  "/export/claims",
+  requireTier("oracle"),
+  async (_req: Request, res: Response) => {
+    try {
+      const claims = await storage.getCreatorClaims({});
+      const headers = [
+        "id",
+        "creatorId",
+        "claimText",
+        "category",
+        "status",
+        "confidenceLanguage",
+        "statedTimeframe",
+        "assetSymbols",
+        "aiExtractionConfidence",
+        "verificationDate",
+        "createdAt",
+      ];
+      const rows = (claims as any[]).map((c) =>
+        [
+          c.id,
+          c.creatorId,
+          `"${(c.claimText || "").replace(/"/g, '""')}"`,
+          c.category,
+          c.status,
+          c.confidenceLanguage,
+          `"${(c.statedTimeframe || "").replace(/"/g, '""')}"`,
+          (c.assetSymbols || []).join("|"),
+          c.aiExtractionConfidence ?? "",
+          c.verificationDate
+            ? new Date(c.verificationDate).toISOString().split("T")[0]
+            : "",
+          c.createdAt ? new Date(c.createdAt).toISOString().split("T")[0] : "",
+        ].join(","),
+      );
+      const csv = [headers.join(","), ...rows].join("\n");
+      res.setHeader("Content-Type", "text/csv");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="confirmd-claims-${new Date().toISOString().split("T")[0]}.csv"`,
+      );
+      res.send(csv);
+    } catch (err) {
+      console.error("GET /export/claims error:", err);
+      res.status(500).json({ error: "Failed to export claims" });
+    }
+  },
+);
+
+// ─── OG Image Routes ────────────────────────────────────────────────────────
+
+router.get(
+  "/og/creator/:id",
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const creator = await storage.getCreator(req.params.id as string);
+      if (!creator) {
+        res.status(404).json({ error: "Creator not found" });
+        return;
+      }
+      const png = await generateCreatorOgImage(creator as any);
+      res.setHeader("Content-Type", "image/png");
+      res.setHeader("Cache-Control", "public, max-age=3600, s-maxage=3600");
+      res.send(png);
+    } catch (err) {
+      console.error("GET /og/creator/:id error:", err);
+      res.status(500).json({ error: "Failed to generate OG image" });
+    }
+  },
+);
+
+router.get(
+  "/og/leaderboard",
+  async (_req: Request, res: Response): Promise<void> => {
+    try {
+      const allCreators = await storage.getCreators();
+      const top10 = allCreators
+        .filter((c) => (c.totalClaims ?? 0) >= 5)
+        .sort((a, b) => (b.overallAccuracy ?? 0) - (a.overallAccuracy ?? 0))
+        .slice(0, 10);
+      const png = await generateLeaderboardOgImage(top10 as any);
+      res.setHeader("Content-Type", "image/png");
+      res.setHeader("Cache-Control", "public, max-age=3600, s-maxage=3600");
+      res.send(png);
+    } catch (err) {
+      console.error("GET /og/leaderboard error:", err);
+      res.status(500).json({ error: "Failed to generate OG image" });
+    }
+  },
+);
+
+// ─── SEO: robots.txt ────────────────────────────────────────────────
+router.get("/robots.txt", (_req: Request, res: Response): void => {
+  res.setHeader("Content-Type", "text/plain");
+  res.send(
+    [
+      "User-agent: *",
+      "Allow: /",
+      "Disallow: /admin",
+      "Disallow: /api",
+      "",
+      "Sitemap: https://confirmd.news/sitemap.xml",
+    ].join("\n"),
+  );
 });
+
+// ─── SEO: sitemap.xml ───────────────────────────────────────────────
+router.get(
+  "/sitemap.xml",
+  async (_req: Request, res: Response): Promise<void> => {
+    try {
+      const BASE = "https://confirmd.news";
+      const today = new Date().toISOString().split("T")[0];
+
+      const staticPages = [
+        { path: "/", priority: "1.0" },
+        { path: "/leaderboard", priority: "0.8" },
+        { path: "/feed", priority: "0.8" },
+        { path: "/plus", priority: "0.8" },
+        { path: "/about", priority: "0.8" },
+        { path: "/methodology", priority: "0.8" },
+        { path: "/faq", priority: "0.8" },
+      ];
+
+      const staticUrls = staticPages
+        .map(
+          ({ path, priority }) =>
+            `  <url>\n    <loc>${BASE}${path}</loc>\n    <lastmod>${today}</lastmod>\n    <changefreq>weekly</changefreq>\n    <priority>${priority}</priority>\n  </url>`,
+        )
+        .join("\n");
+
+      const creators = await storage.getCreators(true);
+      const creatorUrls = creators
+        .map(
+          (c) =>
+            `  <url>\n    <loc>${BASE}/creators/${c.id}</loc>\n    <lastmod>${today}</lastmod>\n    <changefreq>monthly</changefreq>\n    <priority>0.6</priority>\n  </url>`,
+        )
+        .join("\n");
+
+      const xml = [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+        staticUrls,
+        creatorUrls,
+        "</urlset>",
+      ].join("\n");
+
+      res.setHeader("Content-Type", "application/xml");
+      res.setHeader("Cache-Control", "public, max-age=3600");
+      res.send(xml);
+    } catch (err) {
+      console.error("GET /sitemap.xml error:", err);
+      res.status(500).send("Failed to generate sitemap");
+    }
+  },
+);
 
 export default router;
